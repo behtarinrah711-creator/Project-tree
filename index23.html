@@ -1,0 +1,2844 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>کارها</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a73e8">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="کارها">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f1f3f4;
+    --surface:#ffffff;
+    --text:#202124;
+    --text-dim:#5f6368;
+    --divider:#e8eaed;
+    --blue:#1a73e8;
+    --blue-soft:#e8f0fe;
+    --danger:#d93025;
+    --danger-soft:#fce8e6;
+    --star:#fbbc04;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:'Vazirmatn', Tahoma, sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    display:grid;grid-template-columns:1fr auto 1fr;
+    align-items:center;padding:10px 10px 8px;flex-shrink:0;background:var(--bg);
+  }
+  .topbar-title{
+    font-family:'Vazirmatn',Tahoma,sans-serif;font-size:18px;font-weight:700;
+    color:var(--text);padding-inline-start:4px;justify-self:start;
+  }
+  .topbar .mode-toggle{justify-self:center;}
+  .topbar .account-trigger{justify-self:end;}
+  .icon-btn{
+    width:38px;height:38px;border-radius:50%;border:none;background:transparent;
+    color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  }
+  .icon-btn:active{background:var(--divider);}
+  .account-trigger{
+    display:flex;align-items:center;gap:4px;color:var(--text-dim);cursor:pointer;
+    padding:4px 6px 4px 2px;border-radius:20px;
+  }
+  .account-trigger:active{background:var(--divider);}
+  .avatar-circle{
+    width:32px;height:32px;border-radius:50%;background:#9aa0a6;color:#fff;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;
+  }
+  .mode-toggle{
+    display:flex;align-items:center;gap:6px;background:var(--surface);
+    border:1px solid var(--divider);border-radius:20px;padding:6px 12px;
+    font-size:12px;color:var(--text-dim);cursor:pointer;
+  }
+  .mode-toggle svg{flex-shrink:0;}
+  .mode-toggle.active{color:var(--blue);border-color:var(--blue-soft);background:var(--blue-soft);}
+
+  /* ---------- tab bar ---------- */
+  .tabbar{
+    display:flex;align-items:center;gap:22px;
+    padding:0 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    flex-shrink:0;scrollbar-width:none;border-bottom:1px solid var(--divider);
+  }
+  .tabbar::-webkit-scrollbar{display:none;}
+  .tab{
+    flex-shrink:0;padding:12px 2px 10px;font-size:14.5px;color:var(--text-dim);
+    white-space:nowrap;position:relative;cursor:pointer;display:flex;align-items:center;gap:6px;
+  }
+  .tab.active{color:var(--blue);font-weight:600;}
+  .tab.active::after{
+    content:'';position:absolute;right:0;left:0;bottom:-1px;height:2px;background:var(--blue);border-radius:2px;
+  }
+  .tab .count{
+    font-size:11px;color:var(--text-dim);background:var(--divider);border-radius:10px;
+    padding:1px 6px;
+  }
+  .tab.star-tab{color:var(--star);}
+  .tab.add-tab{color:var(--text-dim);font-weight:700;font-size:24px;padding:8px 10px;line-height:1;}
+
+  /* ---------- content ---------- */
+  .content{flex:1;overflow-y:auto;padding:8px 0 100px;-webkit-overflow-scrolling:touch;}
+  .cost-summary{
+    padding:10px 16px 2px;font-size:13px;color:var(--text-dim);
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+  }
+  .cost-summary .cost-sum-val{
+    font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--text);
+    direction:ltr;unicode-bidi:isolate;display:inline-flex;align-items:baseline;gap:5px;
+  }
+  .cost-summary .cost-unit{font-family:'Vazirmatn',Tahoma,sans-serif;font-size:11px;font-weight:500;color:var(--text-dim);}
+
+  .task-block{border-bottom:1px solid var(--divider);position:relative;}
+  .row{
+    display:flex;align-items:center;gap:14px;padding:12px 16px;cursor:pointer;
+  }
+  .row.sub{padding-right:52px;padding-top:9px;padding-bottom:9px;}
+  .row.completed .row-title{color:var(--text-dim);text-decoration:line-through;}
+  .drag-grip{
+    display:flex;align-items:center;justify-content:center;color:#c4c7c5;flex-shrink:0;
+    touch-action:none;cursor:grab;margin-inline-end:-4px;
+  }
+  .drag-grip:active{cursor:grabbing;color:var(--text-dim);}
+  .task-block.row-dragging, .row.sub.row-dragging{opacity:.4;}
+  .task-block.drag-over-top{box-shadow:inset 0 2px 0 var(--blue);}
+  .task-block.drag-over-bottom{box-shadow:inset 0 -2px 0 var(--blue);}
+  .row.sub.drag-over-top{box-shadow:inset 0 2px 0 var(--blue);}
+  .row.sub.drag-over-bottom{box-shadow:inset 0 -2px 0 var(--blue);}
+
+  .circle{
+    width:22px;height:22px;flex-shrink:0;border-radius:50%;
+    border:1.8px solid #80868b;display:flex;align-items:center;justify-content:center;
+    color:transparent;transition:.15s ease;
+  }
+  .row.sub .circle{width:18px;height:18px;}
+  .circle.checked{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .row-body{flex:1;min-width:0;}
+  .row-title{font-size:15px;line-height:1.4;overflow-wrap:anywhere;}
+  .row.sub .row-title{font-size:13.5px;color:#3c4043;}
+  .row-cost{
+    font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--text);flex-shrink:0;
+    direction:ltr;unicode-bidi:isolate;display:inline-flex;align-items:baseline;gap:4px;
+  }
+  .row-cost .cost-unit{font-family:'Vazirmatn',Tahoma,sans-serif;font-size:10px;font-weight:500;color:var(--text-dim);}
+  .star-icon{
+    width:20px;height:20px;flex-shrink:0;color:#c4c7c5;display:flex;align-items:center;justify-content:center;
+  }
+  .star-icon.starred{color:var(--star);}
+  .row.sub .star-icon{width:17px;height:17px;}
+
+  .add-task-row{
+    display:flex;align-items:center;gap:14px;padding:12px 16px;color:var(--text-dim);cursor:pointer;
+  }
+  .add-task-row .plus-circle{
+    width:22px;height:22px;border-radius:50%;border:1.8px dashed #9aa0a6;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+
+  .completed-header{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:14px 16px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;
+    border-top:1px solid var(--divider);margin-top:6px;
+  }
+  .completed-header .chev{color:var(--text-dim);transition:transform .15s ease;flex-shrink:0;}
+  .completed-header .chev.collapsed{transform:rotate(-90deg);}
+  .completed-header .completed-title{flex:1;}
+  .completed-clear-btn{
+    flex-shrink:0;font-family:inherit;font-size:12px;font-weight:700;color:var(--danger);
+    background:var(--danger-soft);border:none;border-radius:8px;padding:6px 10px;cursor:pointer;
+  }
+  .completed-list.hidden{display:none;}
+
+  .starred-tag{
+    font-size:11px;color:var(--blue);background:var(--blue-soft);border-radius:6px;
+    padding:2px 6px;flex-shrink:0;margin-inline-start:6px;
+  }
+
+  .empty-state{
+    text-align:center;padding:70px 24px;color:var(--text-dim);font-size:14px;
+  }
+
+  .inline-add-row{
+    display:flex;align-items:center;gap:14px;padding:12px 16px;color:var(--text-dim);cursor:pointer;
+  }
+  .inline-add-row .plus-circle{
+    width:20px;height:20px;border-radius:50%;color:var(--text-dim);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .inline-add-row.active{cursor:default;}
+  .inline-add-row .empty-check{
+    width:20px;height:20px;border-radius:3px;border:1.8px solid #80868b;flex-shrink:0;
+  }
+  .inline-add-row input{
+    flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:15px;color:var(--text);
+  }
+  .inline-add-row .x-btn{
+    width:26px;height:26px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+
+  /* ---------- modal / detail popup ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;
+    z-index:50;
+  }
+  .overlay.hidden{display:none;}
+  .sheet{
+    background:var(--surface);width:100%;max-height:88vh;border-radius:18px 18px 0 0;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .sheet-head{
+    display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+    border-bottom:1px solid var(--divider);flex-shrink:0;
+  }
+  .sheet-head .close-btn{
+    width:34px;height:34px;border-radius:50%;border:none;background:transparent;color:var(--text-dim);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .sheet-head .close-btn:active{background:var(--divider);}
+  .sheet-body{overflow-y:auto;padding:16px;}
+
+  .detail-title-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;}
+  .detail-title-row .circle{margin-top:3px;}
+  .detail-title{
+    flex:1;font-size:17px;font-weight:600;border:none;outline:none;background:transparent;
+    font-family:inherit;color:var(--text);resize:none;line-height:1.5;
+  }
+  .detail-field{margin-bottom:16px;}
+  .detail-label{font-size:12px;color:var(--text-dim);margin-bottom:6px;}
+  .sub-add-input{
+    width:100%;font-family:'Vazirmatn',Tahoma,sans-serif;font-size:14px;color:var(--text);
+    border:1px solid var(--divider);border-radius:8px;padding:9px 12px;outline:none;
+  }
+  .sub-add-input:focus{border-color:var(--blue);}
+  .detail-cost-display{
+    width:100%;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--text);
+    border:1px solid var(--divider);border-radius:8px;padding:11px 12px;
+    cursor:pointer;text-align:right;box-sizing:border-box;
+  }
+  .detail-cost-display.empty{color:var(--text-dim);}
+  .detail-cost-display:active{border-color:var(--blue);background:var(--blue-soft);}
+
+  .numpad-dialog{
+    background:var(--surface);border-radius:16px;padding:18px;width:100%;max-width:320px;
+  }
+  .numpad-display{
+    font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:600;color:var(--text);
+    text-align:center;padding:14px 8px;margin-bottom:16px;border-bottom:2px solid var(--divider);
+    overflow-wrap:anywhere;
+  }
+  .numpad-display.empty{color:var(--text-dim);font-size:16px;font-weight:400;}
+  .numpad-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  }
+  .numpad-key{
+    font-family:'Vazirmatn',Tahoma,sans-serif;font-size:22px;font-weight:600;color:var(--text);
+    background:var(--bg);border:none;border-radius:12px;padding:16px 0;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;touch-action:manipulation;
+  }
+  .numpad-key:active{background:var(--divider);}
+  .numpad-key.numpad-done{background:var(--blue);color:#fff;}
+  .numpad-key.numpad-done:active{background:#1558b0;}
+  .numpad-key.numpad-backspace{color:var(--text-dim);}
+  .numpad-cancel{
+    width:100%;margin-top:12px;padding:10px;border:none;background:transparent;
+    color:var(--text-dim);font-family:inherit;font-size:14px;cursor:pointer;
+  }
+
+  .detail-star-row{
+    display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:14px;color:var(--text-dim);cursor:pointer;
+  }
+  .detail-star-row .star-icon{width:22px;height:22px;}
+
+  .sub-item{display:flex;align-items:center;gap:10px;padding:8px 0;}
+  .sub-item input.sub-text{
+    flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:14px;color:var(--text);
+  }
+  .sub-item .circle{width:18px;height:18px;}
+  .sub-item .star-icon{width:17px;height:17px;}
+  .sub-del{
+    width:26px;height:26px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .sub-del:active{color:var(--danger);}
+
+  .add-sub-row{display:flex;gap:8px;margin-top:8px;align-items:center;}
+  .add-sub-row .add-sub-btn{
+    flex-shrink:0;width:36px;height:36px;border-radius:8px;border:none;background:var(--blue-soft);
+    color:var(--blue);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+
+  .delete-task-btn{
+    width:100%;margin-top:8px;padding:12px;border-radius:8px;border:1px solid var(--danger-soft);
+    background:var(--danger-soft);color:var(--danger);font-family:inherit;font-size:14px;font-weight:600;
+    cursor:pointer;
+  }
+  .confirm-btn{
+    width:100%;margin-top:8px;padding:13px;border-radius:8px;border:none;
+    background:#1e8e3e;color:#fff;font-family:inherit;font-size:15px;font-weight:700;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;
+  }
+  .confirm-btn:active{background:#186c30;}
+
+  .toast{
+    position:fixed;bottom:96px;left:50%;transform:translateX(-50%);
+    background:#323232;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;
+    opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:60;
+  }
+  .toast.show{opacity:1;}
+
+  /* ---------- side drawer ---------- */
+  .drawer-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:70;
+    display:flex;justify-content:flex-end;
+  }
+  .drawer-overlay.hidden{display:none;}
+  .drawer{
+    width:78%;max-width:320px;background:var(--surface);height:100%;
+    padding:22px 18px;box-shadow:-2px 0 10px rgba(0,0,0,.15);
+    display:flex;flex-direction:column;
+  }
+  .drawer-account{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+  .avatar-circle.big{width:44px;height:44px;}
+  .drawer-account-name{font-size:15px;font-weight:600;}
+  .drawer-account-sub{font-size:12.5px;color:var(--text-dim);}
+  .drawer-signin-btn{
+    width:100%;padding:11px;border-radius:8px;border:1px solid var(--divider);
+    background:var(--surface);color:var(--blue);font-family:inherit;font-size:14px;font-weight:600;
+    cursor:pointer;margin-bottom:16px;display:flex;align-items:center;justify-content:center;touch-action:manipulation;
+  }
+  .drawer-signin-btn:active{background:var(--blue-soft);}
+  .drawer-divider{height:1px;background:var(--divider);margin:6px 0 14px;}
+  .drawer-item{
+    display:flex;align-items:center;gap:14px;padding:10px 4px;cursor:pointer;font-size:14.5px;color:var(--text);
+  }
+  .drawer-item:active{background:var(--divider);border-radius:8px;}
+  .drawer-item-note{font-size:12px;color:var(--text-dim);padding:8px 4px;line-height:1.6;}
+  .shared-project-block{margin-top:14px;}
+  .shared-project-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;}
+  .shared-email-row{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    font-size:12.5px;color:var(--text-dim);padding:6px 2px;border-bottom:1px solid var(--divider);
+    direction:ltr;text-align:right;
+  }
+  .shared-email-row .remove-share-btn{
+    background:transparent;border:none;color:var(--danger);cursor:pointer;font-size:12px;flex-shrink:0;
+    direction:rtl;
+  }
+  .trash-row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:12px 4px;border-bottom:1px solid var(--divider);
+  }
+  .trash-row-text{flex:1;min-width:0;}
+  .trash-row-title{font-size:14.5px;color:var(--text);overflow-wrap:anywhere;}
+  .trash-row-path{font-size:11.5px;color:var(--text-dim);margin-top:2px;}
+  .restore-btn{
+    flex-shrink:0;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--blue);
+    background:var(--blue-soft);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;touch-action:manipulation;
+  }
+
+  /* ---------- mini dialogs (centered) ---------- */
+  .mini-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .mini-overlay.hidden{display:none;}
+  .mini-dialog{
+    background:var(--surface);border-radius:14px;padding:20px;width:100%;max-width:340px;
+  }
+  .mini-title{font-size:16.5px;font-weight:700;margin-bottom:10px;text-align:right;}
+  .mini-sub{font-size:13px;color:var(--text-dim);margin-bottom:12px;line-height:1.6;text-align:right;}
+  .mini-input{
+    width:100%;font-family:inherit;font-size:15px;color:var(--text);
+    border:1px solid var(--divider);border-radius:8px;padding:11px 14px;outline:none;
+    text-align:right;margin-bottom:16px;
+  }
+  .mini-input:focus{border-color:var(--blue);}
+  .mini-actions{display:flex;justify-content:flex-end;gap:8px;}
+  .mini-btn{
+    font-family:inherit;font-size:14px;font-weight:600;border:none;border-radius:8px;
+    padding:10px 16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;touch-action:manipulation;
+  }
+  .mini-btn.ghost{background:transparent;color:var(--text-dim);}
+  .mini-btn.ghost:active{background:var(--divider);}
+  .mini-btn.primary{background:var(--blue);color:#fff;}
+  .mini-btn.primary:active{background:#1558b0;}
+  .mini-btn.danger{background:var(--danger-soft);color:var(--danger);}
+  .mini-btn.danger:active{background:#f6c6c1;}
+
+  /* ---------- undo toast ---------- */
+  .undo-toast{
+    position:fixed;bottom:20px;left:16px;right:16px;max-width:420px;margin:0 auto;
+    background:#323232;color:#fff;border-radius:10px;padding:13px 16px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    z-index:90;overflow:hidden;
+  }
+  .undo-toast.hidden{display:none;}
+  .undo-toast span{font-size:13.5px;flex:1;}
+  .undo-toast button{
+    background:transparent;border:none;color:#8ab4f8;font-family:inherit;font-size:13.5px;font-weight:700;
+    cursor:pointer;flex-shrink:0;
+  }
+  .undo-bar{
+    position:absolute;bottom:0;right:0;left:0;height:2.5px;background:#8ab4f8;
+    transform-origin:right;animation:undoShrink linear forwards;
+  }
+  @keyframes undoShrink{ from{transform:scaleX(1);} to{transform:scaleX(0);} }
+
+  .page-overlay{position:fixed;inset:0;background:var(--bg);z-index:55;display:flex;flex-direction:column;overflow:hidden;}
+  .page-overlay.hidden{display:none;}
+  .page-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--divider);background:var(--bg);flex-shrink:0;}
+  .page-head h2{flex:1;margin:0;font-size:16px;font-weight:700;text-align:center;}
+  .page-body{flex:1;overflow-y:auto;padding:8px 0 40px;-webkit-overflow-scrolling:touch;}
+  .mgmt-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--divider);background:var(--surface);}
+  .mgmt-row.row-dragging{opacity:.4;}
+  .mgmt-row.drag-over-top{box-shadow:inset 0 2px 0 var(--blue);}
+  .mgmt-row.drag-over-bottom{box-shadow:inset 0 -2px 0 var(--blue);}
+  .mgmt-name{flex:1;min-width:0;font-size:15px;overflow-wrap:anywhere;}
+  .mgmt-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;}
+  .mgmt-icon-btn{width:34px;height:34px;border:none;background:transparent;border-radius:50%;color:var(--text-dim);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .mgmt-icon-btn:active{background:var(--divider);}
+  .mgmt-icon-btn.danger{color:var(--danger);}
+  .mgmt-icon-btn.blue{color:var(--blue);}
+  .mgmt-empty{text-align:center;padding:60px 24px;color:var(--text-dim);font-size:14px;}
+  .confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:95;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .confirm-overlay.hidden{display:none;}
+  .confirm-box{background:var(--surface);border-radius:14px;padding:20px;width:100%;max-width:320px;}
+  .confirm-box p{margin:0 0 16px;font-size:15px;line-height:1.6;text-align:right;}
+  .collab-section-title{
+    font-size:12px;font-weight:700;color:var(--text-dim);padding:14px 16px 6px;
+    text-transform:none;letter-spacing:0;
+  }
+  .collab-block{padding:12px 16px;border-bottom:1px solid var(--divider);background:var(--surface);}
+  .collab-block h3{margin:0 0 6px;font-size:14px;font-weight:700;}
+  .collab-meta{font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6;}
+  .collab-role{
+    display:inline-block;font-size:11px;font-weight:700;border-radius:6px;
+    padding:2px 8px;margin-inline-start:6px;vertical-align:middle;
+  }
+  .collab-role.admin{background:var(--blue-soft);color:var(--blue);}
+  .collab-role.member{background:#e6f4ea;color:#137333;}
+  .collab-email-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--divider);direction:ltr;}
+  .collab-email-row:last-child{border-bottom:none;}
+  .collab-email-row span{font-size:13px;color:var(--text-dim);}
+  .collab-email-row .collab-person-tag{font-size:11px;color:var(--text-dim);direction:rtl;}
+  .perm-del-btn{flex-shrink:0;font-family:inherit;font-size:12px;font-weight:700;color:var(--danger);background:var(--danger-soft);border:none;border-radius:8px;padding:7px 10px;cursor:pointer;}
+
+  .export-toolbar{
+    display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px;align-items:center;
+    border-bottom:1px solid var(--divider);background:var(--surface);flex-shrink:0;
+  }
+  .export-toolbar .mode-toggle{margin:0;}
+  .export-check-all{
+    font-family:inherit;font-size:13px;font-weight:600;color:var(--blue);
+    background:var(--blue-soft);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;
+  }
+  .export-pdf-btn{
+    font-family:inherit;font-size:13px;font-weight:700;color:#fff;
+    background:var(--blue);border:none;border-radius:8px;padding:8px 14px;cursor:pointer;
+  }
+  .export-pdf-btn:active{background:#1558b0;}
+  .export-actions{display:flex;gap:8px;margin-inline-start:auto;flex-wrap:wrap;}
+  .export-row{
+    display:flex;align-items:flex-start;gap:12px;padding:10px 16px;
+    border-bottom:1px solid var(--divider);background:var(--surface);
+  }
+  .export-row.sub{padding-right:48px;}
+  .export-row .exp-check{
+    width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:var(--blue);
+  }
+  .export-row .exp-body{flex:1;min-width:0;}
+  .export-row .exp-title{font-size:14.5px;line-height:1.4;}
+  .export-row.sub .exp-title{font-size:13.5px;color:#3c4043;}
+  .export-row .exp-cost{
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);flex-shrink:0;
+  }
+  .export-row.done .exp-title{color:var(--text-dim);text-decoration:line-through;}
+  .export-summary{
+    padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--text-dim);
+    display:flex;justify-content:space-between;
+  }
+  .export-summary b{color:var(--blue);}
+  @media print{
+    body *{visibility:hidden;}
+    #printRoot, #printRoot *{visibility:visible;}
+    #printRoot{position:absolute;left:0;top:0;width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">کارها</div>
+  <div class="mode-toggle" id="modeToggle">
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 8h16M7 8v8" stroke="currentColor" stroke-width="1.5"/></svg>
+    <span id="modeToggleLabel">نمایش هزینه</span>
+  </div>
+  <div class="account-trigger" id="avatarBtn" title="حساب کاربری">
+    <div class="avatar-circle">
+      <img id="avatarImg" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover;">
+      <svg id="avatarDefaultIcon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zM4 20.5c0-3.6 3.6-6.5 8-6.5s8 2.9 8 6.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+</div>
+
+<div class="tabbar" id="tabbar"></div>
+<div class="content" id="content"></div>
+
+<div class="overlay hidden" id="overlay">
+  <div class="sheet">
+    <div class="sheet-head">
+      <button class="close-btn" id="deleteSheetBtn" title="حذف">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.6c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7V4M6.6 7v5M9.4 7v5M3.7 4l.6 9.2c0 .6.5 1 1.1 1h5.2c.6 0 1.1-.4 1.1-1L12.3 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span style="font-size:13px;color:#5f6368;">جزئیات</span>
+      <button class="close-btn" id="closeSheetBtn">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="trashOverlay">
+  <div class="sheet">
+    <div class="sheet-head">
+      <span style="width:34px;"></span>
+      <span style="font-size:13px;color:#5f6368;">حذف شده ها</span>
+      <button class="close-btn" id="closeTrashBtn">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body" id="trashBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- side menu drawer -->
+<div class="drawer-overlay hidden" id="drawerOverlay">
+  <div class="drawer">
+    <div class="drawer-account">
+      <div class="avatar-circle big" id="drawerAvatarWrap">
+        <img id="drawerAvatarImg" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover;">
+        <svg id="drawerAvatarDefaultIcon" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zM4 20.5c0-3.6 3.6-6.5 8-6.5s8 2.9 8 6.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="drawer-account-info">
+        <div class="drawer-account-name" id="drawerAccountName">مهمان</div>
+        <div class="drawer-account-sub" id="drawerAccountSub">وارد نشده‌اید</div>
+      </div>
+    </div>
+    <button class="drawer-signin-btn" id="drawerSigninBtn">ورود با گوگل</button>
+    <div class="drawer-divider"></div>
+    <div class="drawer-item" id="drawerProjectsBtn">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span>مدیریت پروژه‌ها</span>
+    </div>
+    <div class="drawer-item" id="drawerCollabBtn">
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none"><circle cx="7" cy="6" r="2.6" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 16c0-2.6 2-4.6 4.5-4.6s4.5 2 4.5 4.6" stroke="currentColor" stroke-width="1.4"/><circle cx="14.5" cy="6.5" r="2.1" stroke="currentColor" stroke-width="1.4"/><path d="M12.6 11.6c2 .2 3.6 2 3.6 4.2" stroke="currentColor" stroke-width="1.4"/></svg>
+      <span id="drawerCollabLabel">همکاری روی این پروژه</span>
+    </div>
+    <div class="drawer-item" id="drawerCollabListBtn">
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none"><circle cx="7" cy="6" r="2.6" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 16c0-2.6 2-4.6 4.5-4.6s4.5 2 4.5 4.6" stroke="currentColor" stroke-width="1.4"/><circle cx="14.5" cy="6.5" r="2.1" stroke="currentColor" stroke-width="1.4"/><path d="M12.6 11.6c2 .2 3.6 2 3.6 4.2" stroke="currentColor" stroke-width="1.4"/></svg>
+      <span>لیست همکاری‌ها</span>
+    </div>
+    <div class="drawer-item" id="drawerTrashBtn">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.6c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7V4M6.6 7v5M9.4 7v5M3.7 4l.6 9.2c0 .6.5 1 1.1 1h5.2c.6 0 1.1-.4 1.1-1L12.3 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>حذف شده ها</span>
+    </div>
+    <div class="drawer-item" id="drawerArchiveBtn">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 6h14v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6zM2 4h16v2H2V4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span>آرشیو شده ها</span>
+    </div>
+  </div>
+</div>
+
+<!-- share/collaborate dialog -->
+<div class="mini-overlay hidden" id="shareOverlay">
+  <div class="mini-dialog">
+    <div class="mini-title" id="shareDialogTitle">اشتراک‌گذاری پروژه</div>
+    <div class="mini-sub" id="shareDialogSub">آدرس جیمیل فردی که می‌خواهید به این پروژه دسترسی بدهید را وارد کنید.</div>
+    <input type="email" class="mini-input" id="shareEmailInput" placeholder="name@gmail.com" dir="ltr" style="text-align:right;">
+    <div class="mini-actions">
+      <button class="mini-btn ghost" id="shareCancelBtn">انصراف</button>
+      <button class="mini-btn primary" id="shareConfirmBtn">افزودن دسترسی</button>
+    </div>
+  </div>
+</div>
+
+<!-- generic small prompt dialog (used for add project / rename) -->
+<div class="mini-overlay hidden" id="promptOverlay">
+  <div class="mini-dialog">
+    <div class="mini-title" id="promptTitle">عنوان</div>
+    <input type="text" class="mini-input" id="promptInput" placeholder="">
+    <div class="mini-actions">
+      <button class="mini-btn ghost" id="promptCancelBtn">انصراف</button>
+      <button class="mini-btn primary" id="promptConfirmBtn">تایید</button>
+    </div>
+  </div>
+</div>
+
+<div class="mini-overlay hidden" id="numpadOverlay">
+  <div class="numpad-dialog">
+    <div class="numpad-display empty" id="numpadDisplay">وارد کنید…</div>
+    <div class="numpad-grid">
+      <button type="button" class="numpad-key" data-d="1">۱</button>
+      <button type="button" class="numpad-key" data-d="2">۲</button>
+      <button type="button" class="numpad-key" data-d="3">۳</button>
+      <button type="button" class="numpad-key" data-d="4">۴</button>
+      <button type="button" class="numpad-key" data-d="5">۵</button>
+      <button type="button" class="numpad-key" data-d="6">۶</button>
+      <button type="button" class="numpad-key" data-d="7">۷</button>
+      <button type="button" class="numpad-key" data-d="8">۸</button>
+      <button type="button" class="numpad-key" data-d="9">۹</button>
+      <button type="button" class="numpad-key numpad-backspace" id="numpadBackspace">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6h11a1 1 0 011 1v10a1 1 0 01-1 1H9l-6-6 6-6z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 10l5 5M18 10l-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <button type="button" class="numpad-key" data-d="0">۰</button>
+      <button type="button" class="numpad-key numpad-done" id="numpadDoneBtn">
+        <svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M4 10.5l3.5 3.5L16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <button type="button" class="numpad-cancel" id="numpadCancelBtn">انصراف</button>
+  </div>
+</div>
+
+
+
+<div class="page-overlay hidden" id="projectsPage">
+  <div class="page-head">
+    <button class="icon-btn" id="closeProjectsPage"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2>مدیریت پروژه‌ها</h2>
+    <span style="width:38px;"></span>
+  </div>
+  <div class="page-body" id="projectsPageBody"></div>
+</div>
+<div class="page-overlay hidden" id="exportPage">
+  <div class="page-head">
+    <button class="icon-btn" id="closeExportPage"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2 id="exportPageTitle">خروجی PDF</h2>
+    <span style="width:38px;"></span>
+  </div>
+  <div class="export-toolbar" id="exportToolbar"></div>
+  <div class="page-body" id="exportPageBody"></div>
+</div>
+
+<div class="page-overlay hidden" id="collabPage">
+  <div class="page-head">
+    <button class="icon-btn" id="closeCollabPage"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2>لیست همکاری‌ها</h2>
+    <span style="width:38px;"></span>
+  </div>
+  <div class="page-body" id="collabPageBody"></div>
+</div>
+<div class="page-overlay hidden" id="archivePage">
+  <div class="page-head">
+    <button class="icon-btn" id="closeArchivePage"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2>آرشیو شده ها</h2>
+    <span style="width:38px;"></span>
+  </div>
+  <div class="page-body" id="archivePageBody"></div>
+</div>
+<div class="confirm-overlay hidden" id="confirmOverlay">
+  <div class="confirm-box">
+    <p id="confirmText">آیا مطمئن هستید؟</p>
+    <div class="mini-actions">
+      <button class="mini-btn ghost" id="confirmCancelBtn">انصراف</button>
+      <button class="mini-btn danger" id="confirmOkBtn">تایید</button>
+    </div>
+  </div>
+</div>
+<!-- undo toast (soft delete) -->
+<div class="undo-toast hidden" id="undoToast">
+  <span id="undoToastText">حذف شد</span>
+  <button id="undoToastBtn">بازگشت</button>
+  <div class="undo-bar" id="undoToastBar"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBbRk4MsdHtj-gWnjbJExvQgW0sY6Z4uK8",
+  authDomain: "tree-d92af.firebaseapp.com",
+  projectId: "tree-d92af",
+  storageBucket: "tree-d92af.firebasestorage.app",
+  messagingSenderId: "401523332370",
+  appId: "1:401523332370:web:3a524a2b86b967ca4d8fcb"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+db.enablePersistence({ synchronizeTabs: true }).catch((err)=>{
+  console.warn('Offline persistence not enabled:', err.code);
+});
+</script>
+<script>
+const STORAGE_KEY = 'gtasks-clone-v2';
+let data = null;
+let saveTimer = null;
+
+function uid(){ return 'i' + Math.random().toString(36).slice(2,10); }
+function makeTask(text){ return {id:uid(), text, done:false, starred:false, cost:null, subtasks:[], completedAt:null}; }
+function makeSub(text){ return {id:uid(), text, done:false, starred:false, cost:null}; }
+function makeProject(name){ return {id:uid(), name, tasks:[], completedOpen:false, archived:false, trashed:false}; }
+
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      data = JSON.parse(raw);
+      if(!data.starredOrder) data.starredOrder = [];
+      (data.projects||[]).forEach(p=>{
+        if(p.archived===undefined) p.archived=false;
+        (p.tasks||[]).forEach(t=>{
+          if(t.completedAt===undefined) t.completedAt = t.done ? 0 : null;
+        });
+      });
+      return;
+    }
+  }catch(e){}
+  data = { projects:[], viewMode:'simple', activeTab:'starred', starredOrder:[] };
+  persist();
+}
+
+let dirtyProjectIds = new Set();
+function markDirty(pid){ if(pid) dirtyProjectIds.add(pid); }
+let pendingCloudWrites = new Set();
+
+function persist(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+    catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
+    if(cloudMode && currentUser){
+      dirtyProjectIds.forEach(pid => {
+        const p = findProject(pid);
+        if(p) cloudSyncProjectFull(p);
+      });
+    }
+    dirtyProjectIds.clear();
+  }, 120);
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1600);
+}
+
+function findProject(pid){ return data.projects.find(p=>p.id===pid); }
+function findTask(pid, tid){ const p = findProject(pid); return p ? p.tasks.find(t=>t.id===tid) : null; }
+function findSub(pid, tid, sid){ const t = findTask(pid, tid); return t ? t.subtasks.find(s=>s.id===sid) : null; }
+
+function toPersianDigits(str){ return String(str).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]); }
+function toEnglishDigits(str){ return String(str).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)); }
+function formatCost(n){
+  if(n===null || n===undefined || n==='' || isNaN(Number(n))) return toPersianDigits('0');
+  const s = String(Math.round(Number(n)));
+  let out = '';
+  for(let i=0;i<s.length;i++){
+    if(i>0 && (s.length-i)%3===0) out += ',';
+    out += s[i];
+  }
+  return toPersianDigits(out);
+}
+function groupWithCommas(digits){
+  let out = '';
+  for(let i=0;i<digits.length;i++){
+    if(i>0 && (digits.length-i)%3===0) out += ',';
+    out += digits[i];
+  }
+  return out;
+}
+function formatCostDisplay(n){
+  if(n===null || n===undefined || n==='' || isNaN(Number(n))) return '';
+  return toPersianDigits(groupWithCommas(String(Math.round(Math.abs(Number(n)))))) + ' تومان';
+}
+function taskCostSum(task){
+  let total = Number(task.cost)||0;
+  (task.subtasks||[]).forEach(s => {
+    if(s.trashed) return;
+    total += Number(s.cost)||0;
+  });
+  return total;
+}
+/** فقط موارد باز — همان‌هایی که بالای بخش تکمیل‌شده دیده می‌شوند */
+function projectCostSum(project){
+  let sum = 0;
+  (project.tasks||[]).forEach(t=>{
+    if(t.trashed || t.done) return;
+    if(typeof isPendingDeleted === 'function' && isPendingDeleted('task', project.id, t.id)) return;
+    sum += Number(t.cost)||0;
+    (t.subtasks||[]).forEach(s=>{
+      if(s.trashed || s.done) return;
+      if(typeof isPendingDeleted === 'function' && isPendingDeleted('sub', project.id, t.id, s.id)) return;
+      sum += Number(s.cost)||0;
+    });
+  });
+  return sum;
+}
+
+function removeFromStarredOrder(pid, tid){
+  if(!data.starredOrder || !data.starredOrder.length) return;
+  const key = pid + ':' + tid;
+  const idx = data.starredOrder.indexOf(key);
+  if(idx !== -1) data.starredOrder.splice(idx, 1);
+}
+
+function toggleTaskDone(pid, tid){
+  const t = findTask(pid, tid);
+  t.done = !t.done;
+  t.completedAt = t.done ? Date.now() : null;
+  t.subtasks.forEach(s => s.done = t.done);
+  removeFromStarredOrder(pid, tid);
+  markDirty(pid);
+  persist();
+  if(data.activeTab === 'starred'){
+    refreshStarredPartial();
+  } else {
+    renderAll();
+  }
+}
+function toggleSubDone(pid, tid, sid){
+  const s = findSub(pid, tid, sid);
+  s.done = !s.done;
+  if(!s.done){
+    const t = findTask(pid, tid);
+    if(t && t.done){ t.done = false; t.completedAt = null; removeFromStarredOrder(pid, tid); }
+  }
+  markDirty(pid);
+  persist();
+  if(data.activeTab === 'starred'){
+    refreshStarredPartial();
+  } else {
+    renderAll();
+  }
+}
+function toggleTaskStar(pid, tid){ const t = findTask(pid,tid); t.starred = !t.starred; markDirty(pid); persist(); renderAll(); }
+function toggleSubStar(pid, tid, sid){ const s = findSub(pid,tid,sid); s.starred = !s.starred; markDirty(pid); persist(); renderAll(); }
+
+function deleteTask(pid, tid){
+  closeSheet();
+  softDelete('task', pid, tid, null, 'کار حذف شد');
+}
+function deleteSub(pid, tid, sid){
+  softDelete('sub', pid, tid, sid, 'زیرمجموعه حذف شد');
+}
+function addTaskToProject(pid, text){
+  if(!text || !text.trim()) return;
+  const p = findProject(pid);
+  p.tasks.push(makeTask(text.trim()));
+  markDirty(pid);
+  persist(); renderAll();
+}
+function addSubToTask(pid, tid, text){
+  if(!text || !text.trim()) return;
+  const t = findTask(pid, tid);
+  t.subtasks.push(makeSub(text.trim()));
+  markDirty(pid);
+  persist(); renderAll(); if(currentDetail) openTaskDetail(pid, tid);
+}
+function addProject(name){
+  if(!name || !name.trim()) return;
+  const p = makeProject(name.trim());
+  if(cloudMode && currentUser){
+    const ref = db.collection('projects').doc();
+    p.id = ref.id;
+    p.ownerUid = currentUser.uid;
+    p.ownerEmail = (currentUser.email || '').toLowerCase();
+    p.sharedWith = [];
+    ref.set({ name:p.name, tasks:p.tasks, completedOpen:false, ownerUid:currentUser.uid, ownerEmail:p.ownerEmail, sharedWith:[] }).catch(()=> showToast('خطا در ساخت پروژه روی سرور'));
+  }
+  data.projects.push(p);
+  data.activeTab = p.id;
+  persist(); renderAll();
+}
+function deleteProject(pid){
+  softDelete('project', pid, null, null, 'پروژه حذف شد');
+}
+
+/* ---------- cloud sync (Firebase) ---------- */
+let cloudMode = false;
+let currentUser = null;
+let cloudUnsubOwned = null, cloudUnsubShared = null;
+let migratedGuestData = false;
+
+function cloudDeleteProject(p){
+  if(!cloudMode || !p || !p.ownerUid) return;
+  db.collection('projects').doc(p.id).delete().catch(()=>{});
+}
+
+function cloudRenameProject(p){
+  if(!cloudMode || !p || !p.ownerUid) return;
+  db.collection('projects').doc(p.id).update({ name: p.name }).catch(()=>{});
+}
+
+function docToProject(doc){
+  const d = doc.data();
+  const tasks = (d.tasks || []).map(t => ({ ...t, completedAt: t.completedAt===undefined ? (t.done ? 0 : null) : t.completedAt }));
+  return {
+    id: doc.id,
+    name: d.name,
+    tasks: tasks,
+    completedOpen: !!d.completedOpen,
+    ownerUid: d.ownerUid,
+    ownerEmail: d.ownerEmail || '',
+    sharedWith: d.sharedWith || [],
+    trashed: !!d.trashed,
+    archived: !!d.archived,
+    expanded: true
+  };
+}
+
+function cloudSyncProjectFull(p){
+  if(!cloudMode || !currentUser || !p || !p.ownerUid) return;
+  pendingCloudWrites.add(p.id);
+  db.collection('projects').doc(p.id).set({
+    name: p.name,
+    tasks: p.tasks,
+    completedOpen: !!p.completedOpen,
+    ownerUid: p.ownerUid,
+    ownerEmail: p.ownerEmail || '',
+    sharedWith: p.sharedWith || [],
+    trashed: !!p.trashed,
+    archived: !!p.archived
+  }, { merge:true })
+    .then(()=>{ pendingCloudWrites.delete(p.id); })
+    .catch(()=>{ pendingCloudWrites.delete(p.id); showToast('خطا در همگام‌سازی با سرور'); });
+}
+
+function mergeCloudSnapshots(ownedDocs, sharedDocs){
+  const map = {};
+  ownedDocs.forEach(doc => map[doc.id] = docToProject(doc));
+  sharedDocs.forEach(doc => { if(!map[doc.id]) map[doc.id] = docToProject(doc); });
+
+  // If we have local edits not yet confirmed on the server, keep the local version —
+  // otherwise a delayed/racing snapshot can silently erase very recent additions.
+  if(data && data.projects){
+    data.projects.forEach(localP=>{
+      if((dirtyProjectIds.has(localP.id) || pendingCloudWrites.has(localP.id)) && map[localP.id]){
+        map[localP.id] = localP;
+      }
+    });
+  }
+
+  const preservedActive = data ? data.activeTab : null;
+  const preservedMode = data ? data.viewMode : 'simple';
+  const preservedStarredOrder = data && data.starredOrder ? data.starredOrder : [];
+  // preserve local project order
+  const prevOrder = (data && data.projects) ? data.projects.map(p => p.id) : [];
+  let projects = Object.values(map);
+  if(prevOrder.length){
+    const byId = {};
+    projects.forEach(p => { byId[p.id] = p; });
+    const ordered = [];
+    prevOrder.forEach(id => { if(byId[id]){ ordered.push(byId[id]); delete byId[id]; } });
+    // append any new projects from cloud not in local order
+    Object.keys(byId).forEach(id => ordered.push(byId[id]));
+    projects = ordered;
+  }
+  data = { projects: projects, viewMode: preservedMode, activeTab: preservedActive, starredOrder: preservedStarredOrder };
+  // only reset activeTab if it's a missing/archived/trashed *project* — never when on starred
+  if(data.activeTab !== 'starred'){
+    const cur = data.projects.find(p => p.id === data.activeTab);
+    if(!cur || cur.trashed || cur.archived){
+      const first = data.projects.find(p => !p.trashed && !p.archived);
+      data.activeTab = first ? first.id : 'starred';
+    }
+  }
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+  const wasAdding = addItemActive;
+  renderAll();
+  if(wasAdding) focusInlineAdd();
+  // keep management page in sync if open
+  if(!document.getElementById('projectsPage').classList.contains('hidden')) renderProjectsPage();
+  if(!document.getElementById('archivePage').classList.contains('hidden')) renderArchivePage();
+}
+
+function startCloudListeners(){
+  stopCloudListeners();
+  let ownedDocs = [], sharedDocs = [];
+  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
+    .onSnapshot(snap => { ownedDocs = snap.docs; mergeCloudSnapshots(ownedDocs, sharedDocs); },
+      ()=> showToast('خطا در دریافت اطلاعات از سرور'));
+  cloudUnsubShared = db.collection('projects').where('sharedWith','array-contains', currentUser.email)
+    .onSnapshot(snap => { sharedDocs = snap.docs; mergeCloudSnapshots(ownedDocs, sharedDocs); },
+      ()=> showToast('خطا در دریافت اطلاعات از سرور'));
+}
+function stopCloudListeners(){
+  if(cloudUnsubOwned) cloudUnsubOwned();
+  if(cloudUnsubShared) cloudUnsubShared();
+  cloudUnsubOwned = null; cloudUnsubShared = null;
+}
+
+async function migrateGuestDataToCloud(){
+  if(migratedGuestData) return;
+  migratedGuestData = true;
+  const guestProjects = (data && data.projects) ? data.projects.filter(p=>!p.ownerUid) : [];
+  for(const p of guestProjects){
+    const ref = db.collection('projects').doc();
+    await ref.set({
+      name: p.name, tasks: p.tasks, completedOpen: !!p.completedOpen,
+      ownerUid: currentUser.uid, ownerEmail: (currentUser.email||'').toLowerCase(), sharedWith: []
+    }).catch(()=>{});
+  }
+}
+
+function updateAccountUI(){
+  const nameEl = document.getElementById('drawerAccountName');
+  const subEl = document.getElementById('drawerAccountSub');
+  const signBtn = document.getElementById('drawerSigninBtn');
+  const headerImg = document.getElementById('avatarImg');
+  const headerIcon = document.getElementById('avatarDefaultIcon');
+  const drawerImg = document.getElementById('drawerAvatarImg');
+  const drawerIcon = document.getElementById('drawerAvatarDefaultIcon');
+
+  if(currentUser){
+    nameEl.textContent = currentUser.displayName || 'کاربر گوگل';
+    subEl.textContent = currentUser.email || '';
+    signBtn.textContent = 'خروج از حساب';
+    if(currentUser.photoURL){
+      headerImg.src = currentUser.photoURL; headerImg.style.display='block'; headerIcon.style.display='none';
+      drawerImg.src = currentUser.photoURL; drawerImg.style.display='block'; drawerIcon.style.display='none';
+    }
+  } else {
+    nameEl.textContent = 'مهمان';
+    subEl.textContent = 'وارد نشده‌اید';
+    signBtn.textContent = 'ورود با گوگل';
+    headerImg.style.display='none'; headerIcon.style.display='flex';
+    drawerImg.style.display='none'; drawerIcon.style.display='flex';
+  }
+}
+
+auth.onAuthStateChanged(async (user)=>{
+  currentUser = user;
+  cloudMode = !!user;
+  updateAccountUI();
+  if(user){
+    await migrateGuestDataToCloud();
+    startCloudListeners();
+  } else {
+    stopCloudListeners();
+    loadData();
+    renderAll();
+  }
+});
+
+/* ---------- soft delete / undo (like WhatsApp/Telegram) ---------- */
+let pendingDelete = null;
+
+function isPendingDeleted(type, pid, tid, sid){
+  if(!pendingDelete || pendingDelete.pid !== pid) return false;
+  if(pendingDelete.type === 'project') return true;
+  if(pendingDelete.type === 'task') return pendingDelete.tid === tid;
+  if(pendingDelete.type === 'sub') return type === 'sub' && pendingDelete.tid === tid && pendingDelete.sid === sid;
+  return false;
+}
+
+function softDelete(type, pid, tid, sid, label){
+  if(pendingDelete) finalizePendingDelete();
+  pendingDelete = { type, pid, tid, sid };
+  renderAll();
+  if(currentDetail) renderSheet();
+  if(type === 'project' && !document.getElementById('projectsPage').classList.contains('hidden')) renderProjectsPage();
+  showUndoToast(label);
+  pendingDelete.timeoutId = setTimeout(finalizePendingDelete, 4000);
+}
+
+function finalizePendingDelete(){
+  if(!pendingDelete) return;
+  const { type, pid, tid, sid, timeoutId } = pendingDelete;
+  clearTimeout(timeoutId);
+  if(type === 'project'){
+    const p = findProject(pid);
+    if(p){ p.trashed = true; cloudSyncProjectFull(p); }
+    if(data.activeTab === pid){
+      const nextVisible = data.projects.find(pr => pr.id !== pid && !pr.trashed);
+      data.activeTab = nextVisible ? nextVisible.id : 'starred';
+    }
+  } else if(type === 'task'){
+    const p = findProject(pid);
+    const t = p ? p.tasks.find(t => t.id === tid) : null;
+    if(t){ t.trashed = true; markDirty(pid); }
+  } else if(type === 'sub'){
+    const t = findTask(pid, tid);
+    const s = t ? t.subtasks.find(s => s.id === sid) : null;
+    if(s){ s.trashed = true; markDirty(pid); }
+  }
+  pendingDelete = null;
+  persist(); renderAll();
+  if(!document.getElementById('projectsPage').classList.contains('hidden')) renderProjectsPage();
+  hideUndoToast();
+}
+
+function undoPendingDelete(){
+  if(!pendingDelete) return;
+  clearTimeout(pendingDelete.timeoutId);
+  pendingDelete = null;
+  renderAll();
+  if(currentDetail) renderSheet();
+  hideUndoToast();
+}
+
+function showUndoToast(label){
+  const t = document.getElementById('undoToast');
+  document.getElementById('undoToastText').textContent = label;
+  const bar = document.getElementById('undoToastBar');
+  bar.style.animation = 'none';
+  void bar.offsetWidth;
+  bar.style.animation = 'undoShrink 4s linear forwards';
+  t.classList.remove('hidden');
+}
+function hideUndoToast(){
+  document.getElementById('undoToast').classList.add('hidden');
+}
+document.getElementById('undoToastBtn').onclick = undoPendingDelete;
+
+/* ---------- svg icons ---------- */
+function svgCheck(){ return '<svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5l3.5 3.5L12 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+function svgStar(filled){ return '<svg width="18" height="18" viewBox="0 0 20 20" fill="'+(filled?'currentColor':'none')+'"><path d="M10 1.8l2.5 5.2 5.6.6-4.2 3.8 1.1 5.6L10 14.2l-5 2.8 1.1-5.6-4.2-3.8 5.6-.6L10 1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>'; }
+function svgChevron(){ return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+function svgTrash(){ return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.6c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7V4M6.6 7v5M9.4 7v5M3.7 4l.6 9.2c0 .6.5 1 1.1 1h5.2c.6 0 1.1-.4 1.1-1L12.3 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+function svgPlus(){ return '<svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v13M1 7.5h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'; }
+
+/* ---------- collect starred ---------- */
+function collectStarredGrouped(){
+  const groups = [];
+  data.projects.forEach(p=>{
+    if(isPendingDeleted('project', p.id) || p.trashed || p.archived) return;
+    p.tasks.forEach(t=>{
+      if(isPendingDeleted('task', p.id, t.id) || t.trashed) return;
+      const starredSubs = t.subtasks.filter(s => !isPendingDeleted('sub', p.id, t.id, s.id) && !s.trashed && s.starred);
+      if(!t.starred && !starredSubs.length) return;
+      groups.push({
+        pid: p.id, tid: t.id, projectName: p.name,
+        taskText: t.text, taskStarred: t.starred, taskDone: t.done, taskCost: taskCostSum(t), completedAt: t.completedAt || null,
+        subs: starredSubs.map(s => ({ id:s.id, text:s.text, done:s.done, cost:s.cost, starred:s.starred }))
+      });
+    });
+  });
+  groups.sort((a,b)=>{
+    if(a.taskDone && b.taskDone) return (b.completedAt||0) - (a.completedAt||0);
+    return 0;
+  });
+  if(data.starredOrder && data.starredOrder.length){
+    const key = g => g.pid + ':' + g.tid;
+    const orderMap = {};
+    data.starredOrder.forEach((k,i)=>{ orderMap[k]=i; });
+    groups.sort((a,b)=>{
+      const ia = orderMap[key(a)], ib = orderMap[key(b)];
+      if(ia===undefined && ib===undefined) return 0;
+      if(ia===undefined) return 1;
+      if(ib===undefined) return -1;
+      return ia - ib;
+    });
+  }
+  return groups;
+}
+
+/* ---------- tab bar ---------- */
+function renderTabs(){
+  const bar = document.getElementById('tabbar');
+  const prevScrollLeft = bar.scrollLeft;
+  bar.innerHTML = '';
+
+  const starTab = document.createElement('div');
+  starTab.className = 'tab star-tab' + (data.activeTab==='starred' ? ' active' : '');
+  starTab.innerHTML = svgStar(true);
+  starTab.onclick = ()=>{ data.activeTab = 'starred'; addItemActive = false; persist(); renderAll(); };
+  bar.appendChild(starTab);
+
+  data.projects.forEach(p=>{
+    if(isPendingDeleted('project', p.id) || p.trashed || p.archived) return;
+    const undone = p.tasks.filter(t=>!t.done && !isPendingDeleted('task', p.id, t.id) && !t.trashed).length;
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (data.activeTab===p.id ? ' active' : '');
+    tab.dataset.id = p.id;
+    const label = document.createElement('span');
+    label.textContent = p.name;
+    tab.appendChild(label);
+    if(undone){
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = undone;
+      tab.appendChild(count);
+    }
+    tab.onclick = ()=>{ data.activeTab = p.id; addItemActive = false; persist(); renderAll(); };
+    bar.appendChild(tab);
+  });
+
+  const addTab = document.createElement('div');
+  addTab.className = 'tab add-tab';
+  addTab.textContent = '+';
+  addTab.onclick = ()=>{
+    openMiniPrompt('نام پروژهٔ جدید', 'مثلاً «پروژه زیتون»', (name)=>{ if(name && name.trim()) addProject(name); });
+  };
+  bar.appendChild(addTab);
+
+  if(data.activeTab !== 'starred' && data.activeTab !== lastCenteredTab){
+    const activeEl = bar.querySelector('.tab[data-id="'+data.activeTab+'"]');
+    if(activeEl) activeEl.scrollIntoView({ inline:'center', block:'nearest', behavior:'smooth' });
+  } else {
+    bar.scrollLeft = prevScrollLeft;
+  }
+  lastCenteredTab = data.activeTab;
+}
+let lastCenteredTab = null;
+
+function svgGrip(){
+  return '<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="2.5" cy="2.5" r="1.2"/><circle cx="7.5" cy="2.5" r="1.2"/><circle cx="2.5" cy="7" r="1.2"/><circle cx="7.5" cy="7" r="1.2"/><circle cx="2.5" cy="11.5" r="1.2"/><circle cx="7.5" cy="11.5" r="1.2"/></svg>';
+}
+
+/* ---------- generic mini prompt dialog (replaces window.prompt) ---------- */
+let miniPromptCallback = null;
+function openMiniPrompt(title, placeholder, onConfirm){
+  miniPromptCallback = onConfirm;
+  document.getElementById('promptTitle').textContent = title;
+  const input = document.getElementById('promptInput');
+  input.value = '';
+  input.placeholder = placeholder || '';
+  document.getElementById('promptOverlay').classList.remove('hidden');
+  setTimeout(()=> input.focus(), 0);
+}
+function closeMiniPrompt(){ document.getElementById('promptOverlay').classList.add('hidden'); }
+document.getElementById('promptCancelBtn').onclick = closeMiniPrompt;
+document.getElementById('promptConfirmBtn').onclick = ()=>{
+  const val = document.getElementById('promptInput').value;
+  closeMiniPrompt();
+  if(miniPromptCallback) miniPromptCallback(val);
+};
+document.getElementById('promptInput').onkeydown = (e)=>{
+  if(e.key==='Enter'){ e.preventDefault(); document.getElementById('promptConfirmBtn').click(); }
+};
+document.getElementById('promptOverlay').onclick = (e)=>{
+  if(e.target.id==='promptOverlay') closeMiniPrompt();
+};
+
+/* ---------- custom numpad (cost entry) ---------- */
+let numpadBuffer = '';
+let numpadItem = null;
+let numpadPid = null;
+let numpadDisplayEl = null;
+
+function openNumpad(item, pid, displayEl){
+  numpadItem = item;
+  numpadPid = pid;
+  numpadDisplayEl = displayEl;
+  numpadBuffer = (item.cost===null || item.cost===undefined || item.cost==='') ? '' : String(Math.round(Number(item.cost)));
+  updateNumpadDisplay();
+  document.getElementById('numpadOverlay').classList.remove('hidden');
+}
+function closeNumpad(){
+  document.getElementById('numpadOverlay').classList.add('hidden');
+  numpadItem = null; numpadPid = null; numpadDisplayEl = null;
+}
+function updateNumpadDisplay(){
+  const el = document.getElementById('numpadDisplay');
+  if(numpadBuffer === ''){
+    el.textContent = 'وارد کنید…';
+    el.classList.add('empty');
+  } else {
+    el.textContent = toPersianDigits(groupWithCommas(numpadBuffer)) + ' تومان';
+    el.classList.remove('empty');
+  }
+}
+document.querySelectorAll('.numpad-key[data-d]').forEach(btn=>{
+  btn.onclick = ()=>{
+    if(numpadBuffer.length >= 13) return;
+    numpadBuffer += btn.dataset.d;
+    updateNumpadDisplay();
+  };
+});
+document.getElementById('numpadBackspace').onclick = ()=>{
+  numpadBuffer = numpadBuffer.slice(0, -1);
+  updateNumpadDisplay();
+};
+document.getElementById('numpadDoneBtn').onclick = ()=>{
+  if(!numpadItem) return;
+  numpadItem.cost = numpadBuffer === '' ? null : Number(numpadBuffer);
+  markDirty(numpadPid);
+  persist();
+  if(numpadDisplayEl){
+    const text = formatCostDisplay(numpadItem.cost);
+    numpadDisplayEl.textContent = text || 'وارد کنید…';
+    numpadDisplayEl.classList.toggle('empty', !text);
+  }
+  closeNumpad();
+};
+document.getElementById('numpadCancelBtn').onclick = closeNumpad;
+document.getElementById('numpadOverlay').onclick = (e)=>{
+  if(e.target.id==='numpadOverlay') closeNumpad();
+};
+
+/* ---------- content ---------- */
+let currentDetail = null;
+let addItemActive = false;
+
+function renderAll(){
+  renderTabs();
+  renderModeToggle();
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+  if(data.activeTab === 'starred'){
+    renderStarredView(content);
+  } else {
+    const p = findProject(data.activeTab);
+    if(!p || p.archived || p.trashed){
+      content.innerHTML = '<div class="empty-state">پروژه‌ای انتخاب نشده. از نوار بالا یکی را بسازید.</div>';
+      return;
+    }
+    renderProjectView(content, p);
+  }
+}
+function refreshStarredPartial(){
+  // keep activeTab as starred; only refresh content (and tab counts via renderTabs)
+  renderTabs();
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+  renderStarredView(content);
+}
+
+function renderModeToggle(){
+  const btn = document.getElementById('modeToggle');
+  const label = document.getElementById('modeToggleLabel');
+  if(data.viewMode === 'cost'){ btn.classList.add('active'); label.textContent = 'نمایش ساده'; }
+  else { btn.classList.remove('active'); label.textContent = 'نمایش هزینه'; }
+}
+document.getElementById('modeToggle').onclick = ()=>{
+  data.viewMode = data.viewMode === 'cost' ? 'simple' : 'cost';
+  persist(); renderAll();
+};
+
+function renderProjectView(content, p){
+  if(data.viewMode === 'cost'){
+    const summary = document.createElement('div');
+    summary.className = 'cost-summary';
+    summary.innerHTML = '<span>مجموع هزینه</span><span class="cost-sum-val"><span class="cost-unit">تومان</span> '+formatCost(projectCostSum(p))+'</span>';
+    content.appendChild(summary);
+  }
+
+  const visibleTasks = p.tasks.filter(t => !isPendingDeleted('task', p.id, t.id) && !t.trashed);
+  const active = visibleTasks.filter(t=>!t.done);
+  const completed = visibleTasks.filter(t=>t.done).sort((a,b)=> (b.completedAt||0) - (a.completedAt||0));
+
+  if(!active.length && !completed.length){
+    content.appendChild(elFromHtml('<div class="empty-state">کاری در این پروژه نیست. با دکمهٔ + یکی اضافه کنید.</div>'));
+  }
+
+  const activeWrap = document.createElement('div');
+  activeWrap.className = 'active-tasks-wrap';
+  active.forEach(t => activeWrap.appendChild(renderTaskBlock(p, t)));
+  content.appendChild(activeWrap);
+
+  content.appendChild(renderInlineAddRow(p));
+
+  if(completed.length){
+    const header = document.createElement('div');
+    header.className = 'completed-header';
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'completed-title';
+    titleSpan.textContent = 'تکمیل‌شده ('+completed.length+')';
+    header.appendChild(titleSpan);
+    if(p.completedOpen){
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'completed-clear-btn';
+      clearBtn.textContent = 'حذف همه';
+      clearBtn.onclick = (e)=>{
+        e.stopPropagation();
+        openConfirm('همه موارد تکمیل‌شده این پروژه حذف شوند؟', ()=>{
+          completed.forEach(t=>{ t.trashed = true; });
+          markDirty(p.id);
+          persist();
+          renderAll();
+          showToast('تکمیل‌شده‌ها حذف شدند');
+        }, 'حذف همه');
+      };
+      header.appendChild(clearBtn);
+    }
+    const chev = document.createElement('span');
+    chev.className = 'chev'+(p.completedOpen?'':' collapsed');
+    chev.innerHTML = svgChevron();
+    header.appendChild(chev);
+    header.onclick = ()=>{ p.completedOpen = !p.completedOpen; markDirty(p.id); persist(); renderAll(); };
+    content.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'completed-list' + (p.completedOpen ? '' : ' hidden');
+    completed.forEach(t => list.appendChild(renderTaskBlock(p, t)));
+    content.appendChild(list);
+  }
+}
+
+function refreshProjectPartial(p){
+  const emptyState = document.querySelector('.content .empty-state');
+  if(emptyState) emptyState.remove();
+
+  const wrap = document.querySelector('.active-tasks-wrap');
+  if(wrap){
+    wrap.innerHTML = '';
+    const visibleTasks = p.tasks.filter(t => !isPendingDeleted('task', p.id, t.id) && !t.trashed);
+    visibleTasks.filter(t=>!t.done).forEach(t => wrap.appendChild(renderTaskBlock(p, t)));
+  }
+
+  const tabEl = document.querySelector('.tab[data-id="'+p.id+'"]');
+  if(tabEl){
+    const undone = p.tasks.filter(t=>!t.done && !isPendingDeleted('task', p.id, t.id) && !t.trashed).length;
+    let countEl = tabEl.querySelector('.count');
+    if(undone){
+      if(!countEl){ countEl = document.createElement('span'); countEl.className = 'count'; tabEl.appendChild(countEl); }
+      countEl.textContent = undone;
+    } else if(countEl){ countEl.remove(); }
+  }
+
+  if(data.viewMode === 'cost'){
+    const summaryVal = document.querySelector('.cost-summary .cost-sum-val');
+    if(summaryVal) summaryVal.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(projectCostSum(p));
+  }
+}
+
+function renderInlineAddRow(p){
+  const row = document.createElement('div');
+
+  if(!addItemActive){
+    row.className = 'inline-add-row';
+    row.innerHTML = '<span class="plus-circle">'+svgPlus()+'</span><span>افزودن مورد</span>';
+    row.onclick = ()=>{ addItemActive = true; renderAll(); focusInlineAdd(); };
+    return row;
+  }
+
+  row.className = 'inline-add-row active';
+  const check = document.createElement('span');
+  check.className = 'empty-check';
+  row.appendChild(check);
+
+  const input = document.createElement('input');
+  input.id = 'inlineAddInput';
+  input.placeholder = 'مورد جدید…';
+
+  let ignoreBlur = false;
+  const commit = (keepFocus)=>{
+    if(!input.value.trim()) return;
+    const text = input.value.trim();
+    input.value = '';
+    const t = makeTask(text);
+    p.tasks.push(t);
+    markDirty(p.id);
+    // append task without destroying the input (keeps mobile keyboard open)
+    const wrap = document.querySelector('.active-tasks-wrap');
+    if(wrap){
+      const emptyState = document.querySelector('.content .empty-state');
+      if(emptyState) emptyState.remove();
+      wrap.appendChild(renderTaskBlock(p, t));
+    } else {
+      refreshProjectPartial(p);
+    }
+    // update tab count
+    const tabEl = document.querySelector('.tab[data-id="'+p.id+'"]');
+    if(tabEl){
+      const undone = p.tasks.filter(x=>!x.done && !isPendingDeleted('task', p.id, x.id) && !x.trashed).length;
+      let countEl = tabEl.querySelector('.count');
+      if(undone){
+        if(!countEl){ countEl = document.createElement('span'); countEl.className = 'count'; tabEl.appendChild(countEl); }
+        countEl.textContent = undone;
+      }
+    }
+    if(data.viewMode === 'cost'){
+      const summaryVal = document.querySelector('.cost-summary .cost-sum-val');
+      if(summaryVal) summaryVal.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(projectCostSum(p));
+    }
+    persist();
+    if(keepFocus){
+      addItemActive = true;
+      ignoreBlur = true;
+      input.focus();
+      setTimeout(()=>{ ignoreBlur = false; }, 100);
+    }
+  };
+  input.onkeydown = (e)=>{
+    if(e.key==='Enter'){ e.preventDefault(); e.stopPropagation(); commit(true); }
+    if(e.key==='Escape'){ addItemActive = false; renderAll(); }
+  };
+  input.onblur = ()=>{
+    if(ignoreBlur) return;
+    setTimeout(()=>{
+      if(ignoreBlur) return;
+      const el = document.getElementById('inlineAddInput');
+      if(!el) return;
+      if(document.activeElement === el) return;
+      if(el.value.trim()) commit(false);
+      else { /* keep row open while keyboard might bounce */ }
+    }, 120);
+  };
+  row.appendChild(input);
+
+  const xBtn = document.createElement('button');
+  xBtn.className = 'x-btn';
+  xBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  xBtn.onclick = ()=>{ addItemActive = false; renderAll(); };
+  row.appendChild(xBtn);
+
+  return row;
+}
+function focusInlineAdd(){
+  setTimeout(()=>{
+    const el = document.getElementById('inlineAddInput');
+    if(el) el.focus();
+  }, 0);
+}
+
+/* ---------- vertical drag reorder (tasks & subtasks) ---------- */
+let itemDragState = null;
+function startItemDrag(e, id, list, containerEl, wrapperEl, pid){
+  if(!containerEl) return;
+  const siblingEls = Array.from(containerEl.children).filter(el => el.dataset && el.dataset.dragId);
+  itemDragState = { id, list, siblingEls, hoverEl:null, hoverPos:null, wrapperEl, pid };
+  wrapperEl.classList.add('row-dragging');
+  document.addEventListener('pointermove', onItemDragMove);
+  document.addEventListener('pointerup', onItemDragEnd, { once:true });
+}
+function onItemDragMove(e){
+  if(!itemDragState) return;
+  const y = e.clientY;
+  const others = itemDragState.siblingEls.filter(el => el !== itemDragState.wrapperEl);
+  let target=null, pos=null;
+  for(const el of others){
+    const rect = el.getBoundingClientRect();
+    const mid = rect.top + rect.height/2;
+    if(y < mid){ target = el; pos = 'before'; break; }
+  }
+  if(!target && others.length){ target = others[others.length-1]; pos = 'after'; }
+  others.forEach(el => el.classList.remove('drag-over-top','drag-over-bottom'));
+  if(target) target.classList.add(pos==='before' ? 'drag-over-top' : 'drag-over-bottom');
+  itemDragState.hoverEl = target;
+  itemDragState.hoverPos = pos;
+}
+function onItemDragEnd(){
+  if(!itemDragState) return;
+  document.removeEventListener('pointermove', onItemDragMove);
+  itemDragState.wrapperEl.classList.remove('row-dragging');
+  itemDragState.siblingEls.forEach(el => el.classList.remove('drag-over-top','drag-over-bottom'));
+  const { id, list, hoverEl, hoverPos, pid, wrapperEl } = itemDragState;
+  const wasInCompletedList = !!wrapperEl.closest('.completed-list');
+  itemDragState = null;
+  if(!hoverEl) return;
+  const targetId = hoverEl.dataset.dragId;
+  const fromIdx = list.findIndex(x=>x.id===id);
+  if(fromIdx===-1) return;
+  const [moved] = list.splice(fromIdx,1);
+  let toIdx = list.findIndex(x=>x.id===targetId);
+  if(toIdx===-1){ list.splice(fromIdx,0,moved); return; }
+  if(hoverPos==='after') toIdx += 1;
+  list.splice(toIdx,0,moved);
+  if(wasInCompletedList && moved && 'done' in moved){
+    const completedInOrder = list.filter(t => t.done);
+    const base = Date.now();
+    completedInOrder.forEach((t,i)=>{ t.completedAt = base - i; });
+  }
+  markDirty(pid);
+  persist(); renderAll();
+}
+
+function renderTaskBlock(p, t){
+  const block = document.createElement('div');
+  block.className = 'task-block';
+  block.dataset.dragId = t.id;
+
+  const row = document.createElement('div');
+  row.className = 'row' + (t.done ? ' completed' : '');
+  const grip = document.createElement('span');
+  grip.className = 'drag-grip';
+  grip.innerHTML = svgGrip();
+  grip.onpointerdown = (e)=>{
+    e.stopPropagation(); e.preventDefault();
+    startItemDrag(e, t.id, p.tasks, block.parentElement, block, p.id);
+  };
+  row.appendChild(grip);
+  row.appendChild(buildCircle(t.done, (e)=>{ e.stopPropagation(); toggleTaskDone(p.id, t.id); }));
+  const body = document.createElement('div');
+  body.className = 'row-body';
+  const title = document.createElement('div');
+  title.className = 'row-title';
+  title.textContent = t.text;
+  body.appendChild(title);
+  row.appendChild(body);
+  if(data.viewMode === 'cost' && taskCostSum(t) > 0){
+    const c = document.createElement('span');
+    c.className = 'row-cost';
+    c.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(taskCostSum(t));
+    row.appendChild(c);
+  }
+  row.appendChild(buildStar(t.starred, (e)=>{ e.stopPropagation(); toggleTaskStar(p.id, t.id); }));
+  row.onclick = ()=> openTaskDetail(p.id, t.id);
+  block.appendChild(row);
+
+  t.subtasks.filter(s => !isPendingDeleted('sub', p.id, t.id, s.id) && !s.trashed).forEach(s=>{
+    const srow = document.createElement('div');
+    srow.className = 'row sub' + (s.done ? ' completed' : '');
+    srow.dataset.dragId = s.id;
+    const sgrip = document.createElement('span');
+    sgrip.className = 'drag-grip sub-grip';
+    sgrip.innerHTML = svgGrip();
+    sgrip.onpointerdown = (e)=>{
+      e.stopPropagation(); e.preventDefault();
+      startItemDrag(e, s.id, t.subtasks, block, srow, p.id);
+    };
+    srow.appendChild(sgrip);
+    srow.appendChild(buildCircle(s.done, (e)=>{ e.stopPropagation(); toggleSubDone(p.id, t.id, s.id); }, true));
+    const sbody = document.createElement('div');
+    sbody.className = 'row-body';
+    const stitle = document.createElement('div');
+    stitle.className = 'row-title';
+    stitle.textContent = s.text;
+    sbody.appendChild(stitle);
+    srow.appendChild(sbody);
+    if(data.viewMode === 'cost' && s.cost){
+      const c = document.createElement('span');
+      c.className = 'row-cost';
+      c.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(s.cost);
+      srow.appendChild(c);
+    }
+    srow.appendChild(buildStar(s.starred, (e)=>{ e.stopPropagation(); toggleSubStar(p.id, t.id, s.id); }));
+    srow.onclick = ()=> openSubDetail(p.id, t.id, s.id);
+    block.appendChild(srow);
+  });
+
+  return block;
+}
+
+let starredCompletedOpen = false;
+function renderStarredView(content){
+  const groups = collectStarredGrouped();
+  if(!groups.length){
+    content.appendChild(elFromHtml('<div class="empty-state">هنوز چیزی ستاره‌دار نشده. کنار هر کار روی ستاره بزنید.</div>'));
+    return;
+  }
+  const activeList = groups.filter(g => !g.taskDone);
+  const completedList = groups.filter(g => g.taskDone);
+
+  const activeWrap = document.createElement('div');
+  activeWrap.className = 'starred-active-list';
+  activeList.forEach(g => activeWrap.appendChild(buildStarredGroup(g, activeWrap)));
+  content.appendChild(activeWrap);
+
+  if(completedList.length){
+    const header = document.createElement('div');
+    header.className = 'completed-header';
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'completed-title';
+    titleSpan.textContent = 'تکمیل‌شده ('+completedList.length+')';
+    header.appendChild(titleSpan);
+    if(starredCompletedOpen){
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'completed-clear-btn';
+      clearBtn.textContent = 'حذف همه';
+      clearBtn.onclick = (e)=>{
+        e.stopPropagation();
+        openConfirm('همه موارد تکمیل‌شده از ستاره‌دارها حذف شوند؟', ()=>{
+          completedList.forEach(g=>{
+            const t = findTask(g.pid, g.tid);
+            if(t){
+              t.starred = false;
+              t.subtasks.forEach(s=>{ if(s.starred) s.starred = false; });
+              removeFromStarredOrder(g.pid, g.tid);
+              markDirty(g.pid);
+            }
+          });
+          persist();
+          refreshStarredPartial();
+          showToast('از ستاره‌دارها حذف شدند');
+        }, 'حذف همه');
+      };
+      header.appendChild(clearBtn);
+    }
+    const chev = document.createElement('span');
+    chev.className = 'chev'+(starredCompletedOpen?'':' collapsed');
+    chev.innerHTML = svgChevron();
+    header.appendChild(chev);
+    header.onclick = ()=>{ starredCompletedOpen = !starredCompletedOpen; refreshStarredPartial(); };
+    content.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'completed-list' + (starredCompletedOpen ? '' : ' hidden');
+    completedList.forEach(g => list.appendChild(buildStarredGroup(g, list)));
+    content.appendChild(list);
+  }
+}
+
+function buildStarredGroup(g, containerEl){
+  const block = document.createElement('div');
+  block.className = 'task-block';
+  block.dataset.dragId = g.pid + ':' + g.tid;
+
+  const row = document.createElement('div');
+  row.className = 'row' + (g.taskDone ? ' completed' : '');
+  const grip = document.createElement('span');
+  grip.className = 'drag-grip';
+  grip.innerHTML = svgGrip();
+  grip.onpointerdown = (e)=>{
+    e.stopPropagation(); e.preventDefault();
+    startStarredDrag(e, g.pid + ':' + g.tid, block, containerEl);
+  };
+  row.appendChild(grip);
+  row.appendChild(buildCircle(g.taskDone, (e)=>{ e.stopPropagation(); toggleTaskDone(g.pid, g.tid); }));
+  const body = document.createElement('div');
+  body.className = 'row-body';
+  const title = document.createElement('div');
+  title.className = 'row-title';
+  title.textContent = g.taskText;
+  body.appendChild(title);
+  const tag = document.createElement('span');
+  tag.className = 'starred-tag';
+  tag.textContent = g.projectName;
+  body.appendChild(tag);
+  row.appendChild(body);
+  if(data.viewMode === 'cost' && g.taskCost > 0){
+    const c = document.createElement('span');
+    c.className = 'row-cost';
+    c.textContent = formatCost(g.taskCost);
+    row.appendChild(c);
+  }
+  row.appendChild(buildStar(g.taskStarred, (e)=>{ e.stopPropagation(); toggleTaskStar(g.pid, g.tid); }));
+  row.onclick = ()=> openTaskDetail(g.pid, g.tid);
+  block.appendChild(row);
+
+  g.subs.forEach(s=>{
+    const srow = document.createElement('div');
+    srow.className = 'row sub' + (s.done ? ' completed' : '');
+    srow.dataset.dragId = g.pid + ':' + g.tid + ':' + s.id;
+    const sgrip = document.createElement('span');
+    sgrip.className = 'drag-grip sub-grip';
+    sgrip.innerHTML = svgGrip();
+    sgrip.onpointerdown = (e)=>{
+      e.stopPropagation(); e.preventDefault();
+      const parentTask = findTask(g.pid, g.tid);
+      if(parentTask) startItemDrag(e, s.id, parentTask.subtasks, block, srow, g.pid);
+    };
+    srow.appendChild(sgrip);
+    srow.appendChild(buildCircle(s.done, (e)=>{ e.stopPropagation(); toggleSubDone(g.pid, g.tid, s.id); }, true));
+    const sbody = document.createElement('div');
+    sbody.className = 'row-body';
+    const stitle = document.createElement('div');
+    stitle.className = 'row-title';
+    stitle.textContent = s.text;
+    sbody.appendChild(stitle);
+    srow.appendChild(sbody);
+    if(data.viewMode === 'cost' && s.cost){
+      const c = document.createElement('span');
+      c.className = 'row-cost';
+      c.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(s.cost);
+      srow.appendChild(c);
+    }
+    srow.appendChild(buildStar(true, (e)=>{ e.stopPropagation(); toggleSubStar(g.pid, g.tid, s.id); }));
+    srow.onclick = ()=> openSubDetail(g.pid, g.tid, s.id);
+    block.appendChild(srow);
+  });
+
+  return block;
+}
+
+let starredDragState = null;
+function startStarredDrag(e, key, wrapperEl, containerEl){
+  if(!containerEl) return;
+  const siblingEls = Array.from(containerEl.querySelectorAll('.task-block')).filter(el => el.dataset && el.dataset.dragId);
+  starredDragState = { key, siblingEls, hoverEl:null, hoverPos:null, wrapperEl, containerEl };
+  wrapperEl.classList.add('row-dragging');
+  document.addEventListener('pointermove', onStarredDragMove);
+  document.addEventListener('pointerup', onStarredDragEnd, { once:true });
+}
+function onStarredDragMove(e){
+  if(!starredDragState) return;
+  const y = e.clientY;
+  const others = starredDragState.siblingEls.filter(el => el !== starredDragState.wrapperEl);
+  let target=null, pos=null;
+  for(const el of others){
+    const rect = el.getBoundingClientRect();
+    const mid = rect.top + rect.height/2;
+    if(y < mid){ target = el; pos = 'before'; break; }
+  }
+  if(!target && others.length){ target = others[others.length-1]; pos = 'after'; }
+  others.forEach(el => el.classList.remove('drag-over-top','drag-over-bottom'));
+  if(target) target.classList.add(pos==='before' ? 'drag-over-top' : 'drag-over-bottom');
+  starredDragState.hoverEl = target;
+  starredDragState.hoverPos = pos;
+}
+function onStarredDragEnd(){
+  if(!starredDragState) return;
+  document.removeEventListener('pointermove', onStarredDragMove);
+  starredDragState.wrapperEl.classList.remove('row-dragging');
+  starredDragState.siblingEls.forEach(el => el.classList.remove('drag-over-top','drag-over-bottom'));
+  const { key, hoverEl, hoverPos } = starredDragState;
+  starredDragState = null;
+  if(!hoverEl) return;
+  const targetKey = hoverEl.dataset.dragId;
+  // build current order from groups
+  const groups = collectStarredGrouped();
+  let order = groups.map(g => g.pid + ':' + g.tid);
+  const fromIdx = order.indexOf(key);
+  if(fromIdx===-1) return;
+  order.splice(fromIdx,1);
+  let toIdx = order.indexOf(targetKey);
+  if(toIdx===-1){ order.splice(fromIdx,0,key); return; }
+  if(hoverPos==='after') toIdx += 1;
+  order.splice(toIdx,0,key);
+  data.starredOrder = order;
+  persist();
+  refreshStarredPartial();
+}
+
+function buildCircle(checked, onClick, small){
+  const c = document.createElement('span');
+  c.className = 'circle' + (checked ? ' checked' : '');
+  c.innerHTML = checked ? svgCheck() : '';
+  c.onclick = onClick;
+  return c;
+}
+function buildStar(starred, onClick){
+  const s = document.createElement('span');
+  s.className = 'star-icon' + (starred ? ' starred' : '');
+  s.innerHTML = svgStar(starred);
+  s.onclick = onClick;
+  return s;
+}
+function elFromHtml(html){
+  const d = document.createElement('div'); d.innerHTML = html; return d.firstElementChild;
+}
+
+/* ---------- detail sheet ---------- */
+
+function openTaskDetail(pid, tid){
+  currentDetail = {pid, tid, sid:null};
+  renderSheet();
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function openSubDetail(pid, tid, sid){
+  currentDetail = {pid, tid, sid};
+  renderSheet();
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function closeSheet(){
+  currentDetail = null;
+  document.getElementById('overlay').classList.add('hidden');
+  renderAll();
+}
+document.getElementById('closeSheetBtn').onclick = closeSheet;
+document.getElementById('overlay').onclick = (e)=>{ if(e.target.id==='overlay') closeSheet(); };
+
+function renderSheet(){
+  if(!currentDetail) return;
+  const { pid, tid, sid } = currentDetail;
+  const body = document.getElementById('sheetBody');
+  body.innerHTML = '';
+
+  const isSub = !!sid;
+  const item = isSub ? findSub(pid, tid, sid) : findTask(pid, tid);
+  if(!item){ closeSheet(); return; }
+
+  const titleRow = document.createElement('div');
+  titleRow.className = 'detail-title-row';
+  titleRow.appendChild(buildCircle(item.done, ()=>{
+    if(isSub) toggleSubDone(pid, tid, sid); else toggleTaskDone(pid, tid);
+    if(currentDetail) renderSheet();
+  }));
+  const titleInput = document.createElement('textarea');
+  titleInput.className = 'detail-title';
+  titleInput.rows = 1;
+  titleInput.value = item.text;
+  titleInput.oninput = ()=>{ titleInput.style.height='auto'; titleInput.style.height = titleInput.scrollHeight+'px'; };
+  titleInput.onblur = ()=>{
+    item.text = titleInput.value.trim() || item.text;
+    markDirty(pid);
+    persist(); renderAll();
+  };
+  titleRow.appendChild(titleInput);
+  body.appendChild(titleRow);
+
+  const starRow = document.createElement('div');
+  starRow.className = 'detail-star-row';
+  const starIcon = buildStar(item.starred, (e)=>{
+    e.stopPropagation();
+    if(isSub) toggleSubStar(pid, tid, sid); else toggleTaskStar(pid, tid);
+    if(currentDetail) renderSheet();
+  });
+  starRow.appendChild(starIcon);
+  starRow.onclick = ()=>{
+    if(isSub) toggleSubStar(pid, tid, sid); else toggleTaskStar(pid, tid);
+    if(currentDetail) renderSheet();
+  };
+  body.appendChild(starRow);
+
+  if(!isSub){
+    const subField = document.createElement('div');
+    subField.className = 'detail-field';
+    subField.innerHTML = '<div class="detail-label">زیرمجموعه‌ها</div>';
+    const subListWrap = document.createElement('div');
+    subField.appendChild(subListWrap);
+
+    function renderSubItems(){
+      subListWrap.innerHTML = '';
+      item.subtasks.filter(s => !isPendingDeleted('sub', pid, tid, s.id) && !s.trashed).forEach(s=>{
+        const row = document.createElement('div');
+        row.className = 'sub-item';
+        row.appendChild(buildCircle(s.done, ()=>{ toggleSubDone(pid, tid, s.id); renderSubItems(); }, true));
+        const input = document.createElement('input');
+        input.className = 'sub-text';
+        input.value = s.text;
+        input.onblur = ()=>{ s.text = input.value.trim() || s.text; markDirty(pid); persist(); renderAll(); };
+        row.appendChild(input);
+        const del = document.createElement('button');
+        del.className = 'sub-del';
+        del.innerHTML = svgTrash();
+        del.onclick = ()=>{
+          softDelete('sub', pid, tid, s.id, 'زیرمجموعه حذف شد');
+          renderSubItems();
+        };
+        row.appendChild(del);
+        subListWrap.appendChild(row);
+      });
+    }
+    renderSubItems();
+
+    const addRow = document.createElement('div');
+    addRow.className = 'add-sub-row';
+    const addInput = document.createElement('input');
+    addInput.className = 'sub-add-input';
+    addInput.placeholder = 'افزودن زیرمجموعه…';
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-sub-btn';
+    addBtn.innerHTML = svgPlus();
+    const commitAdd = ()=>{
+      if(addInput.value.trim()){
+        const text = addInput.value.trim();
+        addInput.value = '';
+        item.subtasks.push(makeSub(text));
+        markDirty(pid);
+        persist();
+        renderSubItems();
+      }
+    };
+    addBtn.onclick = commitAdd;
+    addInput.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); commitAdd(); } };
+    addInput.onblur = ()=>{ if(addInput.value.trim()) commitAdd(); };
+    addRow.appendChild(addInput);
+    addRow.appendChild(addBtn);
+    subField.appendChild(addRow);
+
+    body.appendChild(subField);
+  }
+
+  const costField = document.createElement('div');
+  costField.className = 'detail-field';
+  costField.innerHTML = '<div class="detail-label">برآورد هزینه (تومان)</div>';
+  const costDisplay = document.createElement('div');
+  costDisplay.className = 'detail-cost-display';
+  costDisplay.textContent = formatCostDisplay(item.cost) || 'وارد کنید…';
+  if(!formatCostDisplay(item.cost)) costDisplay.classList.add('empty');
+  costDisplay.onclick = ()=> openNumpad(item, pid, costDisplay);
+  costField.appendChild(costDisplay);
+  body.appendChild(costField);
+
+  document.getElementById('deleteSheetBtn').onclick = ()=>{
+    closeSheet();
+    if(isSub) softDelete('sub', pid, tid, sid, 'زیرمجموعه حذف شد');
+    else softDelete('task', pid, tid, null, 'کار حذف شد');
+  };
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'confirm-btn';
+  confirmBtn.textContent = 'تایید';
+  confirmBtn.onclick = ()=>{
+    item.text = titleInput.value.trim() || item.text;
+    markDirty(pid);
+    persist();
+    closeSheet();
+  };
+  body.appendChild(confirmBtn);
+}
+
+/* ---------- side drawer (menu) ---------- */
+function openDrawer(){
+  document.getElementById('drawerOverlay').classList.remove('hidden');
+  const label = document.getElementById('drawerCollabLabel');
+  if(label){
+    const p = data.activeTab !== 'starred' ? findProject(data.activeTab) : null;
+    label.textContent = p ? ('همکاری روی «' + p.name + '»') : 'همکاری روی این پروژه';
+  }
+}
+function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('hidden'); }
+document.getElementById('avatarBtn').onclick = openDrawer;
+document.getElementById('drawerOverlay').onclick = (e)=>{ if(e.target.id==='drawerOverlay') closeDrawer(); };
+document.getElementById('drawerSigninBtn').onclick = ()=>{
+  if(currentUser){
+    auth.signOut();
+    closeDrawer();
+  } else {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(()=>{
+      auth.signInWithRedirect(provider);
+    });
+  }
+};
+
+/* ---------- confirm dialog ---------- */
+let confirmCallback = null;
+function openConfirm(text, onOk, okLabel){
+  document.getElementById('confirmText').textContent = text;
+  document.getElementById('confirmOkBtn').textContent = okLabel || 'تایید';
+  confirmCallback = onOk;
+  document.getElementById('confirmOverlay').classList.remove('hidden');
+}
+function closeConfirm(){ document.getElementById('confirmOverlay').classList.add('hidden'); confirmCallback = null; }
+document.getElementById('confirmCancelBtn').onclick = closeConfirm;
+document.getElementById('confirmOverlay').onclick = (e)=>{ if(e.target.id==='confirmOverlay') closeConfirm(); };
+document.getElementById('confirmOkBtn').onclick = ()=>{
+  const cb = confirmCallback;
+  closeConfirm();
+  if(cb) cb();
+};
+
+/* ---------- project management page ---------- */
+document.getElementById('drawerProjectsBtn').onclick = ()=>{ closeDrawer(); openProjectsPage(); };
+document.getElementById('closeProjectsPage').onclick = ()=>{ document.getElementById('projectsPage').classList.add('hidden'); renderAll(); };
+
+function openProjectsPage(){
+  document.getElementById('projectsPage').classList.remove('hidden');
+  renderProjectsPage();
+}
+function renderProjectsPage(){
+  const body = document.getElementById('projectsPageBody');
+  body.innerHTML = '';
+  const list = data.projects.filter(p => !p.trashed && !p.archived && !isPendingDeleted('project', p.id));
+
+  if(!list.length){
+    body.innerHTML = '<div class="mgmt-empty">پروژه‌ای وجود ندارد. از + در نوار بالا بسازید.</div>';
+    return;
+  }
+  const wrap = document.createElement('div');
+  wrap.id = 'projectsMgmtList';
+  list.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'mgmt-row';
+    row.dataset.dragId = p.id;
+    const grip = document.createElement('span');
+    grip.className = 'drag-grip';
+    grip.innerHTML = svgGrip();
+    grip.onpointerdown = (e)=>{
+      e.stopPropagation(); e.preventDefault();
+      startProjectMgmtDrag(e, p.id, row, wrap);
+    };
+    row.appendChild(grip);
+    const name = document.createElement('div');
+    name.className = 'mgmt-name';
+    name.textContent = p.name;
+    row.appendChild(name);
+    const actions = document.createElement('div');
+    actions.className = 'mgmt-actions';
+    // edit
+    const editBtn = document.createElement('button');
+    editBtn.className = 'mgmt-icon-btn blue';
+    editBtn.title = 'ویرایش نام';
+    editBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L5 13H3v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+    editBtn.onclick = ()=>{
+      openMiniPrompt('ویرایش نام پروژه', p.name, (val)=>{
+        if(val && val.trim()){
+          p.name = val.trim();
+          cloudRenameProject(p);
+          markDirty(p.id);
+          persist();
+          renderProjectsPage();
+          renderAll();
+        }
+      });
+      setTimeout(()=>{ const inp = document.getElementById('promptInput'); if(inp) inp.value = p.name; }, 0);
+    };
+    actions.appendChild(editBtn);
+    // archive
+    const archBtn = document.createElement('button');
+    archBtn.className = 'mgmt-icon-btn';
+    archBtn.title = 'آرشیو';
+    archBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 6h14v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6zM2 4h16v2H2V4z" stroke="currentColor" stroke-width="1.4"/><path d="M8 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+    archBtn.onclick = ()=>{
+      p.archived = true;
+      if(data.activeTab === p.id) data.activeTab = 'starred';
+      markDirty(p.id);
+      cloudSyncProjectFull(p);
+      persist();
+      renderProjectsPage();
+      renderAll();
+      showToast('پروژه آرشیو شد');
+    };
+    actions.appendChild(archBtn);
+    // export PDF selection page
+    const pdfBtn = document.createElement('button');
+    pdfBtn.className = 'mgmt-icon-btn blue';
+    pdfBtn.title = 'خروجی PDF';
+    pdfBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 2h7l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 2v4h4M7 11h6M7 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+    pdfBtn.onclick = (e)=>{ e.stopPropagation(); openExportPage(p.id); };
+    actions.appendChild(pdfBtn);
+    // delete
+    const delBtn = document.createElement('button');
+    delBtn.className = 'mgmt-icon-btn danger';
+    delBtn.title = 'حذف';
+    delBtn.innerHTML = svgTrash();
+    delBtn.onclick = ()=>{
+      openConfirm('آیا این پروژه حذف شود؟', ()=>{
+        softDelete('project', p.id, null, null, 'پروژه حذف شد');
+        renderProjectsPage();
+      }, 'حذف');
+    };
+    actions.appendChild(delBtn);
+    row.appendChild(actions);
+    wrap.appendChild(row);
+  });
+  body.appendChild(wrap);
+}
+
+let projDragState = null;
+function startProjectMgmtDrag(e, id, rowEl, containerEl){
+  const siblingEls = Array.from(containerEl.querySelectorAll('.mgmt-row'));
+  projDragState = { id, siblingEls, hoverEl:null, hoverPos:null, rowEl };
+  rowEl.classList.add('row-dragging');
+  document.addEventListener('pointermove', onProjDragMove);
+  document.addEventListener('pointerup', onProjDragEnd, { once:true });
+}
+function onProjDragMove(e){
+  if(!projDragState) return;
+  const y = e.clientY;
+  const others = projDragState.siblingEls.filter(el => el !== projDragState.rowEl);
+  let target=null, pos=null;
+  for(const el of others){
+    const rect = el.getBoundingClientRect();
+    const mid = rect.top + rect.height/2;
+    if(y < mid){ target = el; pos = 'before'; break; }
+  }
+  if(!target && others.length){ target = others[others.length-1]; pos = 'after'; }
+  others.forEach(el => el.classList.remove('drag-over-top','drag-over-bottom'));
+  if(target) target.classList.add(pos==='before' ? 'drag-over-top' : 'drag-over-bottom');
+  projDragState.hoverEl = target;
+  projDragState.hoverPos = pos;
+}
+function onProjDragEnd(){
+  if(!projDragState) return;
+  document.removeEventListener('pointermove', onProjDragMove);
+  projDragState.rowEl.classList.remove('row-dragging');
+  projDragState.siblingEls.forEach(el => el.classList.remove('drag-over-top','drag-over-bottom'));
+  const { id, hoverEl, hoverPos } = projDragState;
+  projDragState = null;
+  if(!hoverEl) return;
+  const targetId = hoverEl.dataset.dragId;
+  // reorder only among non-trashed non-archived by reordering data.projects
+  const fromIdx = data.projects.findIndex(p=>p.id===id);
+  if(fromIdx===-1) return;
+  const [moved] = data.projects.splice(fromIdx,1);
+  let toIdx = data.projects.findIndex(p=>p.id===targetId);
+  if(toIdx===-1){ data.projects.splice(fromIdx,0,moved); return; }
+  if(hoverPos==='after') toIdx += 1;
+  data.projects.splice(toIdx,0,moved);
+  persist();
+  renderProjectsPage();
+  renderAll();
+}
+
+
+/* ---------- PDF export page ---------- */
+let exportPid = null;
+let exportSelected = new Set(); // keys: "t:"+tid or "s:"+tid+":"+sid
+let exportShowCost = true;
+
+document.getElementById('closeExportPage').onclick = ()=>{
+  document.getElementById('exportPage').classList.add('hidden');
+};
+
+function openExportPage(pid){
+  const p = findProject(pid);
+  if(!p) return;
+  exportPid = pid;
+  exportSelected = new Set();
+  exportShowCost = true;
+  // only incomplete (not done) non-trashed items
+  p.tasks.forEach(t=>{
+    if(t.trashed || isPendingDeleted('task', pid, t.id) || t.done) return;
+    exportSelected.add('t:'+t.id);
+    t.subtasks.forEach(s=>{
+      if(s.trashed || isPendingDeleted('sub', pid, t.id, s.id) || s.done) return;
+      exportSelected.add('s:'+t.id+':'+s.id);
+    });
+  });
+  document.getElementById('exportPageTitle').textContent = 'خروجی: ' + p.name;
+  document.getElementById('exportPage').classList.remove('hidden');
+  renderExportPage();
+}
+
+function renderExportPage(){
+  const p = findProject(exportPid);
+  if(!p) return;
+  const toolbar = document.getElementById('exportToolbar');
+  const body = document.getElementById('exportPageBody');
+  toolbar.innerHTML = '';
+  body.innerHTML = '';
+
+  const checkAllBtn = document.createElement('button');
+  checkAllBtn.className = 'export-check-all';
+  const allKeys = [];
+  p.tasks.forEach(t=>{
+    if(t.trashed || isPendingDeleted('task', exportPid, t.id) || t.done) return;
+    allKeys.push('t:'+t.id);
+    t.subtasks.forEach(s=>{
+      if(s.trashed || isPendingDeleted('sub', exportPid, t.id, s.id) || s.done) return;
+      allKeys.push('s:'+t.id+':'+s.id);
+    });
+  });
+  const allChecked = allKeys.length > 0 && allKeys.every(k => exportSelected.has(k));
+  checkAllBtn.textContent = allChecked ? 'برداشتن همه' : 'انتخاب همه';
+  checkAllBtn.onclick = ()=>{
+    if(allChecked) exportSelected.clear();
+    else allKeys.forEach(k => exportSelected.add(k));
+    renderExportPage();
+  };
+  toolbar.appendChild(checkAllBtn);
+
+  const costToggle = document.createElement('div');
+  costToggle.className = 'mode-toggle' + (exportShowCost ? ' active' : '');
+  costToggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 8h16M7 8v8" stroke="currentColor" stroke-width="1.5"/></svg><span>'+(exportShowCost?'نمایش هزینه':'بدون هزینه')+'</span>';
+  costToggle.onclick = ()=>{ exportShowCost = !exportShowCost; renderExportPage(); };
+  toolbar.appendChild(costToggle);
+
+  const actionsWrap = document.createElement('div');
+  actionsWrap.className = 'export-actions';
+  const pdfBtn = document.createElement('button');
+  pdfBtn.className = 'export-pdf-btn';
+  pdfBtn.textContent = 'ساخت PDF';
+  pdfBtn.onclick = ()=> generateProjectPdf();
+  actionsWrap.appendChild(pdfBtn);
+  toolbar.appendChild(actionsWrap);
+
+  if(exportShowCost){
+    let sum = 0;
+    p.tasks.forEach(t=>{
+      if(t.trashed || isPendingDeleted('task', exportPid, t.id) || t.done) return;
+      if(exportSelected.has('t:'+t.id)) sum += parseFloat(t.cost)||0;
+      t.subtasks.forEach(s=>{
+        if(s.trashed || isPendingDeleted('sub', exportPid, t.id, s.id) || s.done) return;
+        if(exportSelected.has('s:'+t.id+':'+s.id)) sum += parseFloat(s.cost)||0;
+      });
+    });
+    const sumEl = document.createElement('div');
+    sumEl.className = 'export-summary';
+    sumEl.innerHTML = '<span>جمع موارد انتخاب‌شده</span><b>'+formatCost(sum)+'</b>';
+    body.appendChild(sumEl);
+  }
+
+  const tasks = p.tasks.filter(t => !t.trashed && !isPendingDeleted('task', exportPid, t.id) && !t.done);
+  if(!tasks.length){
+    body.appendChild(elFromHtml('<div class="mgmt-empty">مورد باز (ناتمام) برای خروجی نیست.</div>'));
+    return;
+  }
+
+  tasks.forEach(t=>{
+    const tKey = 't:'+t.id;
+    const row = document.createElement('div');
+    row.className = 'export-row' + (t.done ? ' done' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'exp-check';
+    cb.checked = exportSelected.has(tKey);
+    cb.onchange = ()=>{
+      if(cb.checked){
+        exportSelected.add(tKey);
+        t.subtasks.forEach(s=>{
+          if(!s.trashed && !isPendingDeleted('sub', exportPid, t.id, s.id) && !s.done)
+            exportSelected.add('s:'+t.id+':'+s.id);
+        });
+      } else {
+        exportSelected.delete(tKey);
+        t.subtasks.forEach(s=> exportSelected.delete('s:'+t.id+':'+s.id));
+      }
+      renderExportPage();
+    };
+    row.appendChild(cb);
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'exp-body';
+    const title = document.createElement('div');
+    title.className = 'exp-title';
+    title.textContent = t.text;
+    bodyEl.appendChild(title);
+    row.appendChild(bodyEl);
+    if(exportShowCost){
+      const c = document.createElement('span');
+      c.className = 'exp-cost';
+      c.textContent = formatCost(taskCostSum(t));
+      row.appendChild(c);
+    }
+    body.appendChild(row);
+
+    t.subtasks.filter(s => !s.trashed && !isPendingDeleted('sub', exportPid, t.id, s.id) && !s.done).forEach(s=>{
+      const sKey = 's:'+t.id+':'+s.id;
+      const srow = document.createElement('div');
+      srow.className = 'export-row sub' + (s.done ? ' done' : '');
+      const scb = document.createElement('input');
+      scb.type = 'checkbox';
+      scb.className = 'exp-check';
+      scb.checked = exportSelected.has(sKey);
+      scb.onchange = ()=>{
+        if(scb.checked) exportSelected.add(sKey);
+        else exportSelected.delete(sKey);
+        renderExportPage();
+      };
+      srow.appendChild(scb);
+      const sbody = document.createElement('div');
+      sbody.className = 'exp-body';
+      const st = document.createElement('div');
+      st.className = 'exp-title';
+      st.textContent = s.text;
+      sbody.appendChild(st);
+      srow.appendChild(sbody);
+      if(exportShowCost && s.cost){
+        const c = document.createElement('span');
+        c.className = 'exp-cost';
+        c.textContent = formatCost(s.cost);
+        srow.appendChild(c);
+      }
+      body.appendChild(srow);
+    });
+  });
+}
+
+function generateProjectPdf(){
+  const p = findProject(exportPid);
+  if(!p) return;
+  if(!exportSelected.size){
+    showToast('حداقل یک مورد را انتخاب کنید');
+    return;
+  }
+
+  function amountHtml(n){
+    if(n===null || n===undefined || n==='') return '';
+    return '<span class="amount">'+formatCost(n)+'</span>';
+  }
+  function amountWithUnit(n){
+    if(n===null || n===undefined || n==='') return '';
+    // تومان سمت چپ مبلغ (در راستای LTR: unit سپس عدد)
+    return '<span class="amount-wrap"><span class="unit">(تومان)</span> <span class="amount">'+formatCost(n)+'</span></span>';
+  }
+
+  // only incomplete items
+  const tasks = p.tasks.filter(t => !t.trashed && !isPendingDeleted('task', exportPid, t.id) && !t.done);
+  let rowsHtml = '';
+  let total = 0;
+
+  tasks.forEach(t=>{
+    const tKey = 't:'+t.id;
+    const tOn = exportSelected.has(tKey);
+    const subs = t.subtasks.filter(s => !s.trashed && !isPendingDeleted('sub', exportPid, t.id, s.id) && !s.done);
+    const anySubOn = subs.some(s => exportSelected.has('s:'+t.id+':'+s.id));
+    if(!tOn && !anySubOn) return;
+
+    if(tOn){
+      if(exportShowCost) total += parseFloat(t.cost)||0;
+      const costCell = exportShowCost
+        ? '<td class="cost-cell">'+amountHtml(t.cost!=null?t.cost:0)+'</td>'
+        : '';
+      rowsHtml += '<tr>'
+        + '<td class="mark parent-mark">■</td>'
+        + '<td class="title parent-title">'+escapeHtml(t.text)+'</td>'
+        + costCell + '</tr>';
+    } else if(anySubOn){
+      rowsHtml += '<tr class="context">'
+        + '<td class="mark parent-mark">■</td>'
+        + '<td class="title parent-title">'+escapeHtml(t.text)+'</td>'
+        + (exportShowCost?'<td class="cost-cell"></td>':'') + '</tr>';
+    }
+
+    subs.forEach(s=>{
+      if(!exportSelected.has('s:'+t.id+':'+s.id)) return;
+      if(exportShowCost) total += parseFloat(s.cost)||0;
+      const costCell = exportShowCost
+        ? '<td class="cost-cell">'+(s.cost!=null&&s.cost!==''?amountHtml(s.cost):'')+'</td>'
+        : '';
+      rowsHtml += '<tr class="sub">'
+        + '<td class="mark child-mark" style="padding-right:28px;">□</td>'
+        + '<td class="title child-title">'+escapeHtml(s.text)+'</td>'
+        + costCell + '</tr>';
+    });
+  });
+
+  const dateStr = new Date().toLocaleDateString('fa-IR');
+  const costHeader = exportShowCost
+    ? '<th class="cost-head"><span class="unit">(تومان)</span> مبلغ</th>'
+    : '';
+  const totalRow = exportShowCost
+    ? '<tr class="total-row"><td></td><td class="title">جمع کل</td><td class="cost-cell">'+amountWithUnit(total)+'</td></tr>'
+    : '';
+
+  const doc = `<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>${escapeHtml(p.name)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { margin: 14mm; }
+  body { font-family: 'Vazirmatn', Tahoma, sans-serif; color: #202124; margin: 0; padding: 8px 4px; }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 700; }
+  .meta { font-size: 12px; color: #5f6368; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: right; padding: 8px 6px; border-bottom: 2px solid #202124; font-size: 12px; color: #5f6368; font-weight: 600; }
+  th.cost-head { text-align: left; direction: ltr; unicode-bidi: isolate; }
+  th.cost-head .unit { font-weight: 500; margin-right: 4px; }
+  td { padding: 7px 6px; vertical-align: top; border-bottom: 1px solid #e8eaed; }
+  td.mark { width: 28px; text-align: center; font-size: 14px; line-height: 1.4; color: #202124; }
+  td.parent-mark { font-size: 13px; }
+  td.child-mark { font-size: 14px; color: #5f6368; padding-right: 28px; }
+  td.title { font-size: 14px; line-height: 1.45; }
+  td.parent-title { font-weight: 700; }
+  td.child-title { font-size: 13.5px; padding-right: 28px; color: #3c4043; }
+  td.cost-cell { text-align: left; white-space: nowrap; }
+  .amount {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 600;
+    color: #202124;
+    letter-spacing: 0.02em;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  .amount-wrap {
+    direction: ltr;
+    unicode-bidi: isolate;
+    display: inline-block;
+  }
+  .unit {
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    color: #5f6368;
+  }
+  tr.done td.title { color: #5f6368; text-decoration: line-through; }
+  tr.context td.title { color: #5f6368; font-weight: 600; }
+  tr.total-row td {
+    border-bottom: none;
+    border-top: 2px solid #202124;
+    padding-top: 12px;
+    font-weight: 700;
+  }
+  tr.total-row .amount { font-size: 16px; color: #202124; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style></head><body>
+  <h1>${escapeHtml(p.name)}</h1>
+  <div class="meta">تاریخ خروجی: ${dateStr}</div>
+  <table>
+    <thead><tr>
+      <th style="width:28px;"></th>
+      <th>مورد</th>
+      ${costHeader}
+    </tr></thead>
+    <tbody>${rowsHtml}${totalRow}</tbody>
+  </table>
+  <script>
+    window.onload = function(){
+      setTimeout(function(){ window.print(); }, 450);
+    };
+  <\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if(!w){
+    showToast('اجازهٔ باز شدن پنجره را بدهید');
+    return;
+  }
+  w.document.open();
+  w.document.write(doc);
+  w.document.close();
+}
+
+function escapeHtml(str){
+  return String(str||'')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+
+
+/* ---------- collaborations page ---------- */
+document.getElementById('drawerCollabBtn').onclick = ()=>{
+  closeDrawer();
+  if(data.activeTab === 'starred' || !findProject(data.activeTab)){
+    showToast('ابتدا یک پروژه را از نوار بالا انتخاب کنید');
+    return;
+  }
+  if(!currentUser){
+    showToast('برای اشتراک‌گذاری، ابتدا با گوگل وارد شوید');
+    return;
+  }
+  const p = findProject(data.activeTab);
+  if(p.ownerUid && p.ownerUid !== currentUser.uid){
+    showToast('فقط سازندهٔ پروژه می‌تواند آن را به اشتراک بگذارد');
+    return;
+  }
+  openShareDialog(data.activeTab);
+};
+document.getElementById('drawerCollabListBtn').onclick = ()=>{ closeDrawer(); openCollabPage(); };
+document.getElementById('closeCollabPage').onclick = ()=>{ document.getElementById('collabPage').classList.add('hidden'); };
+
+function openCollabPage(){
+  document.getElementById('collabPage').classList.remove('hidden');
+  renderCollabPage();
+}
+function renderCollabPage(){
+  const body = document.getElementById('collabPageBody');
+  body.innerHTML = '';
+  if(!currentUser){
+    body.innerHTML = '<div class="mgmt-empty">برای مشاهده همکاری‌ها با گوگل وارد شوید.</div>';
+    return;
+  }
+  const myEmail = (currentUser.email || '').toLowerCase();
+  // ensure ownerEmail for projects I own
+  data.projects.forEach(p=>{
+    if(p.ownerUid === currentUser.uid && !p.ownerEmail){
+      p.ownerEmail = myEmail;
+    }
+  });
+
+  const owned = data.projects.filter(p =>
+    !p.trashed && !p.archived && p.ownerUid === currentUser.uid && p.sharedWith && p.sharedWith.length
+  );
+  const sharedWithMe = data.projects.filter(p =>
+    !p.trashed && !p.archived && p.ownerUid && p.ownerUid !== currentUser.uid
+  );
+
+  if(!owned.length && !sharedWithMe.length){
+    body.innerHTML = '<div class="mgmt-empty">هنوز همکاری‌ای ثبت نشده است.<br>با «همکاری روی این پروژه» می‌توانید ایمیل همکار اضافه کنید.</div>';
+    return;
+  }
+
+  if(owned.length){
+    const sec = document.createElement('div');
+    sec.className = 'collab-section-title';
+    sec.textContent = 'پروژه‌هایی که شما ادمین هستید';
+    body.appendChild(sec);
+
+    owned.forEach(p => {
+      const block = document.createElement('div');
+      block.className = 'collab-block';
+      const h = document.createElement('h3');
+      h.innerHTML = escapeHtml(p.name) + ' <span class="collab-role admin">ادمین: شما</span>';
+      block.appendChild(h);
+      const meta = document.createElement('div');
+      meta.className = 'collab-meta';
+      meta.textContent = 'همکارانی که شما دعوت کرده‌اید:';
+      block.appendChild(meta);
+      (p.sharedWith || []).forEach(email => {
+        const row = document.createElement('div');
+        row.className = 'collab-email-row';
+        const left = document.createElement('div');
+        left.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;';
+        const span = document.createElement('span');
+        span.textContent = email;
+        const tag = document.createElement('span');
+        tag.className = 'collab-person-tag';
+        tag.textContent = 'همکار';
+        left.appendChild(span);
+        left.appendChild(tag);
+        const btn = document.createElement('button');
+        btn.className = 'perm-del-btn';
+        btn.textContent = 'حذف دسترسی';
+        btn.onclick = ()=> removeShare(p, email, ()=> renderCollabPage());
+        row.appendChild(left);
+        row.appendChild(btn);
+        block.appendChild(row);
+      });
+      const addRow = document.createElement('div');
+      addRow.style.cssText = 'padding-top:8px;';
+      const addBtn = document.createElement('button');
+      addBtn.className = 'restore-btn';
+      addBtn.textContent = 'افزودن همکار';
+      addBtn.onclick = ()=> openShareDialog(p.id);
+      addRow.appendChild(addBtn);
+      block.appendChild(addRow);
+      body.appendChild(block);
+    });
+  }
+
+  if(sharedWithMe.length){
+    const sec = document.createElement('div');
+    sec.className = 'collab-section-title';
+    sec.textContent = 'پروژه‌هایی که با شما به اشتراک گذاشته شده';
+    body.appendChild(sec);
+
+    sharedWithMe.forEach(p => {
+      const block = document.createElement('div');
+      block.className = 'collab-block';
+      const h = document.createElement('h3');
+      h.innerHTML = escapeHtml(p.name) + ' <span class="collab-role member">نقش شما: همکار</span>';
+      block.appendChild(h);
+      const meta = document.createElement('div');
+      meta.className = 'collab-meta';
+      const adminLabel = p.ownerEmail ? p.ownerEmail : 'صاحب پروژه';
+      meta.innerHTML = 'ادمین: <span dir="ltr" style="unicode-bidi:isolate;">'+escapeHtml(adminLabel)+'</span>';
+      block.appendChild(meta);
+      if(p.sharedWith && p.sharedWith.length){
+        const others = p.sharedWith.filter(e => e.toLowerCase() !== myEmail);
+        if(others.length){
+          const note = document.createElement('div');
+          note.className = 'collab-meta';
+          note.textContent = 'سایر همکاران: ' + others.join('، ');
+          block.appendChild(note);
+        }
+      }
+      body.appendChild(block);
+    });
+  }
+}
+
+function removeShare(p, email, after){
+  db.collection('projects').doc(p.id).update({
+    sharedWith: firebase.firestore.FieldValue.arrayRemove(email)
+  }).then(()=>{
+    p.sharedWith = (p.sharedWith || []).filter(e => e !== email);
+    showToast('دسترسی ' + email + ' حذف شد');
+    if(after) after();
+  }).catch(()=> showToast('خطا در حذف دسترسی'));
+}
+
+/* ---------- trash / deleted items page ---------- */
+document.getElementById('drawerTrashBtn').onclick = ()=>{
+  closeDrawer();
+  openTrashView();
+};
+function openTrashView(){
+  document.getElementById('trashOverlay').classList.remove('hidden');
+  renderTrashList();
+}
+function closeTrashView(){ document.getElementById('trashOverlay').classList.add('hidden'); }
+document.getElementById('closeTrashBtn').onclick = closeTrashView;
+document.getElementById('trashOverlay').onclick = (e)=>{ if(e.target.id==='trashOverlay') closeTrashView(); };
+
+function collectTrashed(){
+  const out = [];
+  data.projects.forEach(p=>{
+    if(p.trashed){
+      out.push({ type:'project', pid:p.id, tid:null, sid:null, text:p.name, path:'پروژه' });
+      return;
+    }
+    p.tasks.forEach(t=>{
+      if(t.trashed){
+        out.push({ type:'task', pid:p.id, tid:t.id, sid:null, text:t.text, path:p.name });
+        return;
+      }
+      t.subtasks.forEach(s=>{
+        if(s.trashed){
+          out.push({ type:'sub', pid:p.id, tid:t.id, sid:s.id, text:s.text, path:p.name + ' › ' + t.text });
+        }
+      });
+    });
+  });
+  return out;
+}
+
+function renderTrashList(){
+  const body = document.getElementById('trashBody');
+  body.innerHTML = '';
+  const items = collectTrashed();
+  if(!items.length){
+    body.innerHTML = '<div class="empty-state">چیزی در سطل زباله نیست.</div>';
+    return;
+  }
+  const clearAll = document.createElement('button');
+  clearAll.className = 'perm-del-btn';
+  clearAll.style.cssText = 'margin:8px 16px 12px;display:block;width:calc(100% - 32px);padding:11px;';
+  clearAll.textContent = 'حذف همه برای همیشه';
+  clearAll.onclick = ()=>{
+    openConfirm('همه موارد سطل زباله برای همیشه حذف شوند؟', ()=>{
+      items.slice().forEach(entry => permanentlyDelete(entry));
+      renderTrashList();
+      renderAll();
+      showToast('سطل زباله خالی شد');
+    }, 'حذف همه');
+  };
+  body.appendChild(clearAll);
+  items.forEach(entry=>{
+    const row = document.createElement('div');
+    row.className = 'trash-row';
+    const textWrap = document.createElement('div');
+    textWrap.className = 'trash-row-text';
+    const title = document.createElement('div');
+    title.className = 'trash-row-title';
+    title.textContent = entry.text;
+    const path = document.createElement('div');
+    path.className = 'trash-row-path';
+    path.textContent = entry.path;
+    textWrap.appendChild(title);
+    textWrap.appendChild(path);
+    row.appendChild(textWrap);
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
+    const btn = document.createElement('button');
+    btn.className = 'restore-btn';
+    btn.textContent = 'بازگردانی';
+    btn.onclick = ()=> restoreTrashedItem(entry);
+    actions.appendChild(btn);
+    const perm = document.createElement('button');
+    perm.className = 'perm-del-btn';
+    perm.textContent = 'حذف دائمی';
+    perm.onclick = ()=>{
+      openConfirm('این مورد برای همیشه حذف شود؟', ()=>{
+        permanentlyDelete(entry);
+        renderTrashList();
+        renderAll();
+      }, 'حذف دائمی');
+    };
+    actions.appendChild(perm);
+    row.appendChild(actions);
+    body.appendChild(row);
+  });
+}
+
+function permanentlyDelete(entry){
+  if(entry.type === 'project'){
+    const idx = data.projects.findIndex(p=>p.id===entry.pid);
+    if(idx>=0){
+      const p = data.projects[idx];
+      data.projects.splice(idx,1);
+      if(cloudMode && currentUser) cloudDeleteProject(p);
+    }
+  } else if(entry.type === 'task'){
+    const p = findProject(entry.pid);
+    if(p){
+      p.tasks = p.tasks.filter(t=>t.id!==entry.tid);
+      markDirty(entry.pid);
+    }
+  } else if(entry.type === 'sub'){
+    const t = findTask(entry.pid, entry.tid);
+    if(t){
+      t.subtasks = t.subtasks.filter(s=>s.id!==entry.sid);
+      markDirty(entry.pid);
+    }
+  }
+  persist();
+  showToast('برای همیشه حذف شد');
+}
+
+function restoreTrashedItem(entry){
+  if(entry.type === 'project'){
+    const p = findProject(entry.pid);
+    if(p){ p.trashed = false; cloudSyncProjectFull(p); }
+  } else if(entry.type === 'task'){
+    const p = findProject(entry.pid);
+    const t = p ? p.tasks.find(t=>t.id===entry.tid) : null;
+    if(t){ t.trashed = false; markDirty(entry.pid); }
+  } else if(entry.type === 'sub'){
+    const t = findTask(entry.pid, entry.tid);
+    const s = t ? t.subtasks.find(s=>s.id===entry.sid) : null;
+    if(s){ s.trashed = false; markDirty(entry.pid); }
+  }
+  showToast('بازگردانده شد');
+  persist(); renderAll();
+  renderTrashList();
+}
+
+/* ---------- archive page ---------- */
+document.getElementById('drawerArchiveBtn').onclick = ()=>{ closeDrawer(); openArchivePage(); };
+document.getElementById('closeArchivePage').onclick = ()=>{ document.getElementById('archivePage').classList.add('hidden'); renderAll(); };
+
+function openArchivePage(){
+  document.getElementById('archivePage').classList.remove('hidden');
+  renderArchivePage();
+}
+function renderArchivePage(){
+  const body = document.getElementById('archivePageBody');
+  body.innerHTML = '';
+  const list = data.projects.filter(p => p.archived && !p.trashed);
+  if(!list.length){
+    body.innerHTML = '<div class="mgmt-empty">پروژه آرشیو شده ای نیست.</div>';
+    return;
+  }
+  list.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'mgmt-row';
+    const name = document.createElement('div');
+    name.className = 'mgmt-name';
+    name.textContent = p.name;
+    row.appendChild(name);
+    const btn = document.createElement('button');
+    btn.className = 'restore-btn';
+    btn.textContent = 'بازگردانی';
+    btn.onclick = ()=>{
+      p.archived = false;
+      markDirty(p.id);
+      cloudSyncProjectFull(p);
+      persist();
+      renderArchivePage();
+      renderAll();
+      showToast('پروژه بازگردانده شد');
+    };
+    row.appendChild(btn);
+    body.appendChild(row);
+  });
+}
+
+/* ---------- share / collaborate dialog ---------- */
+let shareTargetProjectId = null;
+function openShareDialog(pid){
+  shareTargetProjectId = pid;
+  const p = findProject(pid);
+  const name = p ? p.name : '';
+  document.getElementById('shareDialogTitle').textContent = 'اشتراک‌گذاری پروژه ' + name;
+  document.getElementById('shareDialogSub').textContent = 'آدرس جیمیل فردی که می‌خواهید به پروژهٔ «' + name + '» دسترسی بدهید را وارد کنید.';
+  document.getElementById('shareEmailInput').value = '';
+  document.getElementById('shareOverlay').classList.remove('hidden');
+  setTimeout(()=> document.getElementById('shareEmailInput').focus(), 0);
+}
+function closeShareDialog(){ document.getElementById('shareOverlay').classList.add('hidden'); }
+document.getElementById('shareCancelBtn').onclick = closeShareDialog;
+document.getElementById('shareOverlay').onclick = (e)=>{ if(e.target.id==='shareOverlay') closeShareDialog(); };
+document.getElementById('shareConfirmBtn').onclick = ()=>{
+  const email = document.getElementById('shareEmailInput').value.trim().toLowerCase();
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if(!isValidEmail){ showToast('یک آدرس جیمیل معتبر وارد کنید'); return; }
+  const p = findProject(shareTargetProjectId);
+  closeShareDialog();
+  if(!p || !p.ownerUid){ showToast('این پروژه هنوز روی سرور نیست'); return; }
+  if(p.ownerUid === currentUser.uid && !p.ownerEmail && currentUser.email){
+    p.ownerEmail = currentUser.email.toLowerCase();
+  }
+  const shareUpdate = { sharedWith: firebase.firestore.FieldValue.arrayUnion(email) };
+  if(p.ownerEmail) shareUpdate.ownerEmail = p.ownerEmail;
+  db.collection('projects').doc(p.id).update(shareUpdate).then(()=>{
+    showToast('دسترسی برای ' + email + ' اضافه شد');
+    if(!p.sharedWith) p.sharedWith = [];
+    if(!p.sharedWith.includes(email)) p.sharedWith.push(email);
+    if(!document.getElementById('collabPage').classList.contains('hidden')) renderCollabPage();
+  }).catch(()=> showToast('خطا در افزودن دسترسی'));
+};
+
+/* ---------- PWA service worker registration ---------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+/* ---------- init ---------- */
+loadData();
+if(data.activeTab !== 'starred' && !findProject(data.activeTab)){
+  data.activeTab = data.projects.length ? data.projects[0].id : 'starred';
+}
+renderAll();
+</script>
+</body>
+</html>
