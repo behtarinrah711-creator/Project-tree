@@ -14,11 +14,16 @@ export function getContractTemplates(project=null){
   return p.contractTemplates;
 }
 
-export function findContractTemplate()return getContractTemplates(project).find(x=>String(x.id)===String(id) && !x.trashed) || null;
+export function findContractTemplate(id, project=getCurrentProject()){
+  return getContractTemplates(project).find(x=>String(x.id)===String(id) && !x.trashed) || null;
+}
 
-export function makeContractItem()return {id:uid(), text:String(text||''), children:Array.isArray(children)?children:[]};
+export function makeContractItem(text='', children=[]){
+  return {id:uid(), text:String(text||''), children:Array.isArray(children)?children:[]};
+}
 
-export function getDefaultContractTemplateItems()// قالب اولیه فقط بندهای اصلی را دارد؛ ماده‌ها باید توسط کاربر اضافه شوند.
+export function getDefaultContractTemplateItems(){
+  // قالب اولیه فقط بندهای اصلی را دارد؛ ماده‌ها باید توسط کاربر اضافه شوند.
   return [
     makeContractItem('موضوع قرارداد:'),
     makeContractItem('اسناد و مدارک قرارداد:'),
@@ -33,8 +38,10 @@ export function getDefaultContractTemplateItems()// قالب اولیه فقط �
     makeContractItem('جریمه:'),
     makeContractItem('دوره تضمین:')
   ];
+}
 
-export function normalizeContractTemplate()if(!t) return null;
+export function normalizeContractTemplate(t){
+  if(!t) return null;
   if(!Array.isArray(t.items)) t.items=[];
   const normalizeItems=(arr,depth=0)=> (arr||[]).map(x=>{
     const item={id:x.id||uid(),text:String(x.text||x.description||''),children:depth<1&&Array.isArray(x.children)?x.children.map(c=>({id:c.id||uid(),text:String(c.text||c.description||''),children:[]})):[]};
@@ -42,13 +49,18 @@ export function normalizeContractTemplate()if(!t) return null;
   });
   t.items=normalizeItems(t.items,0);
   return t;
+}
 
-export function renumberContractItems()(items||[]).forEach((item,i)=>{
+export function renumberContractItems(items){
+  (items||[]).forEach((item,i)=>{
     item.number=String(i+1);
     (item.children||[]).forEach((child,j)=>child.number=(i+1)+'-'+(j+1));
   });
+  return items;
+}
 
-export function makeContractTemplateDraftClean()if(existing){
+export function makeContractTemplateDraftClean(existing=null){
+  if(existing){
     const copy=JSON.parse(JSON.stringify(existing));
     normalizeContractTemplate(copy);
     copy.paymentItems=Array.isArray(copy.paymentItems)?copy.paymentItems:[];
@@ -56,6 +68,9 @@ export function makeContractTemplateDraftClean()if(existing){
     return copy;
   }
   return {id:uid(),activityId:'',title:'',items:getDefaultContractTemplateItems(),paymentItems:[],createdAt:Date.now(),updatedAt:Date.now(),trashed:false};
+}
 
-export function getContractTemplateDraftKey()const p=getCurrentProject(); return 'contract-template-draft-'+(p?.id||'none');
-
+export function getContractTemplateDraftKey(){
+  const p=getCurrentProject();
+  return 'contract-template-draft-'+(p?.id||'none');
+}
