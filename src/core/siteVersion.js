@@ -1,2 +1,1 @@
-export const SITE_VERSION = 'v10';
-
+export const SITE_VERSION = 'v12';
