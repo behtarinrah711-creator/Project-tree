@@ -31,7 +31,12 @@ export class AppRouter{
     window.KarhaRoute = { ...route, module };
     if(module && route.projectId){
       this.currentMounted = module.mount({ projectId: route.projectId, route, registry: moduleRegistry });
+    } else {
+      this.currentMounted = null;
     }
+    window.dispatchEvent(new CustomEvent('karha:workspace-route-synced', {
+      detail: { ...route, moduleId: route.moduleId }
+    }));
   }
 }
 

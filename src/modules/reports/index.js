@@ -1,3 +1,4 @@
-import { createLegacyModule } from '../legacyModule.js';
+import reportsModule from './reportsModule.js';
 
-export default createLegacyModule({ id: 'reports', title: 'گزارش‌ها', route: 'reports', open: 'renderReportsWorkspace', selectors: ['#content'], dataCollections: ['tasks', 'contracts', 'statusReports'] });
+export default reportsModule;
+export { reportsModule };

@@ -1,3 +1,4 @@
-import { createLegacyModule } from '../legacyModule.js';
+import peopleModule from './peopleModule.js';
 
-export default createLegacyModule({ id: 'people', title: 'کارکنان و پیمانکاران', route: 'people', open: 'openContactsPage', render: 'renderContactsPage', selectors: ['#contactsPage', '#contactsPageBody'], dataCollections: ['contacts', 'activityTemplates'] });
+export default peopleModule;
+export { peopleModule };
