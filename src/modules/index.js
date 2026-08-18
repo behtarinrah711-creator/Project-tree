@@ -7,5 +7,6 @@ import accounting from './accounting/index.js';
 import purchases from './purchases/index.js';
 import reports from './reports/index.js';
 import people from './people/index.js';
+import activities from './activities/index.js';
 
-export const projectModules = [dashboard, contracts, statuses, minutes, letters, accounting, purchases, reports, people];
+export const projectModules = [dashboard, contracts, statuses, minutes, letters, accounting, purchases, reports, people, activities];

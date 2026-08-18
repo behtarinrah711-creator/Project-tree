@@ -1,3 +1,4 @@
-import { createLegacyModule } from '../legacyModule.js';
-
-export default createLegacyModule({ id: 'dashboard', title: 'داشبورد پروژه', route: 'projects', render: 'renderAll', selectors: ['#content', '#tabbar'] });
+import dashboardModule from './dashboardModule.js';
+export default dashboardModule;
+export { dashboardModule };
+if (typeof window !== 'undefined') window.KarhaDashboard = dashboardModule;
