@@ -2352,6 +2352,10 @@ function saveContractTemplateClean(silent=false){
 }
 function openContractsPage(){ closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contracts'; setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('contractsPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contracts'); renderContractsPage(); }
 function closeContractsPage(){ workspaceSubpage=null; setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('reportsPage'); updateWorkspaceContextBar(); renderReportsWorkspace(); }
+function renderContractsPage(){
+  const module=window.KarhaApp?.modules?.get('contracts');
+  if(module?.render) module.render(getCurrentProject()?.id);
+}
 
 function cloneTemplateIntoContract(t){ return (t?.items||[]).map(x=>({id:uid(),text:x.text||'',number:x.number||'',children:(x.children||[]).map(c=>({id:uid(),text:c.text||'',number:c.number||'',children:[]}))})); }
 function renumberRealContractItems(items){ return window.KarhaRealContracts?.renumberRealContractItems?.(items) || items || []; }
@@ -3266,6 +3270,10 @@ function getContacts(project=getCurrentProject()){
 }
 function findContact(id, project=getCurrentProject()){ return getContacts(project).find(c=>c.id===id)||null; }
 function openContactsPage(){ closeBottomPages(); enterWorkspaceSurface(); workspaceSubpage='contacts'; showOnlyWorkspacePage('contactsPage'); renderContactsPage(); try{history.pushState({workspaceSubpage:'contacts'},'',location.href);}catch(e){} }
+function renderContactsPage(){
+  const module=window.KarhaApp?.modules?.get('people');
+  if(module?.render) module.render(getCurrentProject()?.id);
+}
 
 function openContactForm(contact=null){
   const isEdit=!!contact;
@@ -3623,6 +3631,10 @@ function openProjectActivitiesPage(){
   showOnlyWorkspacePage('projectActivitiesPage');
   renderProjectActivitiesPage();
   try{ history.pushState({workspaceSubpage:'activities'},'',location.href); }catch(e){}
+}
+function renderProjectActivitiesPage(){
+  const module=window.KarhaApp?.modules?.get('activities');
+  if(module?.render) module.render(getCurrentProject()?.id);
 }
 
 let activityFormDirty=false;let activityFormHistoryPushed=false;
@@ -6039,7 +6051,7 @@ document.getElementById('shareConfirmBtn').onclick = ()=>{
 /* ---------- PWA service worker registration ---------- */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js?v=159',{updateViaCache:'none'}).then(reg=>{
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
       try{ reg.update(); }catch(e){}
       if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
     }).catch(()=>{});
