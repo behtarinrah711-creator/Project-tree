@@ -5862,6 +5862,23 @@ if(routedProjectId && routedModuleId==='contracts'){
 // Modular architecture bridge: keeps the remaining legacy runtime project-scoped
 // while individual modules are migrated out of this file.
 window.KarhaLegacy = Object.freeze({
+  getViewMode(){ return data?.viewMode || 'simple'; },
+  renderAll,
+  elFromHtml(html){
+    const template=document.createElement('template');
+    template.innerHTML=String(html||'').trim();
+    return template.content.firstElementChild;
+  },
+  formatCost,
+  projectCostSum,
+  isPendingDeleted,
+  markDirty,
+  persist,
+  openConfirm,
+  showToast,
+  svgChevron,
+  renderInlineAddRow,
+  renderTaskBlock,
   setActiveProject(projectId){
     return setActiveProject(projectId,{updateRoute:false,render:false});
   },
@@ -5892,6 +5909,24 @@ window.KarhaLegacy = Object.freeze({
   openContractsPage,
   closeContractsPage,
   openContractForm,
+  openRealContractFormShell,
+  closeRealContractFormShell,
+  closeSearchTemplate,
+  escapeHtml,
+  findActivityTemplate,
+  formatJalaliDisplay,
+  getContacts,
+  openNumpadGeneric,
+  pushWorkspaceHistory,
+  requestAnimationFrame(callback){ return window.requestAnimationFrame(callback); },
+  svgGrip,
+  svgPlus,
+  toEnglishDigits,
+  toPersianDigits,
+  todayJalaliStr,
+  renumberContractItems,
+  goHomeProjects,
+  renderAccountingWorkspace,
   openActivityForm,
   openActivityEditForm,
   requestCloseActivityForm,
