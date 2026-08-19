@@ -1,6 +1,7 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
 import { activityRepository } from '../../data/activityRepository.js';
+import { openActivityForm, openActivityEditForm, requestCloseActivityForm } from './activityFormModule.js';
 
 function getProjectId(explicit = null){
   return explicit
@@ -25,18 +26,6 @@ function getContracts(project){
     : [];
 }
 
-function openLegacyActivityForm(activity){
-  if(typeof window.openActivityEditForm === 'function'){
-    window.openActivityEditForm(activity);
-    return true;
-  }
-  if(typeof window.KarhaLegacy?.openActivityEditForm === 'function'){
-    window.KarhaLegacy.openActivityEditForm(activity);
-    return true;
-  }
-  return false;
-}
-
 function deleteActivity(projectId, activityId){
   return !!activityRepository.softDelete(projectId, activityId);
 }
@@ -45,6 +34,9 @@ export const activitiesModule = {
   id:'activities',
   title:'فعالیت‌ها',
   route:'activities',
+  openActivityForm,
+  openActivityEditForm,
+  requestCloseActivityForm,
 
   mount({projectId} = {}){
     this.render(projectId);
@@ -124,7 +116,7 @@ export const activitiesModule = {
       edit.textContent='ویرایش';
       edit.addEventListener('click',e=>{
         e.stopPropagation();
-        openLegacyActivityForm(activity);
+        openActivityEditForm(activity);
       });
 
       const del=document.createElement('button');
@@ -144,7 +136,7 @@ export const activitiesModule = {
       row.dataset.searchText=
         `${activity.name || ''} ${meta.textContent}`.toLocaleLowerCase('fa');
 
-      row.addEventListener('click',()=>openLegacyActivityForm(activity));
+      row.addEventListener('click',()=>openActivityEditForm(activity));
 
       rows.push(row);
       list.appendChild(row);

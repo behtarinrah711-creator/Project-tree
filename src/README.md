@@ -119,10 +119,13 @@ The Activities list/search renderer is now independent under
 and real-contract counts, search, edit and soft-delete behavior, and no longer
 uses `legacyModule.js`.
 
-The full activity edit form remains temporarily behind the existing legacy bridge
-because it is coupled to drafts, contract templates and other legacy workspace
-state. This step intentionally migrates the list surface first rather than
-rewriting that coupled form.
+The Activity create/edit form runtime now lives in
+`src/modules/activities/activityFormModule.js`. It owns form state, dirty state,
+rendering, validation, save, cancel, and browser-back handling, and persists both
+new and existing records through `ActivityRepository`. The legacy runtime retains
+only workspace UI and in-memory/cloud synchronization services behind the
+`activityFormRuntime` compatibility bridge; the form itself does not access
+`localStorage` or mutate `project.activityTemplates`.
 
 
 ## Refactor step 288 — contracts workspace

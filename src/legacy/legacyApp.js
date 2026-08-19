@@ -2821,26 +2821,15 @@ function renderProjectActivitiesPage(){
   if(module?.render) module.render(getCurrentProject()?.id);
 }
 
-let activityFormDirty=false;let activityFormHistoryPushed=false;
-const ACTIVITY_DRAFT_KEY='karha_activity_form_draft_v1';
-
 function openActivityEditForm(activity){
-  if(!activity) return;
-  const body=document.getElementById('activityFormBody'); const actions=document.getElementById('activityFormActions');
-  activityFormDirty=false; setInternalFormMode(true); workspaceSubpage='activityForm'; showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); pushWorkspaceHistory('activityForm'); activityFormHistoryPushed=true;
-  body.innerHTML=''; const f=document.createElement('div'); f.className='internal-form-field'; const l=document.createElement('label'); l.textContent='نام فعالیت'; const input=document.createElement('input'); input.className='internal-form-input'; input.value=activity.name||''; input.oninput=()=>activityFormDirty=true; f.append(l,input); body.appendChild(f);
-  actions.innerHTML=''; const save=document.createElement('button'); save.className='if-save'; save.textContent='ذخیره'; save.onclick=()=>{const name=input.value.trim();if(!name)return;if(getActivityTemplates().some(a=>a!==activity&&!a.trashed&&String(a.name||'').trim()===name)){showToast('این فعالیت قبلاً ثبت شده است');return;}activity.name=name;const project=getCurrentProject();if(project)markDirty(project.id);persist();activityFormDirty=false;closeActivityForm(true);renderProjectActivitiesPage();}; const cancel=document.createElement('button'); cancel.className='if-cancel'; cancel.textContent='انصراف'; cancel.onclick=()=>closeActivityForm(); actions.append(save,cancel);
+  return window.KarhaApp?.modules?.get('activities')?.openActivityEditForm(activity);
 }
 
 function openActivityForm(){
-  activityFormDirty=false;setInternalFormMode(true);workspaceSubpage='activityForm';showOnlyWorkspacePage('activityFormPage');setBottomNavActive('Settings');renderTabs();updateWorkspaceContextBar();pushWorkspaceHistory('activityForm');activityFormHistoryPushed=true;
-  const body=document.getElementById('activityFormBody');body.innerHTML='';const f=document.createElement('div');f.className='internal-form-field';const l=document.createElement('label');l.textContent='نام فعالیت';const input=document.createElement('input');input.className='internal-form-input';input.placeholder='مثلاً آرماتوربندی';input.value='';input.oninput=()=>activityFormDirty=true;f.append(l,input);body.appendChild(f);
-  const actions=document.getElementById('activityFormActions');actions.innerHTML='';const save=document.createElement('button');save.className='if-save';save.textContent='ذخیره';save.onclick=()=>{const name=input.value.trim();if(!name){input.focus();return;}if(getActivityTemplates().some(a=>String(a.name||'').trim()===name)){showToast('این فعالیت قبلاً ثبت شده است');return;}const project=getCurrentProject(); if(!project) return; getActivityTemplates(project).push({id:uid(),name,createdAt:Date.now()}); markDirty(project.id);try{localStorage.removeItem(ACTIVITY_DRAFT_KEY)}catch(e){}activityFormDirty=false;closeActivityForm(true);renderProjectActivitiesPage();};const cancel=document.createElement('button');cancel.className='if-cancel';cancel.textContent='انصراف';cancel.onclick=()=>closeActivityForm();actions.append(save,cancel);
+  return window.KarhaApp?.modules?.get('activities')?.openActivityForm();
 }
-function closeActivityForm(fromPopState=false){if(activityFormHistoryPushed){activityFormHistoryPushed=false;if(!fromPopState){try{history.back()}catch(e){}}}setInternalFormMode(false);document.getElementById('activityFormPage').classList.add('hidden');workspaceSubpage='activities';showOnlyWorkspacePage('projectActivitiesPage');renderProjectActivitiesPage();updateWorkspaceContextBar();activityFormDirty=false;}
 function requestCloseActivityForm(fromPopState=false){
-  // فعالیت فرم مستقلی است که پیش‌نویس برای آن تعریف نشده؛ خروج همیشه بدون ذخیره انجام می‌شود.
-  closeActivityForm(fromPopState);
+  return window.KarhaApp?.modules?.get('activities')?.requestCloseActivityForm(fromPopState);
 }
 
 function renderItemActivities(item,pid,body){
@@ -6617,6 +6606,25 @@ window.KarhaLegacy = Object.freeze({
   openContractsPage,
   closeContractsPage,
   openContractForm,
+  openActivityForm,
+  openActivityEditForm,
+  requestCloseActivityForm,
+  activityFormRuntime: Object.freeze({
+    uid,
+    getCurrentProjectId:getCurrentProjectScopeId,
+    showToast,
+    enterActivityForm(){ setInternalFormMode(true); workspaceSubpage='activityForm'; showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); },
+    leaveActivityForm(){ setInternalFormMode(false); document.getElementById('activityFormPage')?.classList.add('hidden'); workspaceSubpage='activities'; showOnlyWorkspacePage('projectActivitiesPage'); renderProjectActivitiesPage(); updateWorkspaceContextBar(); },
+    pushWorkspaceHistory,
+    renderActivities(projectId){ window.KarhaApp?.modules?.get('activities')?.render(projectId); },
+    persistActivities(projectId){
+      const project=findProject(projectId);
+      const stored=window.KarhaApp?.projectRepository?.find(projectId);
+      if(project && stored) project.activityTemplates=Array.isArray(stored.activityTemplates)?stored.activityTemplates:[];
+      if(project) markDirty(project.id);
+      persist();
+    }
+  }),
   contactFormRuntime: Object.freeze({
     uid,
     getCurrentProject,
