@@ -1,5 +1,6 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
+import { activityRepository } from '../../data/activityRepository.js';
 
 function getProjectId(explicit = null){
   return explicit
@@ -10,12 +11,6 @@ function getProjectId(explicit = null){
 
 function getProject(projectId){
   return projectId ? projectRepository.getActiveProject(projectId) : null;
-}
-
-function getActivities(project){
-  return Array.isArray(project?.activityTemplates)
-    ? project.activityTemplates.filter(a => !a.trashed)
-    : [];
 }
 
 function getContractTemplates(project){
@@ -43,17 +38,7 @@ function openLegacyActivityForm(activity){
 }
 
 function deleteActivity(projectId, activityId){
-  const projects=projectRepository.getProjectsList();
-  const project=projects.find(p => String(p.id ?? p.projectId) === String(projectId));
-  if(!project) return false;
-
-  const activity=(project.activityTemplates || [])
-    .find(a => String(a.id) === String(activityId));
-  if(!activity) return false;
-
-  activity.trashed=true;
-  projectRepository.saveProjectsList(projects);
-  return true;
+  return !!activityRepository.softDelete(projectId, activityId);
 }
 
 export const activitiesModule = {
@@ -79,7 +64,7 @@ export const activitiesModule = {
       return;
     }
 
-    const activities=getActivities(project);
+    const activities=activityRepository.list(activeId).filter(activity => !activity.trashed);
 
     if(!activities.length){
       const empty=document.createElement('div');
