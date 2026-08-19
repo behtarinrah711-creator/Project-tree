@@ -2350,8 +2350,19 @@ function saveContractTemplateClean(silent=false){
   if(!p)return false;
   return window.KarhaContractTemplateForm?.save?.(p.id,silent) || false;
 }
-function openContractsPage(){ closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contracts'; setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('contractsPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contracts'); renderContractsPage(); }
-function closeContractsPage(){ workspaceSubpage=null; setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('reportsPage'); updateWorkspaceContextBar(); renderReportsWorkspace(); }
+function openContractsPage(projectId=getCurrentProjectScopeId(),{updateRoute=true,pushHistory=true}={}){
+  if(projectId && String(projectId)!==String(getCurrentProjectScopeId())){
+    setActiveProject(projectId,{updateRoute:false,render:false});
+  }
+  const p=getCurrentProject(); if(!p)return false;
+  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contracts';
+  if(updateRoute) replaceWorkspaceRoute(p.id,'contracts');
+  setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('contractsPage'); updateWorkspaceContextBar();
+  if(pushHistory) pushWorkspaceHistory('contracts');
+  renderContractsPage();
+  return true;
+}
+function closeContractsPage(){ const p=getCurrentProject(); workspaceSubpage=null; if(p)replaceWorkspaceRoute(p.id,'reports'); setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('reportsPage'); updateWorkspaceContextBar(); renderReportsWorkspace(); }
 function renderContractsPage(){
   const module=window.KarhaApp?.modules?.get('contracts');
   if(module?.render) module.render(getCurrentProject()?.id);
@@ -3026,7 +3037,7 @@ function contactsToSearchTemplateItems(contacts){
 function openContractorSearchTemplate(){
   const p=getCurrentProject(); if(!p||!contractFormState)return;
   return window.KarhaContractPickers?.openContractorPicker?.(p.id,contractFormState,()=>{contractFormDirty=true;renderContractForm();},()=>{
-    if(typeof openContactForm==='function'){closeSearchTemplate(false);openContactForm();}
+    if(typeof openContactForm==='function'){closeSearchTemplate(false);openContactForm(null,{activityId:contractFormState.activityId});}
     else showToast('افزودن مخاطب در دسترس نیست');
   });
 }
@@ -3275,7 +3286,7 @@ function renderContactsPage(){
   if(module?.render) module.render(getCurrentProject()?.id);
 }
 
-function openContactForm(contact=null){
+function openContactForm(contact=null,{activityId=null}={}){
   const isEdit=!!contact;
   const c=contact||{
     id:uid(), nationalityType:'ایرانی', nationality:'', foreignId:'', foreignIdImages:[],
@@ -3283,6 +3294,7 @@ function openContactForm(contact=null){
     phones:[], type:'', activities:[], bankAccounts:[], pending:true
   };
   if(!contact){ const existingDraft=getContacts().find(x=>x.pending===true); if(existingDraft) Object.assign(c,existingDraft); }
+  if(!contact && activityId) c.activities=[String(activityId)];
   if(!Array.isArray(c.phones)) c.phones=c.phone?[c.phone]:[];
   if(!Array.isArray(c.bankAccounts)){
     const oldCards=Array.isArray(c.cards)?c.cards.filter(Boolean):[];
@@ -4685,8 +4697,11 @@ function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('
 document.getElementById('hamburgerBtn').onclick = openDrawer;
 document.getElementById('avatarBtn').onclick = openDrawer;
 document.getElementById('drawerOverlay').onclick = (e)=>{ if(e.target.id==='drawerOverlay') closeDrawer(); };
-window.addEventListener('karha:workspace-route-synced', ()=>{
+window.addEventListener('karha:workspace-route-synced', event=>{
   renderDrawerProjectList();
+  if(event.detail?.moduleId==='contracts' && event.detail?.projectId){
+    openContractsPage(event.detail.projectId,{updateRoute:false,pushHistory:false});
+  }
   updateWorkspaceContextBar();
 });
 
@@ -6051,7 +6066,7 @@ document.getElementById('shareConfirmBtn').onclick = ()=>{
 /* ---------- PWA service worker registration ---------- */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js?v=159',{updateViaCache:'none'}).then(reg=>{
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
       try{ reg.update(); }catch(e){}
       if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
     }).catch(()=>{});
@@ -7366,15 +7381,19 @@ window.addEventListener('popstate', ()=>{
 /* ---------- init ---------- */
 loadData();
 const routedProjectId = getProjectIdFromRoute();
+const routedModuleId = String(location.hash || '').match(/^#\/?projects?\/[^/?&#]+\/([^/?&#]+)/i)?.[1] || 'dashboard';
 if(routedProjectId && findProject(routedProjectId)){
   data.activeTab = routedProjectId;
-  replaceWorkspaceRoute(routedProjectId, 'dashboard');
+  if(routedModuleId!=='contracts') replaceWorkspaceRoute(routedProjectId, 'dashboard');
 }else if(data.activeTab && data.activeTab !== 'starred' && findProject(data.activeTab)){
   replaceWorkspaceRoute(data.activeTab, 'dashboard');
 }else{
   data.activeTab = null;
 }
-renderAll();
+if(routedProjectId && routedModuleId==='contracts'){
+  enterWorkspaceSurface(); workspaceSubpage='contracts'; setBottomNavActive('Reports');
+  showOnlyWorkspacePage('contractsPage'); updateWorkspaceContextBar();
+}else renderAll();
 
 // قراردادها: صفحه قالب‌ها و فرم مستقل قالب قرارداد
 (function(){
@@ -7409,5 +7428,8 @@ window.KarhaLegacy = Object.freeze({
   },
   getActiveProject(){
     return typeof getCurrentProject === 'function' ? getCurrentProject() : null;
-  }
+  },
+  openContractsPage,
+  closeContractsPage,
+  openContractForm
 });
