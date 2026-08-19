@@ -1,6 +1,7 @@
 import { projectContext } from '../../core/projectContext.js';
 import { contactRepository } from '../../data/contactRepository.js';
 import { projectRepository } from '../../data/projectRepository.js';
+import { openContactForm } from './contactFormModule.js';
 
 function getProjectId(explicit = null){
   return explicit
@@ -22,27 +23,22 @@ function textMatch(text,q){
   return !q || String(text || '').toLocaleLowerCase('fa').includes(q);
 }
 
-function openLegacyContactForm(contact){
-  if(typeof window.openContactForm === 'function'){
-    window.openContactForm(contact);
-    return true;
-  }
-  const legacy=window.KarhaLegacy;
-  if(typeof legacy?.openContactForm === 'function'){
-    legacy.openContactForm(contact);
-    return true;
-  }
-  return false;
+function openPeopleContactForm(contact){
+  return openContactForm(contact);
 }
 
 function softDeleteContact(projectId, contactId){
-  return Boolean(contactRepository.softDelete(projectId, contactId));
+  const deleted=Boolean(contactRepository.softDelete(projectId, contactId));
+  if(deleted) window.KarhaLegacy?.contactFormRuntime?.persistContacts?.(projectId);
+  return deleted;
 }
+
 
 export const peopleModule = {
   id:'people',
   title:'کارکنان و پیمانکاران',
   route:'people',
+  openContactForm,
 
   mount({projectId} = {}){
     this.render(projectId);
@@ -130,7 +126,7 @@ export const peopleModule = {
       edit.textContent='ویرایش';
       edit.addEventListener('click',event=>{
         event.stopPropagation();
-        openLegacyContactForm(contact);
+        openPeopleContactForm(contact);
       });
 
       const del=document.createElement('button');
@@ -146,7 +142,7 @@ export const peopleModule = {
       actions.append(del,edit);
       row.append(main,actions);
       row.dataset.searchText=(displayName+' '+activityText+' '+(contact.type||'')).toLocaleLowerCase('fa');
-      row.addEventListener('click',()=>openLegacyContactForm(contact));
+      row.addEventListener('click',()=>openPeopleContactForm(contact));
       rows.push(row);
       list.appendChild(row);
     });
