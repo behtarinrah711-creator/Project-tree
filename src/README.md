@@ -104,10 +104,11 @@ The People/Contacts list renderer is now independent under
 activity labels, pending state, edit and soft-delete actions, and does not use
 `legacyModule.js`.
 
-For safety, the existing full contact form implementation remains temporarily
-behind an explicit compatibility bridge (`openContactForm`). This is deliberate:
-the form is a large coupled legacy surface and will be migrated separately
-without copying or rewriting it in this step.
+The full contact form runtime now lives in
+`src/modules/people/contactFormModule.js`. It owns form state, drafts, dirty and
+validation behavior, activity selection, and create/edit persistence through
+`ContactRepository`; the remaining legacy bridge only exposes shared workspace
+UI services and synchronizes the existing in-memory/cloud persistence runtime.
 
 
 ## Refactor step 287 — activities module

@@ -32,7 +32,8 @@ function openContractPicker(kind){
  const addContact=()=>{
   if(typeof window?.KarhaSearchTemplate?.close==='function') window.KarhaSearchTemplate.close(false);
   else helper("closeSearchTemplate",false);
-  if(typeof window?.openContactForm==='function') window.openContactForm(null,kind==='contractor'?{activityId:state.activityId}:undefined);
+  const people=window?.KarhaApp?.modules?.get('people');
+  if(typeof people?.openContactForm==='function') people.openContactForm(null,kind==='contractor'?{activityId:state.activityId}:undefined);
   else helper("showToast",'افزودن مخاطب در دسترس نیست');
  };
  if(kind==='contractor') return contractPickers.openContractorPicker(p.id,state,pickerChanged,addContact);
