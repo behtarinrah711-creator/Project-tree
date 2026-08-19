@@ -45,15 +45,8 @@ const APP_FORM_ARCHITECTURE = Object.freeze({
   exitChoices: ['بله','خیر']
 });
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBbRk4MsdHtj-gWnjbJExvQgW0sY6Z4uK8",
-  authDomain: "tree-d92af.firebaseapp.com",
-  projectId: "tree-d92af",
-  storageBucket: "tree-d92af.firebasestorage.app",
-  messagingSenderId: "401523332370",
-  appId: "1:401523332370:web:3a524a2b86b967ca4d8fcb"
-};
-firebase.initializeApp(firebaseConfig);
+// The independent shell entry initializes the default Firebase app so Login
+// remains available even if the application import graph fails. Reuse it here.
 const auth = firebase.auth();
 const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch((err)=>{
@@ -3117,14 +3110,12 @@ function openDrawer(){
   renderDrawerProjectList();
   const label = document.getElementById('drawerCollabLabel');
   if(label){
-    const p = data.activeTab !== 'starred' ? findProject(data.activeTab) : null;
+    const p = data && data.activeTab !== 'starred' ? findProject(data.activeTab) : null;
     label.textContent = p ? ('همکاری روی «' + p.name + '»') : 'همکاری روی این پروژه';
   }
 }
 function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('hidden'); }
-document.getElementById('hamburgerBtn').onclick = openDrawer;
-document.getElementById('avatarBtn').onclick = openDrawer;
-document.getElementById('drawerOverlay').onclick = (e)=>{ if(e.target.id==='drawerOverlay') closeDrawer(); };
+window.addEventListener('karha:drawer-open', openDrawer);
 window.addEventListener('karha:workspace-route-synced', event=>{
   renderDrawerProjectList();
   if(event.detail?.moduleId==='contracts' && event.detail?.projectId){
@@ -3132,18 +3123,6 @@ window.addEventListener('karha:workspace-route-synced', event=>{
   }
   updateWorkspaceContextBar();
 });
-
-document.getElementById('drawerSigninBtn').onclick = ()=>{
-  if(currentUser){
-    auth.signOut();
-    closeDrawer();
-  } else {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(()=>{
-      auth.signInWithRedirect(provider);
-    });
-  }
-};
 
 /* ---------- confirm dialog ---------- */
 let confirmCallback = null;
