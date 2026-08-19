@@ -39,8 +39,9 @@ test('legacy loader creates one ordered classic script', async () => {
   assert.equal(first.dataset.loaded, 'true');
 });
 
-test('HTML has one module bootstrap and does not independently schedule legacyApp', async () => {
+test('HTML has independent shell and application entries and no direct legacyApp script', async () => {
   const html = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
+  assert.match(html, /<script type="module" src="src\/bootstrap\/shellEntry\.js"><\/script>/);
   assert.match(html, /<script type="module" src="src\/bootstrap\/app\.js"><\/script>/);
   assert.doesNotMatch(html, /<script[^>]+src="src\/legacy\/legacyApp\.js"/);
 });
