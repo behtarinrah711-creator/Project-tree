@@ -17,7 +17,7 @@ export function assertProjectItemRepositoryContract(){
   const repository=new ProjectItemRepository(new ProjectRepository(createMemoryStorage({
     'gtasks-clone-v2':JSON.stringify({projects:[{id:'p1',tasks:[]}]})
   })));
-  for(const method of ['list','get','save','update','softDelete','updateSubtask','addSubtask','softDeleteSubtask','restore','reorder']){
+  for(const method of ['list','get','save','update','softDelete','updateSubtask','addSubtask','softDeleteSubtask','restore','remove','reorder']){
     if(typeof repository[method] !== 'function'){
       throw new Error(`ProjectItemRepository contract missing: ${method}`);
     }
@@ -82,6 +82,12 @@ export function assertProjectItemRepositoryBehavior(){
   if(!deleted?.trashed || !deleted.deletedAt || deleted.deletedType !== 'task' ||
      !repository.get('p1','t2')?.trashed){
     throw new Error('ProjectItemRepository softDelete behavior failed');
+  }
+  if(!repository.remove('p1','t2','s2') || repository.get('p1','t2')?.subtasks.some(item=>item.id==='s2')){
+    throw new Error('ProjectItemRepository nested permanent delete failed');
+  }
+  if(!repository.remove('p1','t2') || repository.get('p1','t2')){
+    throw new Error('ProjectItemRepository permanent delete failed');
   }
 
   const persisted=JSON.parse(storage.getItem('gtasks-clone-v2'));
