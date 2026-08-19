@@ -1,4 +1,5 @@
 import { projectContext } from '../../core/projectContext.js';
+import { contactRepository } from '../../data/contactRepository.js';
 import { projectRepository } from '../../data/projectRepository.js';
 
 function getProjectId(explicit = null){
@@ -35,14 +36,7 @@ function openLegacyContactForm(contact){
 }
 
 function softDeleteContact(projectId, contactId){
-  const projects=projectRepository.getProjectsList();
-  const project=projects.find(p => String(p.id ?? p.projectId) === String(projectId));
-  if(!project) return false;
-  const contact=(project.contacts || []).find(c => String(c.id) === String(contactId));
-  if(!contact) return false;
-  contact.trashed=true;
-  projectRepository.saveProjectsList(projects);
-  return true;
+  return Boolean(contactRepository.softDelete(projectId, contactId));
 }
 
 export const peopleModule = {
@@ -68,9 +62,7 @@ export const peopleModule = {
       return;
     }
 
-    const contacts=Array.isArray(project.contacts)
-      ? project.contacts.filter(c => !c.trashed)
-      : [];
+    const contacts=contactRepository.list(activeId).filter(c => !c.trashed);
 
     if(!contacts.length){
       const empty=document.createElement('div');
