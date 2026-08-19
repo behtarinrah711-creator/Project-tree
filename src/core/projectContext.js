@@ -28,6 +28,17 @@ export class ProjectContextStore{
     this.listeners = new Set();
   }
   getProjectId(){ return this.projectId; }
+  synchronizeProjects(projects, preferredProjectId = this.projectId){
+    const available = Array.isArray(projects)
+      ? projects.filter(project => project && !project.trashed && !project.archived)
+      : [];
+    const preferred = available.find(project =>
+      String(project.id ?? project.projectId) === String(preferredProjectId ?? '')
+    );
+    const next = preferred || available[0] || null;
+    this.setProjectId(next ? (next.id ?? next.projectId) : null);
+    return this.projectId;
+  }
   setProjectId(projectId, { silent = false } = {}){
     const next = projectId || null;
     if(next === this.projectId) return;

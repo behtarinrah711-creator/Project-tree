@@ -1054,6 +1054,15 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
       data.activeTab = first ? first.id : 'starred';
     }
   }
+  // Auth restoration and Firestore snapshots are asynchronous.  On a cleared
+  // browser cache the first render has no project, so there is no route from
+  // which the modular context can recover later.  Synchronize the context from
+  // the now-authoritative cloud collection before refreshing any workspace UI.
+  const synchronizedProjectId = window.KarhaApp?.projectContext?.synchronizeProjects?.(
+    data.projects,
+    data.activeTab !== 'starred' ? data.activeTab : null
+  );
+  data.activeTab = synchronizedProjectId || 'starred';
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
   const wasAdding = false;
   const projectsPageVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
