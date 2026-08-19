@@ -63,7 +63,11 @@ export const reportsModule = {
     `;
 
     row.addEventListener('click', () => {
-      goToProjectModule(activeProjectId, 'contracts');
+      if(typeof window.KarhaLegacy?.openContractsPage === 'function'){
+        window.KarhaLegacy.openContractsPage(activeProjectId);
+      }else{
+        goToProjectModule(activeProjectId, 'contracts');
+      }
     });
 
     wrap.appendChild(row);
