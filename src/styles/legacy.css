@@ -96,9 +96,7 @@ html[data-theme="dark"]{
     color:var(--text);padding-inline-start:4px;flex-shrink:0;
   }
   .topbar-title{display:flex;align-items:baseline;gap:5px;line-height:1.2;}
-  .topbar-title .app-title-lockup{position:relative;display:inline-flex;align-items:baseline;}
   .topbar-title .app-title-main{font-size:18px;font-weight:700;color:var(--text);}
-  .topbar-title .site-version{position:absolute;inset-inline-start:100%;top:-3px;margin-inline-start:2px;font-size:8px;font-weight:500;line-height:1;color:var(--text-dim);direction:ltr;}
   .topbar-title .app-title-project{font-size:13px;font-weight:500;color:var(--text-dim);white-space:nowrap;}
 
   .topbar-search{

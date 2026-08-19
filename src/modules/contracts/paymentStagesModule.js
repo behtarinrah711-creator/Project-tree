@@ -48,7 +48,8 @@ export function renderPaymentStages(body,state,{onDirty,onNumpad,onRender}={}){
   const list=document.createElement('div');
   list.className='contract-payment-stages';
 
-  normalizePaymentStages(state.paymentStages).forEach((x,i)=>{
+  state.paymentStages=normalizePaymentStages(state.paymentStages);
+  state.paymentStages.forEach((x,i)=>{
     const row=document.createElement('div');
     row.className='contract-payment-stage';
 
