@@ -1,5 +1,6 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
+import { projectItemRepository } from '../../data/projectItemRepository.js';
 
 function getProjectId(explicitProjectId=null){
   return explicitProjectId || projectContext.getProjectId?.()
@@ -44,7 +45,7 @@ export const dashboardModule={
     content.appendChild(summary);
   }
 
-  const visibleTasks = p.tasks.filter(t => !legacy("isPendingDeleted",'task', p.id, t.id) && !t.trashed);
+  const visibleTasks = projectItemRepository.list(p.id).filter(t => !legacy("isPendingDeleted",'task', p.id, t.id) && !t.trashed);
   const active = visibleTasks.filter(t=>!t.done);
   const completedTasks = visibleTasks.filter(t=>t.done).sort((a,b)=> (b.completedAt||0) - (a.completedAt||0));
   // فرزندان تکمیل‌شده زیر والد باز
@@ -83,10 +84,12 @@ export const dashboardModule={
       clearBtn.onclick = (e)=>{
         e.stopPropagation();
         legacy("openConfirm",'همه موارد تکمیل‌شده این پروژه حذف شوند؟', ()=>{
-          completedTasks.forEach(t=>{ t.trashed = true; });
-          doneSubsUnderOpen.forEach(({s})=>{ s.trashed = true; });
-          legacy("markDirty",p.id);
-          legacy("persist",);
+          completedTasks.forEach(t=>projectItemRepository.update(p.id,t.id,item=>({...item,trashed:true})));
+          doneSubsUnderOpen.forEach(({t,s})=>projectItemRepository.update(p.id,t.id,item=>({
+            ...item,
+            subtasks:(item.subtasks||[]).map(child=>String(child.id)===String(s.id)?{...child,trashed:true}:child),
+          })));
+          window.KarhaLegacy?.projectItemRuntime?.persistItems(p.id);
           renderAll();
           legacy("showToast",'تکمیل‌شده‌ها حذف شدند');
         }, 'حذف همه');
