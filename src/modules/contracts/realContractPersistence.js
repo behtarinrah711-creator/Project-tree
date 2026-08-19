@@ -1,4 +1,4 @@
-import { projectRepository } from '../../data/projectRepository.js';
+import { contractRepository } from '../../data/contractRepository.js';
 import * as realContractDomain from './realContractDomain.js';
 
 function today(){
@@ -57,15 +57,6 @@ export function saveRealContract(projectId, draft, helpers={}){
   s.updatedAt=Date.now();
   s.trashed=false;
 
-  const projects=projectRepository.getProjectsList()||[];
-  const pIndex=projects.findIndex(p=>String(p.id??p.projectId)===String(project.id));
-  if(pIndex<0) return {ok:false};
-
-  const p=projects[pIndex];
-  if(!Array.isArray(p.contracts)) p.contracts=[];
-  const idx=p.contracts.findIndex(x=>String(x.id)===String(s.id));
-  if(idx>=0)p.contracts[idx]=s;
-  else p.contracts.push(s);
-  projectRepository.saveProjectsList(projects);
+  if(!contractRepository.save(project.id,s)) return {ok:false};
   return {ok:true,contract:s};
 }

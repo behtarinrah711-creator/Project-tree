@@ -1,3 +1,5 @@
+import { localStorageAdapter } from './storageAdapter.js';
+
 const PRIMARY_KEY = 'gtasks-clone-v2';
 const LEGACY_KEYS = [PRIMARY_KEY, 'projects', 'karha_projects', 'karha.projects'];
 
@@ -17,7 +19,7 @@ function readKey(storage, key){
 }
 
 export class ProjectRepository{
-  constructor(storage = window.localStorage){
+  constructor(storage = localStorageAdapter){
     this.storage = storage;
   }
 

@@ -2156,15 +2156,15 @@ function getContractTemplates(project){
   return window.KarhaContractTemplates?.getContractTemplates(project) || [];
 }
 function getProjectContracts(project=getCurrentProject()){
-  if(!project) return [];
-  normalizeProjectScopedData(project);
-  return project.contracts;
+  return project?.id
+    ? (window.KarhaRealContracts?.getProjectContracts?.(project.id) || [])
+    : [];
 }
 function findContractTemplate(id,p){
   return window.KarhaContractTemplates?.findContractTemplate(id,p) || null;
 }
 function findProjectContract(id, project=getCurrentProject()){
-  return getProjectContracts(project).find(x=>String(x.id)===String(id) && !x.trashed) || null;
+  return window.KarhaRealContracts?.findProjectContract?.(id,project) || null;
 }
 function makeContractItem(text=''){
   return window.KarhaContractTemplates?.makeContractItem(text) || {id:'ct_'+Date.now(),text:String(text||''),children:[]};
@@ -2184,7 +2184,6 @@ function contractTemplateHasContent(t){
 let contractTemplateFormState=null, contractTemplateFormDirty=false, contractTemplateFormHistoryPushed=false, contractTemplateEditingId=null;
 let contractDragHandlesVisible=true;
 let contractTemplateInlineAddState=null;
-let contractRealInlineAddState=null;
 let contractDragState=null;
 
 function openContractTemplatesPage(){
@@ -2247,37 +2246,6 @@ function onContractPointerDragEnd(){
 function attachContractDrag(handle, arr, index, render){
   handle.onpointerdown=e=>startContractPointerDrag(e,arr,index,handle.closest('.contract-item-card'),render);
 }
-
-function findContractItemById(items,id){
-  if(!Array.isArray(items)) return null;
-  for(const item of items){
-    if(String(item.id)===String(id)) return item;
-  }
-  return null;
-}
-function focusContractInlineAdd(){
-  return window.KarhaRealContractForm?.focusInlineAdd?.();
-}
-function commitContractInlineAdd(...args){
-  return window.KarhaRealContractForm?.commitContractInlineAdd?.(...args) || false;
-}
-function renderContractInlineAddRow(...args){ return window.KarhaRealContractForm?.renderContractInlineAddRow?.(...args); }
-function startContractItemDrag(e,id,list,containerEl,wrapperEl,kind){
-  return window.KarhaContractItemInteractions?.attachPointerDrag?.({
-    handle:e.currentTarget,list,id,kind,
-    state:kind==='template'
-      ? {items:contractTemplateFormState.items,dirty:false}
-      : {items:contractFormState.items,dirty:false},
-    onRender:kind==='template'?()=>renderContractTemplateForm():()=>renderContractForm()
-  });
-}
-function renderContractRootInlineAddRow(...args){ return window.KarhaRealContractForm?.renderContractRootInlineAddRow?.(...args); }
-
-function renderContractItem(...args){ return window.KarhaRealContractForm?.renderContractItem?.(...args); }
-
-let contractEditingId=null, contractFormState=null, contractFormDirty=false, contractFormHistoryPushed=false, realContractDragState=null;
-const REAL_CONTRACT_DRAFT_KEY='karha_real_contract_form_draft_v1';
-function makeRealContractDraft(existing=null){ return window.KarhaRealContracts?.makeRealContractDraft?.(existing,todayJalaliStr()) || existing; }
 
 function makeContractTemplateDraftClean(existing){
   return window.KarhaContractTemplates?.makeContractTemplateDraftClean(existing) || existing;
@@ -2368,344 +2336,34 @@ function renderContractsPage(){
   if(module?.render) module.render(getCurrentProject()?.id);
 }
 
-function cloneTemplateIntoContract(t){ return (t?.items||[]).map(x=>({id:uid(),text:x.text||'',number:x.number||'',children:(x.children||[]).map(c=>({id:uid(),text:c.text||'',number:c.number||'',children:[]}))})); }
-function renumberRealContractItems(items){ return window.KarhaRealContracts?.renumberRealContractItems?.(items) || items || []; }
-function openContractForm(id=null){
-  closeDrawer(); const p=getCurrentProject(); if(!p)return;
-  contractEditingId=id||null; contractFormHistoryPushed=contractFormHistoryPushed||false;
+// Compatibility shell only: form state, rendering and persistence live in the
+// modular real-contract form module.
+function openRealContractFormShell(projectId){
+  const p=getCurrentProject(); if(!p || String(p.id)!==String(projectId)) return false;
+  closeDrawer();
   workspaceSubpage='contractForm'; setInternalFormMode(true);
   showOnlyWorkspacePage('contractFormPage'); setBottomNavActive('Reports');
   renderTabs(); updateWorkspaceContextBar();
-  if(!contractFormHistoryPushed){pushWorkspaceHistory('contractForm');contractFormHistoryPushed=true;}
-  if(window.KarhaRealContractForm?.open?.(id,p.id)){
-    // Keep legacy picker/numpad bridges on the modular form's live draft.
-    contractFormState=window.KarhaRealContractForm.getState();
-  }
+  return true;
 }
-function closeContractForm(fromPopState=false){setInternalFormMode(false);document.getElementById('contractFormPage')?.classList.add('hidden');contractFormHistoryPushed=false;contractFormState=null;contractEditingId=null;contractFormDirty=false;contractRealInlineAddState=null;workspaceSubpage='contracts';showOnlyWorkspacePage('contractsPage');setBottomNavActive('Reports');renderTabs();updateWorkspaceContextBar();renderContractsPage();}
-function requestCloseContractForm(fromPopState=false){closeContractForm(fromPopState);}
-function realContractMove(arr,from,to){
-  if(!Array.isArray(arr))return arr;
-  const item=arr[from]; const target=arr[to];
-  if(!item||!target)return arr;
-  return window.KarhaContractItemInteractions?.moveItem?.(arr,item.id,target.id,to>from?'after':'before')?arr:arr;
+function closeRealContractFormShell(){
+  setInternalFormMode(false);
+  document.getElementById('contractFormPage')?.classList.add('hidden');
+  workspaceSubpage='contracts';
+  showOnlyWorkspacePage('contractsPage'); setBottomNavActive('Reports');
+  renderTabs(); updateWorkspaceContextBar(); renderContractsPage();
 }
-let realContractPointerDragState=null;
-function attachRealContractDrag(handle,arr,index){
-  handle.onpointerdown=e=>{
-    e.preventDefault();e.stopPropagation();
-    const wrapper=handle.closest('.real-contract-item'); const container=wrapper?.parentElement;
-    const siblingEls=Array.from(container?.children||[]).filter(el=>el.dataset&&el.dataset.realContractDragId);
-    realContractPointerDragState={arr,index,wrapper,siblingEls,hoverEl:null,hoverPos:null,moved:false};
-    wrapper.classList.add('contract-row-dragging');
-    document.addEventListener('pointermove',onRealContractPointerDragMove);
-    document.addEventListener('pointerup',onRealContractPointerDragEnd,{once:true});
-  };
+function openContractForm(id=null){
+  const p=getCurrentProject(); if(!p)return false;
+  return window.KarhaRealContractForm?.open?.(id,p.id) || false;
 }
-function onRealContractPointerDragMove(e){
-  const st=realContractPointerDragState;if(!st)return;st.moved=true;
-  const others=st.siblingEls.filter(el=>el!==st.wrapper);let target=null,pos=null;
-  for(const el of others){const r=el.getBoundingClientRect();if(e.clientY<r.top+r.height/2){target=el;pos='before';break;}}
-  if(!target&&others.length){target=others[others.length-1];pos='after';}
-  others.forEach(el=>el.classList.remove('contract-drag-over-top','contract-drag-over-bottom'));
-  if(target)target.classList.add(pos==='before'?'contract-drag-over-top':'contract-drag-over-bottom');
-  st.hoverEl=target;st.hoverPos=pos;
+function closeContractForm(fromPopState=false){
+  return window.KarhaRealContractForm?.close?.(fromPopState) || false;
 }
-function onRealContractPointerDragEnd(){
-  const st=realContractPointerDragState;if(!st)return;
-  document.removeEventListener('pointermove',onRealContractPointerDragMove);
-  st.wrapper.classList.remove('contract-row-dragging');st.siblingEls.forEach(el=>el.classList.remove('contract-drag-over-top','contract-drag-over-bottom'));
-  realContractPointerDragState=null;if(!st.moved||!st.hoverEl)return;
-  const from=st.arr.findIndex(x=>String(x.id)===String(st.wrapper.dataset.realContractDragId));if(from<0)return;
-  const [moved]=st.arr.splice(from,1);let to=st.arr.findIndex(x=>String(x.id)===String(st.hoverEl.dataset.realContractDragId));if(to<0){st.arr.splice(from,0,moved);return;}if(st.hoverPos==='after')to++;st.arr.splice(to,0,moved);contractFormDirty=true;renderContractForm();
+function requestCloseContractForm(fromPopState=false){
+  return window.KarhaRealContractForm?.requestClose?.(fromPopState) || false;
 }
 
-function renderRealContractItem(...args){ return window.KarhaRealContractForm?.renderRealContractItem?.(...args); }
-
-function makeContractFieldTitle(label,onClear,showClear){
-  const row=document.createElement('div');
-  row.className='contract-field-title-row';
-  row.style.display='flex';
-  row.style.alignItems='center';
-  row.style.justifyContent='space-between';
-  row.style.gap='10px';
-  row.style.width='100%';
-
-  const lab=document.createElement('label');
-  lab.textContent=label;
-  row.appendChild(lab);
-
-  // قانون عمومی قرارداد:
-  // فیلدهای انتخاب‌شده با کلیک روی خود باکس ویرایش می‌شوند.
-  // ضربدر حذف فقط برای «آیتم پروژه» و به‌صورت اختصاصی در همان فیلد ساخته می‌شود.
-  return row;
-}
-
-
-function closeAllContractDropdowns(except){
-  document.querySelectorAll('.contract-inline-choice.open').forEach(el=>{ if(el!==except) el.classList.remove('open'); });
-  document.querySelectorAll('.contract-activity-picker.open').forEach(el=>{ if(el!==except) el.classList.remove('open'); });
-  document.querySelectorAll('.contract-activity-list-single').forEach(el=>{ if(!except || !except.contains(el)) el.classList.add('hidden'); });
-  document.querySelectorAll('.contract-contractor-results').forEach(el=>{ if(!except || !except.contains(el)) el.classList.add('hidden'); });
-  document.querySelectorAll('.contract-project-item-results').forEach(el=>{ if(!except || !except.contains(el)) el.classList.add('hidden'); });
-  document.querySelectorAll('.contract-activity-picker .contract-activity-trigger span:last-child').forEach(ch=>{
-    if(!except || !except.contains(ch)) ch.textContent='⌄';
-  });
-}
-
-function addInlineContractChoice(parent,label,value,onChange,options){
-  const wrap=document.createElement('div'); wrap.className='real-contract-field contract-inline-choice';
-  const title=makeContractFieldTitle(label,()=>{onChange('');contractFormDirty=true;renderContractForm();},!!value);
-  wrap.appendChild(title);
-  const trigger=document.createElement('button'); trigger.type='button'; trigger.className='contract-inline-choice-trigger';
-  const selectedOpt=options.find(o=>String(o.value)===String(value));
-  trigger.textContent=selectedOpt?.label || 'انتخاب کنید…';
-  const list=document.createElement('div'); list.className='contract-inline-choice-options';
-  options.forEach(opt=>{
-    const b=document.createElement('button'); b.type='button';
-    b.className='contract-inline-choice-option'+(String(opt.value)===String(value)?' selected':'');
-    b.textContent=opt.label;
-    b.onclick=(e)=>{
-      e.preventDefault(); e.stopPropagation();
-      onChange(String(opt.value));
-      contractFormDirty=true;
-      renderContractForm();
-    };
-    list.appendChild(b);
-  });
-  trigger.onclick=(e)=>{
-    e.preventDefault(); e.stopPropagation();
-    const wasOpen=wrap.classList.contains('open');
-    closeAllContractDropdowns(wrap);
-    if(!wasOpen) wrap.classList.add('open');
-  };
-  wrap.append(trigger,list); parent.appendChild(wrap); return wrap;
-}
-
-function addContractField(body,label,value,onChange,opts={}){
-  const wrap=document.createElement('div'); wrap.className='real-contract-field';
-  const hasSelectableValue=opts && Array.isArray(opts.select) && String(value??'')!=='';
-  const title=makeContractFieldTitle(label,()=>{onChange('');contractFormDirty=true;renderContractForm();},hasSelectableValue);
-  wrap.appendChild(title);
-  let el;
-  if(opts && Array.isArray(opts.select)){
-    el=document.createElement('select');
-    opts.select.forEach(opt=>{const o=document.createElement('option');o.value=String(opt.value??'');o.textContent=String(opt.label??'');el.appendChild(o);});
-    el.value=String(value??''); if(el.value!==String(value??'')) el.selectedIndex=0;
-    el.onchange=()=>{onChange(el.value);contractFormDirty=true;renderContractForm();};
-  }else if(opts && opts.datePicker){
-    el=document.createElement('input'); el.type='text'; el.readOnly=true; el.className='jalali-contract-date'; el.value=formatJalaliDisplay(value||''); el.placeholder='انتخاب از تقویم…';
-    el.onclick=()=>openJalaliPicker(value||todayJalaliStr(),v=>{onChange(v);contractFormDirty=true;renderContractForm();},{maxToday:!!opts.maxToday});
-  }else{
-    el=document.createElement('input'); el.type=opts.inputType||'text'; el.value=String(value??''); el.placeholder=opts.placeholder||'';
-    if(opts.inputMode) el.inputMode=opts.inputMode;
-    if(opts.numpad){
-      el.type='text'; el.readOnly=true; el.inputMode='none'; el.classList.add('contract-numpad-field');
-      const suffix=opts.suffix||' تومان';
-      const prefix=opts.prefix||'';
-      if(value){
-        el.value = prefix
-          ? prefix + toPersianDigits(String(value)) + suffix
-          : (suffix === '٪' ? toPersianDigits(String(value))+'٪' : toPersianDigits(formatCost(value))+suffix);
-      }else{
-        el.value='';
-      }
-      el.placeholder=opts.placeholder|| (prefix==='٪' || suffix==='٪' ? 'برای ورود درصد انتخاب کنید' : 'برای ورود مبلغ انتخاب کنید');
-      if(prefix==='٪') el.setAttribute('data-percent-prefix','true');
-      el.onclick=()=>openNumpadGeneric(value||'', raw=>{onChange(raw);contractFormDirty=true;renderContractForm();},{prefix,suffix,maxLen:opts.maxLen||16,group:opts.group!==false});
-    }else{
-      el.oninput=()=>{onChange(el.value);contractFormDirty=true;};
-      if(opts.formatCost){
-        el.inputMode='numeric'; el.type='text';
-        el.value=value?formatCost(value):'';
-        el.oninput=()=>{const raw=toEnglishDigits(el.value).replace(/[^0-9]/g,'');onChange(raw);contractFormDirty=true;};
-        el.onblur=()=>{const raw=toEnglishDigits(el.value).replace(/[^0-9]/g,'');el.value=raw?formatCost(raw):'';};
-      }
-      if(opts.readonly) el.readOnly=true;
-    }
-  }
-  wrap.appendChild(el); body.appendChild(wrap); return el;
-}
-function collectProjectContractItems(project){
-  const out=[]; if(!project) return out;
-  (project.tasks||[]).forEach(root=>{
-    if(!root||root.trashed)return;
-    const rootName=String(root.text||'').trim();
-    if(rootName) out.push({id:root.id,rootId:root.id,text:rootName,path:rootName,depth:0});
-    walkItems(root.subtasks,(item,parent,depth)=>{
-      if(!item||item.trashed)return;
-      const parentChain=[]; let pid=item.id;
-      while(pid){const par=findParentItem(project.id,root.id,pid);if(!par)break;parentChain.unshift(String(par.text||'').trim());pid=par.id;}
-      const path=[rootName,...parentChain,String(item.text||'').trim()].filter(Boolean).join(' / ');
-      out.push({id:item.id,rootId:root.id,text:String(item.text||'').trim(),path,depth:depth+1});
-    });
-  });
-  return out;
-}
-function contractCalcDurationDays(start,end){
-  if(!start || !end) return '';
-  const parseJ=(v)=>{const m=String(v).match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/); if(!m)return null; const g=jalaliToGregorian(+m[1],+m[2],+m[3]); return new Date(Date.UTC(g.gy,g.gm-1,g.gd));};
-  const a=parseJ(start), b=parseJ(end);
-  if(!a || !b || Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return '';
-  const diff=Math.round((b-a)/86400000);
-  return diff>=0 ? String(diff+1) : '';
-}
-
-function renderProjectContractItemPicker(body,s,p){
-  const wrap=document.createElement('div'); wrap.className='real-contract-field contract-project-item-picker';
-
-  const titleRow=makeContractFieldTitle('آیتم پروژه',null,false);
-
-  // فقط آیتم پروژه ضربدر حذف دارد؛ در انتهای ردیف عنوان قرار می‌گیرد،
-  // نه پشت/داخل باکس و نه برای هیچ‌کدام از فیلدهای دیگر قرارداد.
-  if(s.projectItemPath){
-    const clear=document.createElement('button');
-    clear.type='button';
-    clear.className='contract-project-item-clear-x';
-    clear.setAttribute('aria-label','حذف آیتم پروژه');
-    clear.title='حذف آیتم پروژه';
-    clear.textContent='×';
-    clear.onclick=(e)=>{
-      e.preventDefault();
-      e.stopPropagation();
-      s.projectItemId='';
-      s.projectItemRootTaskId='';
-      s.projectItemPath='';
-      contractFormDirty=true;
-      renderContractForm();
-    };
-    titleRow.appendChild(clear);
-  }
-  wrap.appendChild(titleRow);
-
-  const input=document.createElement('textarea');
-  input.className='contract-project-item-input';
-  input.placeholder='جستجوی آیتم پروژه…';
-  input.value=s.projectItemPath||'';
-  input.autocomplete='off';
-  input.rows=1;
-  input.wrap='soft';
-  input.style.minHeight='48px';
-  input.style.height='auto';
-  input.style.overflowY='hidden';
-  input.style.overflowX='hidden';
-  input.style.resize='none';
-  input.style.whiteSpace='pre-wrap';
-  input.style.overflowWrap='anywhere';
-  input.style.wordBreak='break-word';
-  input.style.lineHeight='1.7';
-  input.style.boxSizing='border-box';
-  wrap.appendChild(input);
-
-  const resizeProjectItemInput=()=>{
-    // ابتدا ارتفاع را صفر می‌کنیم تا scrollHeight واقعی متن محاسبه شود
-    input.style.height='0px';
-    const sh=input.scrollHeight;
-    input.style.height=Math.max(48, sh)+'px';
-  };
-  input.addEventListener('input',resizeProjectItemInput);
-
-  const results=document.createElement('div');
-  results.className='contract-project-item-results hidden';
-  wrap.appendChild(results);
-
-  const all=collectProjectContractItems(p);
-  const render=()=>{
-    const q=String(input.value||'').trim().toLowerCase();
-    results.innerHTML='';
-    const matches=all.filter(x=>!q||x.path.toLowerCase().includes(q)).slice(0,15);
-    if(!matches.length){results.classList.add('hidden');return;}
-    matches.forEach(x=>{
-      const b=document.createElement('button');
-      b.type='button';
-      b.className='contract-project-item-option';
-      b.style.paddingRight=(12+x.depth*14)+'px';
-      b.textContent=x.path;
-      b.onclick=()=>{
-        s.projectItemId=x.id;
-        s.projectItemRootTaskId=x.rootId;
-        s.projectItemPath=x.path;
-        contractFormDirty=true;
-        renderContractForm();
-      };
-      results.appendChild(b);
-    });
-    results.classList.remove('hidden');
-  };
-
-  input.onfocus=()=>{
-    closeAllContractDropdowns(wrap);
-    input.value=s.projectItemPath||'';
-    resizeProjectItemInput();
-    render();
-  };
-  input.oninput=()=>{
-    s.projectItemId='';
-    s.projectItemRootTaskId='';
-    s.projectItemPath=input.value;
-    contractFormDirty=true;
-    resizeProjectItemInput();
-    render();
-  };
-  input.onblur=()=>setTimeout(()=>results.classList.add('hidden'),180);
-
-  body.appendChild(wrap);
-
-  // ارتفاع باید بعد از قرار گرفتن فیلد داخل DOM و با عرض واقعی محاسبه شود
-  // تا متن‌های طولانی از همان ورود به صفحه کامل دیده شوند.
-  const resizeAfterLayout=()=>{
-    try{
-      // اطمینان از اینکه عرض نهایی اعمال شده
-      void input.offsetWidth;
-      resizeProjectItemInput();
-    }catch(e){}
-    requestAnimationFrame(()=>{
-      resizeProjectItemInput();
-      requestAnimationFrame(resizeProjectItemInput);
-    });
-    setTimeout(resizeProjectItemInput,0);
-    setTimeout(resizeProjectItemInput,40);
-    setTimeout(resizeProjectItemInput,100);
-    setTimeout(resizeProjectItemInput,250);
-  };
-  resizeAfterLayout();
-}
-function getContactDisplayName(c){return c?[c.firstName,c.lastName].filter(Boolean).join(' ')||c.name||'مخاطب':'مخاطب';}
-function syncContractPartyData(s,p){ return window.KarhaRealContracts?.syncContractPartyData?.(s,p) || s; }
-function renderPaymentStages(body,s){
-  return window.KarhaPaymentStages?.renderPaymentStages?.(body,s,{
-    onDirty:()=>{contractFormDirty=true;},
-    onNumpad:(value,onCommit,opts)=>openNumpadGeneric(value,onCommit,opts),
-    onRender:()=>renderContractForm()
-  });
-}
-function renderEmployerPicker(body,s,p,contacts){
- const wrap=document.createElement('div'); wrap.className='real-contract-field contract-search-template-field';
- const title=makeContractFieldTitle('کارفرما',()=>{s.employerId='';s.employerName='';contractFormDirty=true;renderContractForm();},!!s.employerId);
- wrap.appendChild(title);
- const btn=document.createElement('button'); btn.type='button'; btn.className='contract-contractor-search stpl-field-trigger';
- btn.textContent=s.employerId?getContactDisplayName(findContact(s.employerId,p)):'انتخاب کارفرما…';
- if(!s.employerId) btn.style.color='var(--text-dim)';
- btn.onclick=(e)=>{ e.preventDefault(); openEmployerSearchTemplate(); };
- wrap.appendChild(btn);
- body.appendChild(wrap);
-}
-
-function renderContractorPicker(body,s,p,contacts){
- const wrap=document.createElement('div'); wrap.className='real-contract-field contract-search-template-field';
- const title=makeContractFieldTitle('پیمانکار',()=>{s.contractorId='';s.activityId='';s.templateId='';s.items=[];s.paymentItems=[];contractFormDirty=true;renderContractForm();},!!s.contractorId);
- wrap.appendChild(title);
- const btn=document.createElement('button'); btn.type='button'; btn.className='contract-contractor-search stpl-field-trigger';
- btn.textContent=s.contractorId?getContactDisplayName(findContact(s.contractorId,p)):'انتخاب پیمانکار…';
- if(!s.contractorId) btn.style.color='var(--text-dim)';
- btn.onclick=(e)=>{ e.preventDefault(); openContractorSearchTemplate(); };
- wrap.appendChild(btn);
- body.appendChild(wrap);
-}
-
-
-
-/* ========== تمپلیت جستجو (Search Template) v273 ========== */
 let searchTemplateState = null;
 let searchTemplateHistoryPushed = false;
 /** لایهٔ جدا برای حالت جستجوی داخل تمپلیت (کیبورد/فوکس) */
@@ -3028,142 +2686,6 @@ window.addEventListener('popstate', function(ev){
   searchTemplateSearchModePushed=false;
   closeSearchTemplate(true);
 });
-
-function contactsToSearchTemplateItems(contacts){
-  return (contacts||[]).filter(c=>!c.trashed).map(c=>({
-    id:c.id,
-    name:getContactDisplayName(c),
-    _contact:c
-  }));
-}
-
-function openContractorSearchTemplate(){
-  const p=getCurrentProject(); if(!p||!contractFormState)return;
-  return window.KarhaContractPickers?.openContractorPicker?.(p.id,contractFormState,()=>{contractFormDirty=true;renderContractForm();},()=>{
-    if(typeof openContactForm==='function'){closeSearchTemplate(false);openContactForm(null,{activityId:contractFormState.activityId});}
-    else showToast('افزودن مخاطب در دسترس نیست');
-  });
-}
-
-function openEmployerSearchTemplate(){
-  const p=getCurrentProject(); if(!p||!contractFormState)return;
-  return window.KarhaContractPickers?.openEmployerPicker?.(p.id,contractFormState,()=>{contractFormDirty=true;renderContractForm();},()=>{
-    if(typeof openContactForm==='function'){closeSearchTemplate(false);openContactForm();}
-    else showToast('افزودن مخاطب در دسترس نیست');
-  });
-}
-
-
-/* ========== تمپلیت فرم (Form Template) — ارجح برای همه فرم‌ها ========== */
-function ftCreateRoot(parent){
-  const root=document.createElement('div');
-  root.className='form-template';
-  parent.appendChild(root);
-  return root;
-}
-/** ردیف متنی — برچسب کم‌رنگ بالا + ورودی */
-function ftTextRow(root, label, value, onChange, opts={}){
-  const row=document.createElement('div');
-  row.className='ft-row ft-stack';
-  const lab=document.createElement('div');
-  lab.className='ft-label';
-  lab.textContent=label;
-  const input=document.createElement('input');
-  input.type=opts.inputType||'text';
-  input.className='ft-input';
-  input.value=String(value??'');
-  input.placeholder=opts.placeholder||label;
-  if(opts.readonly){ input.readOnly=true; }
-  input.oninput=()=>{ if(onChange) onChange(input.value); if(opts.dirty!==false) contractFormDirty=true; };
-  row.append(lab, input);
-  root.appendChild(row);
-  return row;
-}
-/** ردیف انتخابی — برچسب راست + مقدار/placeholder چپ؛ کل ردیف قابل کلیک */
-function ftSelectRow(root, label, displayValue, onOpen, opts={}){
-  const row=document.createElement('div');
-  row.className='ft-row ft-tap';
-  const lab=document.createElement('div');
-  lab.className='ft-label';
-  lab.textContent=label + (opts.hideColon?'':':');
-  const val=document.createElement('div');
-  val.className='ft-value'+(displayValue?'':' ft-placeholder');
-  val.textContent=displayValue || (opts.placeholder||'انتخاب');
-  row.append(lab, val);
-  row.onclick=(e)=>{ e.preventDefault(); if(onOpen) onOpen(); };
-  root.appendChild(row);
-  return row;
-}
-/** ردیف تاریخ — بازکننده تقویم مشترک */
-function ftDateRow(root, label, value, onChange, opts={}){
-  const display=value?formatJalaliDisplay(value):(opts.placeholder||'انتخاب تاریخ');
-  return ftSelectRow(root, label, value?display:'', ()=>{
-    openJalaliPicker(value||todayJalaliStr(), v=>{
-      if(onChange) onChange(v);
-      if(opts.dirty!==false) contractFormDirty=true;
-      renderContractForm();
-    }, {maxToday:!!opts.maxToday});
-  }, {placeholder:opts.placeholder||'انتخاب تاریخ'});
-}
-/** ردیف عددی — نامبرپد مشترک */
-function ftNumberRow(root, label, value, onChange, opts={}){
-  let display='';
-  if(value!==''&&value!=null&&String(value).length){
-    const n=toEnglishDigits(String(value)).replace(/[^\d.]/g,'');
-    display=(opts.prefix||'')+ (opts.group!==false?formatCost(n):toPersianDigits(n)) +(opts.suffix?(' '+opts.suffix):'');
-  }
-  return ftSelectRow(root, label, display, ()=>{
-    openNumpadGeneric(value||'', raw=>{
-      if(onChange) onChange(raw);
-      if(opts.dirty!==false) contractFormDirty=true;
-      renderContractForm();
-    }, {suffix:opts.suffix||'', maxLen:opts.maxLen||16, group:opts.group!==false, prefix:opts.prefix||''});
-  }, {placeholder:opts.placeholder||'وارد کنید'});
-}
-function ftNoteRow(root, text){
-  const n=document.createElement('div');
-  n.className='ft-note';
-  n.textContent=text;
-  root.appendChild(n);
-  return n;
-}
-function ftCalcRow(root, text){
-  const n=document.createElement('div');
-  n.className='ft-calc';
-  n.textContent=text;
-  root.appendChild(n);
-  return n;
-}
-
-/** باز کردن تمپلیت جستجو برای آیتم پروژه */
-function openProjectItemSearchTemplate(){
-  const p=getCurrentProject(); if(!p||!contractFormState)return;
-  return window.KarhaContractPickers?.openProjectItemPicker?.(p.id,contractFormState,()=>{contractFormDirty=true;renderContractForm();});
-}
-/** باز کردن تمپلیت جستجو برای فعالیت پیمانکار */
-function openActivitySearchTemplate(){
-  const p=getCurrentProject(); if(!p||!contractFormState)return;
-  return window.KarhaContractPickers?.openActivityPicker?.(p.id,contractFormState,()=>{contractFormDirty=true;renderContractForm();});
-}
-/** انتخاب از لیست ثابت با تمپلیت جستجو */
-function openStaticChoiceSearchTemplate(title,listTitle,options,currentValue,onPick){
-  return window.KarhaContractPickers?.openStaticChoicePicker?.(title,listTitle,options,currentValue,onPick);
-}
-
-
-function renderContractForm(...args){ return window.KarhaRealContractForm?.render?.(...args); }
-
-
-function applyContractItem6(){
-  // تمپلیت فرم: همه فیلدها تک‌ستونه هستند؛ دیگر تاریخ‌ها را کنار هم نمی‌چینیم.
-  return;
-}
-
-function saveRealContract(silent=false){
-  const p=getCurrentProject();
-  if(!p)return false;
-  return window.KarhaRealContractForm?.save?.(p.id,silent) || false;
-}
 
 function openContractStatusPage(){
   closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractStatus'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('contractStatusPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contractStatus'); renderContractStatusPage();
@@ -7423,13 +6945,6 @@ if(routedProjectId && routedModuleId==='contracts'){
   const add=document.getElementById('contractTemplateAddBtn'); if(add) add.onclick=()=>openContractTemplateForm(null);
   const back=document.getElementById('closeContractTemplateFormPage'); if(back) back.onclick=()=>requestCloseContractTemplateForm(false);
 })();
-
-// legacy script contract-dropdown-outside-close
-document.addEventListener('click',function(e){
-  const t=e.target;
-  if(t.closest('.contract-inline-choice')||t.closest('.contract-contractor-picker')||t.closest('.contract-activity-picker')||t.closest('.contract-project-item-picker')) return;
-  if(typeof closeAllContractDropdowns==='function') closeAllContractDropdowns(null);
-},true);
 
 // Modular architecture bridge: keeps the remaining legacy runtime project-scoped
 // while individual modules are migrated out of this file.

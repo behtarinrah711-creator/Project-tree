@@ -27,7 +27,7 @@ export function renumberAndMark(state,kind){
   }
 }
 
-export function attachPointerDrag({handle,list,id,kind,state,onRender}){
+export function attachPointerDrag({handle,list,id,kind,state,onDirty,onRender}){
   if(!handle||!Array.isArray(list))return false;
   const wrapper=handle.closest('[data-contract-drag-id]')||handle.closest('.real-contract-item')||handle.parentElement;
   const container=wrapper?.parentElement;
@@ -58,7 +58,8 @@ export function attachPointerDrag({handle,list,id,kind,state,onRender}){
       const targetId=drag.target.dataset.contractDragId;
       if(moveItem(list,id,targetId,drag.position)){
         renumberAndMark(state,kind);
-        legacy('persist');
+        onDirty?.();
+        if(!onDirty) legacy('persist');
         onRender?.();
       }
     }
