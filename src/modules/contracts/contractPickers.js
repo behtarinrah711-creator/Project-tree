@@ -16,15 +16,16 @@ function findProjectItems(p){
   const roots=Array.isArray(p?.tasks)?p.tasks:[];
   const walk=(items,path=[],rootId='')=>{
     (items||[]).forEach(x=>{
-      const id=x.id; const next=[...path,x.title||x.name||''].filter(Boolean);
+      const id=x.id; const next=[...path,x.title||x.name||x.text||''].filter(Boolean);
       out.push({id,path:next.join(' / '),rootId:rootId||id,raw:x});
-      walk(x.children,next,rootId||id);
+      walk(x.subtasks||x.children,next,rootId||id);
     });
   };
   walk(roots);
   return out;
 }
 function openSearch(opts){
+  if(typeof window?.KarhaSearchTemplate?.open==='function') return window.KarhaSearchTemplate.open(opts);
   if(typeof window?.openSearchTemplate==='function') return window.openSearchTemplate(opts);
   return false;
 }
@@ -60,7 +61,7 @@ export function selectActivity(projectId,state,item){
 export function selectProjectItem(projectId,state,item){
   const p=getProject(projectId);
   if(!p||!state||!item)return false;
-  const raw=item._raw||item;
+  const raw=item?._raw?._raw || item?._raw || item;
   state.projectItemId=raw.id;
   state.projectItemRootTaskId=raw.rootId||'';
   state.projectItemPath=item.name||raw.path||'';
@@ -115,7 +116,7 @@ export function openProjectItemPicker(projectId,state,onChange,onAddActivity){
   return openSearch({
     title:'انتخاب آیتم پروژه',listTitle:'آیتم‌های پروژه',selectedTitle:'آیتم‌های منتخب',
     contextKey:'projectItem',
-    items:all.map(x=>({id:x.id,name:x.path,_raw:x})),
+    items:all.map(x=>({id:x.id,name:x.path,_raw:{...x.raw,rootId:x.rootId,path:x.path}})),
     showStar:true,showAdd:false,
     onSelect:item=>{
       if(!selectProjectItem(projectId,state,item))return;
