@@ -5,9 +5,9 @@ import { projectRepository } from '../data/projectRepository.js';
 import { projectModules } from '../modules/index.js';
 import { listProjects, getProject, getActiveProject, selectProject } from '../core/projectWorkspace.js';
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
+import { loadLegacyRuntime } from './legacyBootstrap.js';
 
 projectModules.forEach(moduleDefinition => moduleRegistry.register(moduleDefinition));
-appRouter.start();
 
 window.KarhaApp = Object.freeze({
   modules: moduleRegistry,
@@ -16,3 +16,7 @@ window.KarhaApp = Object.freeze({
   taskRuntime: taskRuntimeModule,
   projectWorkspace: Object.freeze({ listProjects, getProject, getActiveProject, selectProject }),
 });
+
+await loadLegacyRuntime();
+appRouter.start();
+window.dispatchEvent(new CustomEvent('karha:ready'));

@@ -5827,6 +5827,9 @@ window.addEventListener('popstate', ()=>{
 });
 
 /* ---------- init ---------- */
+// Install the complete, deliberate module/legacy boundary before the first
+// render. Dashboard and routed module mounts may call it during startup.
+installLegacyCompatibilityBoundary();
 loadData();
 window.KarhaApp?.taskRuntime?.configure({
   uid,
@@ -5861,6 +5864,7 @@ if(routedProjectId && routedModuleId==='contracts'){
 
 // Modular architecture bridge: keeps the remaining legacy runtime project-scoped
 // while individual modules are migrated out of this file.
+function installLegacyCompatibilityBoundary(){
 window.KarhaLegacy = Object.freeze({
   getViewMode(){ return data?.viewMode || 'simple'; },
   renderAll,
@@ -5966,3 +5970,4 @@ window.KarhaLegacy = Object.freeze({
     }
   })
 });
+}
