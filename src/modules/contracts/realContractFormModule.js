@@ -2,6 +2,7 @@ import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
 import * as realContractDomain from './realContractDomain.js';
 import { saveRealContract } from './realContractPersistence.js';
+import * as contractPickers from './contractPickers.js';
 
 let state=null;
 let dirty=false;
@@ -18,6 +19,19 @@ function legacy(name,...args){
   return undefined;
 }
 function helper(name,...args){ return legacy(name,...args); }
+function pickerChanged(){ dirty=true; renderContractForm(); }
+function openContractPicker(kind){
+ const p=activeProject(); if(!p||!state)return false;
+ const addContact=()=>{
+  if(typeof window?.KarhaSearchTemplate?.close==='function') window.KarhaSearchTemplate.close(false);
+  else helper("closeSearchTemplate",false);
+  if(typeof window?.openContactForm==='function') window.openContactForm(null,kind==='contractor'?{activityId:state.activityId}:undefined);
+  else helper("showToast",'افزودن مخاطب در دسترس نیست');
+ };
+ if(kind==='contractor') return contractPickers.openContractorPicker(p.id,state,pickerChanged,addContact);
+ if(kind==='employer') return contractPickers.openEmployerPicker(p.id,state,pickerChanged,addContact);
+ return contractPickers.openProjectItemPicker(p.id,state,pickerChanged);
+}
 function renderContractForm(){
  const body=document.getElementById('contractFormBody');if(!body||!state)return;
  const scrollHost=body.closest('.page-body')||body;
@@ -36,11 +50,11 @@ function renderContractForm(){
  if(!s.contractPlace) s.contractPlace=projectPlaceEarly;
  ftTextRow(ft,'محل انعقاد قرارداد',s.contractPlace||'',v=>s.contractPlace=v,{placeholder:'پیش‌فرض: محل پروژه'});
  // آیتم پروژه — تمپلیت جستجو
- ftSelectRow(ft,'آیتم پروژه',s.projectItemPath||'',()=>helper("openProjectItemSearchTemplate",),{placeholder:'انتخاب'});
+ ftSelectRow(ft,'آیتم پروژه',s.projectItemPath||'',()=>openContractPicker('projectItem'),{placeholder:'انتخاب'});
  // کارفرما — تمپلیت جستجو
- ftSelectRow(ft,'کارفرما',s.employerId?helper("getContactDisplayName",helper("findContact",s.employerId,p)):'',()=>helper("openEmployerSearchTemplate",),{placeholder:'انتخاب'});
+ ftSelectRow(ft,'کارفرما',s.employerId?helper("getContactDisplayName",helper("findContact",s.employerId,p)):'',()=>openContractPicker('employer'),{placeholder:'انتخاب'});
  // پیمانکار — تمپلیت جستجو
- ftSelectRow(ft,'پیمانکار',s.contractorId?helper("getContactDisplayName",helper("findContact",s.contractorId,p)):'',()=>helper("openContractorSearchTemplate",),{placeholder:'انتخاب'});
+ ftSelectRow(ft,'پیمانکار',s.contractorId?helper("getContactDisplayName",helper("findContact",s.contractorId,p)):'',()=>openContractPicker('contractor'),{placeholder:'انتخاب'});
  // فعالیت از Project Item تعیین می‌شود؛ انتخاب مستقل Activity در فرم قرارداد وجود ندارد.
  // قالب قرارداد (بر اساس Activity انتخاب‌شده)
 

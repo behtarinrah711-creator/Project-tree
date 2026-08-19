@@ -6179,6 +6179,7 @@ function formatJalaliDisplay(str){
   return toPersianDigits(p[2]) + ' ' + (JALALI_MONTHS[m-1]||'') + ' ' + toPersianDigits(p[0]);
 }
 
+let jalaliPickerHistoryPushed=false;
 function openJalaliPicker(current, onPick, opts={}){
   jalaliPick.onPick = onPick;
   jalaliPick.maxDate = opts.maxToday ? todayJalaliStr() : null;
@@ -6194,9 +6195,28 @@ function openJalaliPicker(current, onPick, opts={}){
   jalaliPick.y = y; jalaliPick.m = m; jalaliPick.d = d;
   document.getElementById('jalaliPop').classList.remove('hidden');
   renderJalaliPicker();
+  if(!jalaliPickerHistoryPushed){
+    try{ history.pushState({karhaJalaliPicker:true},'',location.href); jalaliPickerHistoryPushed=true; }catch(e){}
+  }
 }
-function closeJalaliPicker(){ document.getElementById('jalaliPop').classList.add('hidden'); }
+function closeJalaliPicker(fromPopState=false){
+  document.getElementById('jalaliPop').classList.add('hidden');
+  if(jalaliPickerHistoryPushed){
+    jalaliPickerHistoryPushed=false;
+    if(!fromPopState){
+      suppressWorkspaceBackOnce=true;
+      try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
+    }
+  }
+}
 document.getElementById('jalaliPop').onclick = (e)=>{ if(e.target.id==='jalaliPop') closeJalaliPicker(); };
+window.addEventListener('popstate',()=>{
+  const pop=document.getElementById('jalaliPop');
+  if(!jalaliPickerHistoryPushed || !pop || pop.classList.contains('hidden')) return;
+  jalaliPickerHistoryPushed=false;
+  suppressWorkspaceBackOnce=true;
+  closeJalaliPicker(true);
+});
 
 function renderJalaliPicker(){
   const box = document.getElementById('jalaliBox');

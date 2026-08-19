@@ -25,6 +25,7 @@ function findProjectItems(p){
   return out;
 }
 function openSearch(opts){
+  if(typeof window?.KarhaSearchTemplate?.open==='function') return window.KarhaSearchTemplate.open(opts);
   if(typeof window?.openSearchTemplate==='function') return window.openSearchTemplate(opts);
   return false;
 }
@@ -60,7 +61,7 @@ export function selectActivity(projectId,state,item){
 export function selectProjectItem(projectId,state,item){
   const p=getProject(projectId);
   if(!p||!state||!item)return false;
-  const raw=item._raw||item;
+  const raw=item?._raw?._raw || item?._raw || item;
   state.projectItemId=raw.id;
   state.projectItemRootTaskId=raw.rootId||'';
   state.projectItemPath=item.name||raw.path||'';
