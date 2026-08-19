@@ -102,6 +102,17 @@ export class ProjectItemRepository{
     return subtaskId ? this.updateSubtask(projectId,itemId,subtaskId,restoreItem) : this.update(projectId,itemId,restoreItem);
   }
 
+  remove(projectId,itemId,subtaskId=null){
+    if(!subtaskId){
+      const saved=this.projectRepository.updateProject(projectId,project=>({...project,tasks:(project.tasks||[]).filter(item=>String(item.id)!==String(itemId))}));
+      return saved ? true : null;
+    }
+    let removed=false;
+    const strip=items=>(items||[]).filter(item=>{ if(String(item.id)===String(subtaskId)){ removed=true; return false; } return true; }).map(item=>Array.isArray(item.subtasks)?{...item,subtasks:strip(item.subtasks)}:item);
+    const saved=this.update(projectId,itemId,item=>({...item,subtasks:strip(item.subtasks)}));
+    return saved && removed ? true : null;
+  }
+
   reorder(projectId,itemId,orderedIds,parentId=null){
     const reorderList=list=>{
       const rank=new Map(orderedIds.map((id,index)=>[String(id),index]));
