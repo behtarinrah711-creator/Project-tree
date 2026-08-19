@@ -2377,7 +2377,10 @@ function openContractForm(id=null){
   showOnlyWorkspacePage('contractFormPage'); setBottomNavActive('Reports');
   renderTabs(); updateWorkspaceContextBar();
   if(!contractFormHistoryPushed){pushWorkspaceHistory('contractForm');contractFormHistoryPushed=true;}
-  window.KarhaRealContractForm?.open?.(id,p.id);
+  if(window.KarhaRealContractForm?.open?.(id,p.id)){
+    // Keep legacy picker/numpad bridges on the modular form's live draft.
+    contractFormState=window.KarhaRealContractForm.getState();
+  }
 }
 function closeContractForm(fromPopState=false){setInternalFormMode(false);document.getElementById('contractFormPage')?.classList.add('hidden');contractFormHistoryPushed=false;contractFormState=null;contractEditingId=null;contractFormDirty=false;contractRealInlineAddState=null;workspaceSubpage='contracts';showOnlyWorkspacePage('contractsPage');setBottomNavActive('Reports');renderTabs();updateWorkspaceContextBar();renderContractsPage();}
 function requestCloseContractForm(fromPopState=false){closeContractForm(fromPopState);}
