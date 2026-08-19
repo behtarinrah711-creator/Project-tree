@@ -1,5 +1,6 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
+import { contractRepository } from '../../data/contractRepository.js';
 
 function projectId(explicit=null){
   return explicit || projectContext.getProjectId?.()
@@ -72,7 +73,8 @@ export const contractsModule={
     listWrap.className='contract-list';
     const head=document.createElement('div');
     head.className='contract-list-head';
-    head.innerHTML=`<span class="title">قراردادهای واقعی پیمانکاران</span><span class="mgmt-count">${new Intl.NumberFormat('fa-IR').format(list(p,'contracts').length)}</span>`;
+    const contracts=contractRepository.list(id).filter(c=>!c.trashed);
+    head.innerHTML=`<span class="title">قراردادهای واقعی پیمانکاران</span><span class="mgmt-count">${new Intl.NumberFormat('fa-IR').format(contracts.length)}</span>`;
     body.append(head);
 
     const search=searchInput('جستجوی قرارداد، پیمانکار یا فعالیت…',q=>{
@@ -80,7 +82,6 @@ export const contractsModule={
     });
     body.append(search.wrap,listWrap);
 
-    const contracts=list(p,'contracts');
     if(!contracts.length){
       const e=document.createElement('div'); e.className='contract-empty';
       e.innerHTML='هنوز قرارداد واقعی ثبت نشده است.<br>از علامت + یک قرارداد ایجاد کنید.';
@@ -109,7 +110,7 @@ export const contractsModule={
       del.onclick=e=>{
         e.stopPropagation();
         if(!confirm('آیا از حذف این قرارداد اطمینان دارید؟'))return;
-        if(softDelete(id,'contracts',c.id))this.render(id);
+        if(contractRepository.softDelete(id,c.id))this.render(id);
       };
       actions.append(edit,del); row.append(main,actions);
       main.onclick=()=>legacy('openContractForm',c.id);

@@ -1,5 +1,6 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
+import { contractRepository } from '../../data/contractRepository.js';
 
 function activeProjectId(projectId=null){
   return projectId || projectContext.getProjectId?.()
@@ -10,12 +11,12 @@ export function getProject(projectId=null){
   return id ? projectRepository.getActiveProject(id) : null;
 }
 export function getProjectContracts(projectId=null){
-  const p=getProject(projectId);
-  return Array.isArray(p?.contracts) ? p.contracts : [];
+  const id=activeProjectId(projectId);
+  return id ? contractRepository.list(id) : [];
 }
 export function findProjectContract(id, project=null){
   const p=project || getProject();
-  return getProjectContracts(p?.id).find(c=>String(c.id)===String(id)) || null;
+  return p?.id ? contractRepository.get(p.id,id) : null;
 }
 export function makeRealContractDraft(existing=null, today=''){
   if(existing){

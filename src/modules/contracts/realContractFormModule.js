@@ -1,13 +1,20 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
+import { localStorageAdapter } from '../../data/storageAdapter.js';
 import * as realContractDomain from './realContractDomain.js';
 import { saveRealContract } from './realContractPersistence.js';
 import * as contractPickers from './contractPickers.js';
+import * as contractTemplatesDomain from './contractTemplatesDomain.js';
+import * as paymentStagesModule from './paymentStagesModule.js';
+import * as contractItemInteractions from './contractItemInteractions.js';
 
 let state=null;
 let dirty=false;
 let editingId=null;
 let inlineAddState=null;
+let activeProjectId=null;
+let formHistoryPushed=false;
+const REAL_CONTRACT_DRAFT_KEY='karha_real_contract_form_draft_v1';
 
 function activeProject(projectId=null){
   const id=projectId || projectContext.getProjectId?.() || projectContext.getActiveProjectId?.();
@@ -32,11 +39,39 @@ function openContractPicker(kind){
  if(kind==='employer') return contractPickers.openEmployerPicker(p.id,state,pickerChanged,addContact);
  return contractPickers.openProjectItemPicker(p.id,state,pickerChanged);
 }
+function currentProject(){ return activeProject(activeProjectId); }
+function closeFormShell(fromPopState=false){
+  helper('closeRealContractFormShell',fromPopState);
+  formHistoryPushed=false;
+}
+function openFormShell(projectId){
+  helper('openRealContractFormShell',projectId);
+  if(!formHistoryPushed){
+    helper('pushWorkspaceHistory','contractForm');
+    formHistoryPushed=true;
+  }
+}
+function saveDraft(){
+  try{
+    localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY,JSON.stringify(state));
+    dirty=false;
+    helper('showToast','پیش‌نویس ذخیره شد');
+    state=null;
+    editingId=null;
+    inlineAddState=null;
+    activeProjectId=null;
+    closeFormShell(false);
+    return true;
+  }catch(e){
+    helper('showToast','پیش‌نویس ذخیره نشد');
+    return false;
+  }
+}
 function renderContractForm(){
  const body=document.getElementById('contractFormBody');if(!body||!state)return;
  const scrollHost=body.closest('.page-body')||body;
  const savedScroll=scrollHost.scrollTop||0;
- body.innerHTML='';const p=getCurrentProject();if(!p)return;const contacts=helper("getContacts",p).filter(c=>!c.trashed);const s=state;
+ body.innerHTML='';const p=currentProject();if(!p)return;const contacts=helper("getContacts",p).filter(c=>!c.trashed);const contactDisplayName=c=>c?[c.firstName,c.lastName].filter(Boolean).join(' ')||c.name||'مخاطب':'مخاطب';const findContact=(id)=>contacts.find(c=>String(c.id)===String(id))||null;const s=state;
  const activity=helper("findActivityTemplate",s.activityId,p);
  const actName=activity?.name||activity?.title||'';
  // تمپلیت فرم — همه فیلدها زیر هم، یک ردیف در هر سطر
@@ -52,18 +87,18 @@ function renderContractForm(){
  // آیتم پروژه — تمپلیت جستجو
  ftSelectRow(ft,'آیتم پروژه',s.projectItemPath||'',()=>openContractPicker('projectItem'),{placeholder:'انتخاب'});
  // کارفرما — تمپلیت جستجو
- ftSelectRow(ft,'کارفرما',s.employerId?helper("getContactDisplayName",helper("findContact",s.employerId,p)):'',()=>openContractPicker('employer'),{placeholder:'انتخاب'});
+ ftSelectRow(ft,'کارفرما',s.employerId?contactDisplayName(findContact(s.employerId)):'',()=>openContractPicker('employer'),{placeholder:'انتخاب'});
  // پیمانکار — تمپلیت جستجو
- ftSelectRow(ft,'پیمانکار',s.contractorId?helper("getContactDisplayName",helper("findContact",s.contractorId,p)):'',()=>openContractPicker('contractor'),{placeholder:'انتخاب'});
+ ftSelectRow(ft,'پیمانکار',s.contractorId?contactDisplayName(findContact(s.contractorId)):'',()=>openContractPicker('contractor'),{placeholder:'انتخاب'});
  // فعالیت از Project Item تعیین می‌شود؛ انتخاب مستقل Activity در فرم قرارداد وجود ندارد.
  // قالب قرارداد (بر اساس Activity انتخاب‌شده)
 
- const templates=helper("getContractTemplates",p).filter(t=>!t.trashed);
+ const templates=contractTemplatesDomain.getContractTemplates(p).filter(t=>!t.trashed);
  const filteredTemplates=templates.filter(t=>String(t.activityId)===String(s.activityId));
  if(s.activityId&&filteredTemplates.length>1){
    const tLabel=(filteredTemplates.find(t=>t.id===s.templateId)||{}).title||'';
    ftSelectRow(ft,'قالب قرارداد',tLabel,()=>{
-     helper("openStaticChoiceSearchTemplate",'انتخاب قالب قرارداد','قالب‌ها',
+     contractPickers.openStaticChoicePicker('انتخاب قالب قرارداد','قالب‌ها',
        filteredTemplates.map(t=>({value:t.id,label:t.title||'قالب قرارداد'})),
        s.templateId,
        (id)=>{
@@ -93,18 +128,22 @@ function renderContractForm(){
  // مبنای شروع و مدت نگهداری — تمپلیت جستجو
  const basisOpts=[{value:'پایان قرارداد',label:'تاریخ پایان قرارداد'},{value:'تحویل موقت',label:'تحویل موقت'},{value:'تحویل قطعی',label:'تحویل قطعی'},{value:'تسویه نهایی',label:'تسویه نهایی'}];
  ftSelectRow(ft,'مبنای شروع مدت نگهداری حسن انجام کار',s.retentionBasis||'',()=>{
-   helper("openStaticChoiceSearchTemplate",'مبنای شروع نگهداری','گزینه‌ها',basisOpts,s.retentionBasis,(v)=>{
+   contractPickers.openStaticChoicePicker('مبنای شروع نگهداری','گزینه‌ها',basisOpts,s.retentionBasis,(v)=>{
      s.retentionBasis=v; dirty=true; renderContractForm();
    });
  },{placeholder:'انتخاب'});
  const durOpts=['یک هفته','دو هفته','سه هفته','چهار هفته','یک ماه','یک ماه و نیم','دو ماه','دو ماه و نیم','سه ماه','چهار ماه','پنج ماه','شش ماه'].map(x=>({value:x,label:x}));
  ftSelectRow(ft,'مدت نگهداری حسن انجام کار',s.retentionDuration||'',()=>{
-   helper("openStaticChoiceSearchTemplate",'مدت نگهداری','مدت‌ها',durOpts,s.retentionDuration,(v)=>{
+   contractPickers.openStaticChoicePicker('مدت نگهداری','مدت‌ها',durOpts,s.retentionDuration,(v)=>{
      s.retentionDuration=v; dirty=true; renderContractForm();
    });
  },{placeholder:'انتخاب'});
 
- helper("renderPaymentStages",body,s);
+ paymentStagesModule.renderPaymentStages(body,s,{
+   onDirty:()=>{dirty=true;},
+   onNumpad:(value,onCommit,opts)=>helper('openNumpadGeneric',value,onCommit,opts),
+   onRender:()=>renderContractForm()
+ });
  const sec3=document.createElement('div');sec3.className='real-contract-section contract-clause-heading';const sec3Title=document.createElement('span');sec3Title.textContent='مواد قرارداد';sec3.append(sec3Title);body.appendChild(sec3);
  if(!s.items.length){const n=document.createElement('div');n.className='contract-form-note';n.textContent=s.activityId?'برای این فعالیت هنوز قالب قراردادی ثبت نشده است.':'پس از انتخاب فعالیت، مواد قرارداد از قالب آن خوانده می‌شوند.';body.appendChild(n);}else{renumberRealContractItems(s.items);const items=document.createElement('div');items.className='real-contract-items';(s.items||[]).forEach((it,i)=>items.appendChild(renderRealContractItem(it,s.items,i,false)));items.appendChild(renderContractRootInlineAddRow('real',items));body.appendChild(items);}
  const previewSec=document.createElement('div');previewSec.className='real-contract-section';previewSec.textContent='پیش‌نمایش متن قرارداد';body.appendChild(previewSec);
@@ -114,16 +153,13 @@ function renderContractForm(){
  const itemPath=s.projectItemPath||'';
  preview.innerHTML='<div class="doc-title">'+esc('قرارداد '+actName)+'</div><div class="doc-meta"><div>شماره قرارداد: <span class="doc-line">'+partyBlank(s.contractNo)+'</span></div><div>تاریخ تنظیم: <span class="doc-line">'+partyBlank(helper("formatJalaliDisplay",s.contractDate))+'</span></div><div>تاریخ شروع: <span class="doc-line">'+partyBlank(helper("formatJalaliDisplay",s.startDate))+'</span></div><div>تاریخ پایان: <span class="doc-line">'+partyBlank(helper("formatJalaliDisplay",s.endDate))+'</span></div><div>محل انعقاد: <span class="doc-line">'+partyBlank(s.contractPlace)+'</span></div></div><div class="doc-parties"><div class="party"><span class="doc-party-label">این قرارداد فی‌مابین کارفرما:</span> '+partyBlank(s.employerName)+'</div><div class="party"><span class="doc-party-label">و پیمانکار:</span> '+partyBlank(s.contractorName)+'</div><div class="party">موضوع فعالیت: '+partyBlank(actName)+'</div><div class="party">آیتم پروژه: '+partyBlank(itemPath)+'</div><div class="party">مبلغ کل قرارداد: '+(s.amount?helper("formatCost",s.amount):'................................')+' تومان</div><div class="party">حسن انجام کار: ٪'+helper("toPersianDigits",String(s.retentionPercent||'۰'))+'، معادل '+helper("formatCost",ra)+' تومان</div><div class="party">مبنای شروع نگهداری حسن انجام کار: '+partyBlank(s.retentionBasis)+'</div><div class="party">مدت نگهداری: '+partyBlank(s.retentionDuration)+'</div></div><div class="doc-clauses">'+(clauseHtml||'<div class="doc-clause">........................................................</div>')+'</div><div class="doc-payment"><b>شرایط پرداخت</b>'+(payHtml||'<div>........................................................</div>')+'</div><div class="doc-signatures"><div class="signature-box">امضا و اثر انگشت کارفرما<br>................................</div><div class="signature-box">امضا و اثر انگشت پیمانکار<br>................................</div></div>';body.appendChild(preview);
  const actions=document.getElementById('contractFormActions');actions.innerHTML='';const bar=document.createElement('div');bar.className='real-contract-savebar';
- const save=document.createElement('button');save.className='if-save';save.textContent='ذخیره';save.onclick=()=>helper("saveRealContract",false);
+ const save=document.createElement('button');save.className='if-save';save.textContent='ذخیره';save.onclick=()=>realContractFormModule.save(activeProjectId,false);
  const draft=document.createElement('button');draft.className='if-draft';draft.textContent='پیش‌نویس';draft.onclick=()=>{
    try{
-     localStorage.setItem(REAL_CONTRACT_DRAFT_KEY,JSON.stringify(state));
-     dirty=false;
-     helper("showToast",'پیش‌نویس ذخیره شد');
-     helper("closeContractForm",);
+     saveDraft();
    }catch(e){helper("showToast",'ذخیره پیش‌نویس انجام نشد');}
  };
- const cancel=document.createElement('button');cancel.className='if-cancel';cancel.textContent='انصراف';cancel.onclick=()=>helper("closeContractForm",);
+ const cancel=document.createElement('button');cancel.className='if-cancel';cancel.textContent='انصراف';cancel.onclick=()=>realContractFormModule.close();
  bar.append(save,draft,cancel);actions.appendChild(bar);
  // جلوگیری از پرش به ابتدای فرم بعد از انتخاب گزینه
  helper("requestAnimationFrame",()=>{ try{ scrollHost.scrollTop=savedScroll; }catch(e){} });
@@ -204,7 +240,10 @@ function renderRealContractItem(item,arr,index,isChild=false){
  card.dataset.realContractDragId=item.id;
  const row=document.createElement('div');row.className='real-contract-item-row contract-work-row';
  const grip=document.createElement('span');grip.className='real-contract-grip contract-work-grip';grip.innerHTML=helper("svgGrip",);grip.title='جابه‌جایی';
- grip.onpointerdown=e=>startContractItemDrag(e,item.id,arr,card.parentElement,card,'real');
+ grip.onpointerdown=e=>contractItemInteractions.attachPointerDrag({
+   handle:e.currentTarget,list:arr,id:item.id,kind:'real',
+   state:{items:state.items},onDirty:()=>{dirty=true;},onRender:()=>renderContractForm()
+ });
  row.appendChild(grip);
  const num=document.createElement('div');num.className='real-contract-num contract-work-number';num.textContent=helper("toPersianDigits",item.number||'');row.appendChild(num);
  const inp=document.createElement('textarea');inp.className='real-contract-text contract-work-input';inp.value=item.text||'';inp.placeholder=isChild?'متن بند را وارد کنید…':'متن ماده را وارد کنید…';inp.oninput=()=>{
@@ -366,6 +405,8 @@ export const realContractFormModule={
   open(id=null,projectId=null){
     const p=activeProject(projectId);
     if(!p)return false;
+    activeProjectId=p.id;
+    openFormShell(p.id);
     editingId=id||null;
     state=realContractDomain.makeRealContractDraft(
       id ? realContractDomain.findProjectContract(id,p) : null,
@@ -379,20 +420,34 @@ export const realContractFormModule={
   },
   render(){ return !!state && renderContractForm(); },
   save(projectId=null,silent=false){
-    const p=activeProject(projectId);
+    const p=activeProject(projectId||activeProjectId);
     if(!p || !state) return false;
     const result=saveRealContract(p.id,state,{
       showToast:(m)=>helper("showToast",m),
       todayJalaliStr:()=>helper("todayJalaliStr"),
       findActivityTemplate:(id,project)=>helper("findActivityTemplate",id,project),
-      syncContractPartyData:(draft,project)=>helper("syncContractPartyData",draft,project),
+      syncContractPartyData:(draft,project)=>realContractDomain.syncContractPartyData(draft,project),
       toEnglishDigits:(v)=>helper("toEnglishDigits",v)
     });
     if(!result.ok) return false;
     state=result.contract;
     dirty=false;
-    helper("closeContractForm");
+    this.close(false);
     if(!silent) helper("showToast",'قرارداد ذخیره شد');
+    return true;
+  },
+
+  requestClose(fromPopState=false){
+    return this.close(fromPopState);
+  },
+  saveDraft,
+  close(fromPopState=false){
+    state=null;
+    dirty=false;
+    editingId=null;
+    inlineAddState=null;
+    activeProjectId=null;
+    closeFormShell(fromPopState);
     return true;
   },
 
@@ -400,7 +455,7 @@ export const realContractFormModule={
   isDirty(){ return dirty; },
   setDirty(v=true){ dirty=!!v; },
   setState(v){ state=v; },
-  close(){ helper("closeContractForm"); }
+
 };
 export default realContractFormModule;
 

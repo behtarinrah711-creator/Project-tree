@@ -1,6 +1,6 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
-import { cloneTemplateIntoContract } from './realContractDomain.js';
+import { cloneTemplateIntoContract, syncContractPartyData } from './realContractDomain.js';
 
 function getProject(projectId=null){
   const id=projectId || projectContext.getProjectId?.() || projectContext.getActiveProjectId?.();
@@ -36,13 +36,13 @@ export function selectContractor(projectId,state,item){
   const aid=String(state.activityId||'');
   if(aid && !(contact?.activities||[]).some(x=>String(x)===aid)) return false;
   state.contractorId=item.id; state.contactId=item.id;
-  if(typeof window?.syncContractPartyData==='function') window.syncContractPartyData(state,p);
+  syncContractPartyData(state,p);
   return true;
 }
 export function selectEmployer(projectId,state,item){
   const p=getProject(projectId); if(!p||!state||!item)return false;
   state.employerId=item.id;
-  if(typeof window?.syncContractPartyData==='function') window.syncContractPartyData(state,p);
+  syncContractPartyData(state,p);
   return true;
 }
 export function selectActivity(projectId,state,item){
