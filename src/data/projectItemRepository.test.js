@@ -17,7 +17,7 @@ export function assertProjectItemRepositoryContract(){
   const repository=new ProjectItemRepository(new ProjectRepository(createMemoryStorage({
     'gtasks-clone-v2':JSON.stringify({projects:[{id:'p1',tasks:[]}]})
   })));
-  for(const method of ['list','get','save','update','softDelete']){
+  for(const method of ['list','get','save','update','softDelete','updateSubtask','addSubtask','softDeleteSubtask','restore','reorder']){
     if(typeof repository[method] !== 'function'){
       throw new Error(`ProjectItemRepository contract missing: ${method}`);
     }
@@ -58,6 +58,26 @@ export function assertProjectItemRepositoryBehavior(){
     throw new Error('ProjectItemRepository update behavior failed');
   }
 
+  const child={id:'s2',text:'Nested',done:false,customField:'kept',subtasks:[]};
+  if(repository.addSubtask('p1','t2','t2',child)!==child || repository.get('p1','t2')?.subtasks[0]?.customField!=='kept'){
+    throw new Error('ProjectItemRepository addSubtask behavior failed');
+  }
+  const nested=repository.updateSubtask('p1','t2','s2',item=>({...item,done:true}));
+  if(!nested?.done || !repository.get('p1','t2')?.subtasks[0]?.done){
+    throw new Error('ProjectItemRepository updateSubtask behavior failed');
+  }
+  repository.softDeleteSubtask('p1','t2','s2');
+  if(!repository.get('p1','t2')?.subtasks[0]?.trashed) throw new Error('ProjectItemRepository nested soft delete failed');
+  repository.restore('p1','t2','s2');
+  if(repository.get('p1','t2')?.subtasks[0]?.trashed || repository.get('p1','t2')?.subtasks[0]?.customField!=='kept'){
+    throw new Error('ProjectItemRepository nested restore failed');
+  }
+  repository.reorder('p1','t1',['s1'],'t1');
+  repository.reorder('p1','t1',['t2','t1']);
+  if(repository.list('p1')[0]?.id!=='t2' || repository.get('p1','t1')?.subtasks[0]?.id!=='s1'){
+    throw new Error('ProjectItemRepository reorder behavior failed');
+  }
+
   const deleted=repository.softDelete('p1','t2');
   if(!deleted?.trashed || !deleted.deletedAt || deleted.deletedType !== 'task' ||
      !repository.get('p1','t2')?.trashed){
@@ -66,7 +86,7 @@ export function assertProjectItemRepositoryBehavior(){
 
   const persisted=JSON.parse(storage.getItem('gtasks-clone-v2'));
   const project=persisted.projects[0];
-  const preserved=project.tasks[0];
+  const preserved=project.tasks.find(item=>item.id==='t1');
   if(JSON.stringify(preserved) !== JSON.stringify(original) ||
      project.contacts[0].id !== 'c1' || project.activityTemplates[0].id !== 'a1' ||
      project.contracts[0].id !== 'co1' || project.projectMetadata?.preserved !== true ||

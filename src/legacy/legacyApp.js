@@ -196,7 +196,7 @@ function showToast(msg){
 }
 
 function findProject(pid){ return data.projects.find(p=>p.id===pid); }
-function findTask(pid, tid){ const p = findProject(pid); return p ? p.tasks.find(t=>t.id===tid) : null; }
+function findTask(pid, tid){ return window.KarhaApp?.taskRuntime?.get(pid,tid) || null; }
 function findNestedItem(items, id){
   for(const item of (items||[])){
     if(item && item.id===id) return item;
@@ -205,7 +205,7 @@ function findNestedItem(items, id){
   }
   return null;
 }
-function findSub(pid, tid, sid){ const t = findTask(pid, tid); return t ? findNestedItem(t.subtasks, sid) : null; }
+function findSub(pid, tid, sid){ return window.KarhaApp?.taskRuntime?.findSubtask(pid,tid,sid) || null; }
 function itemChildren(item){
   if(!item) return [];
   if(!Array.isArray(item.subtasks)) item.subtasks=[];
@@ -306,29 +306,21 @@ function setDescendantsDone(item, done){
 }
 function toggleTaskDone(pid, tid){
   const t = findTask(pid, tid); if(!t) return;
-  t.done = !t.done;
-  t.completedAt = t.done ? Date.now() : null;
-  setDescendantsDone(t,t.done);
+  window.KarhaApp?.taskRuntime?.toggleCompleted(pid,tid);
   removeFromStarredOrder(pid, tid);
-  markDirty(pid); persist();
   if(data.activeTab === 'starred') refreshStarredPartial(); else renderAll();
 }
 function toggleSubDone(pid, tid, sid){
   const s = findSub(pid, tid, sid); if(!s) return;
-  s.done = !s.done; s.completedAt = s.done ? Date.now() : null;
-  setDescendantsDone(s,s.done);
-  if(!s.done){
-    const t = findTask(pid, tid);
-    if(t && t.done){ t.done = false; t.completedAt = null; removeFromStarredOrder(pid, tid); }
-  } else {
+  const changed=window.KarhaApp?.taskRuntime?.toggleCompleted(pid,tid,sid);
+  if(changed && !changed.done){ removeFromStarredOrder(pid, tid); } else {
     const p = findProject(pid); if(p) p.completedOpen = true;
     if(data.activeTab === 'starred') starredCompletedOpen = true;
   }
-  markDirty(pid); persist();
   if(data.activeTab === 'starred') refreshStarredPartial(); else renderAll();
 }
-function toggleTaskStar(pid, tid){ const t = findTask(pid,tid); t.starred = !t.starred; markDirty(pid); persist(); renderAll(); }
-function toggleSubStar(pid, tid, sid){ const s = findSub(pid,tid,sid); s.starred = !s.starred; markDirty(pid); persist(); renderAll(); }
+function toggleTaskStar(pid, tid){ window.KarhaApp?.taskRuntime?.toggleStarred(pid,tid); renderAll(); }
+function toggleSubStar(pid, tid, sid){ window.KarhaApp?.taskRuntime?.toggleStarred(pid,tid,sid); renderAll(); }
 
 function deleteTask(pid, tid){
   closeSheet();
@@ -338,18 +330,11 @@ function deleteSub(pid, tid, sid){
   softDelete('sub', pid, tid, sid, 'زیرمجموعه حذف شد');
 }
 function addTaskToProject(pid, text){
-  if(!text || !text.trim()) return;
-  const p = findProject(pid);
-  p.tasks.push(makeTask(text.trim()));
-  rememberProjectTasks(p);
-  markDirty(pid);
-  persist(); renderAll();
+  if(window.KarhaApp?.taskRuntime?.create(pid,text)) renderAll();
 }
 function addSubToTask(pid, tid, text, parentId=null){
-  const child=addChildToItem(pid,tid,parentId,text);
-  if(!child) return null;
-  rememberProjectTasks(findProject(pid));
-  markDirty(pid); persist(); renderAll();
+  const child=window.KarhaApp?.taskRuntime?.createSubtask(pid,tid,text,parentId);
+  if(child) renderAll();
   return child;
 }
 function addProject(name){
@@ -6561,6 +6546,16 @@ window.addEventListener('popstate', ()=>{
 
 /* ---------- init ---------- */
 loadData();
+window.KarhaApp?.taskRuntime?.configure({
+  uid,
+  afterMutation(projectId){
+    const project=findProject(projectId);
+    const stored=window.KarhaApp?.projectRepository?.find(projectId);
+    if(project && stored) project.tasks=Array.isArray(stored.tasks)?stored.tasks:[];
+    if(project){ rememberProjectTasks(project); markDirty(projectId); }
+    persist();
+  }
+});
 const routedProjectId = getProjectIdFromRoute();
 const routedModuleId = String(location.hash || '').match(/^#\/?projects?\/[^/?&#]+\/([^/?&#]+)/i)?.[1] || 'dashboard';
 if(routedProjectId && findProject(routedProjectId)){
