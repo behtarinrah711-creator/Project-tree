@@ -6603,6 +6603,15 @@ window.KarhaLegacy = Object.freeze({
   getActiveProject(){
     return typeof getCurrentProject === 'function' ? getCurrentProject() : null;
   },
+  projectItemRuntime: Object.freeze({
+    persistItems(projectId){
+      const project=findProject(projectId);
+      const stored=window.KarhaApp?.projectRepository?.find(projectId);
+      if(project && stored) project.tasks=Array.isArray(stored.tasks)?stored.tasks:[];
+      if(project) markDirty(project.id);
+      persist();
+    }
+  }),
   openContractsPage,
   closeContractsPage,
   openContractForm,
