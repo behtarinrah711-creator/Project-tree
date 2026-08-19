@@ -11,6 +11,7 @@ function getProject(projectId=null){
   return id ? projectRepository.getActiveProject(id) : null;
 }
 function legacy(name,...args){
+  if(typeof window?.KarhaLegacy?.[name]==='function') return window.KarhaLegacy[name](...args);
   if(typeof window?.[name]==='function') return window[name](...args);
   return undefined;
 }
@@ -38,7 +39,7 @@ export const dashboardModule={
     // Existing task UI remains the source of truth for task interaction;
     // this module owns the project dashboard renderer and project scoping.
 
-  if((window.data?.viewMode ?? 'default') === 'cost'){
+  if(legacy('getViewMode') === 'cost'){
     const summary = document.createElement('div');
     summary.className = 'cost-summary';
     summary.innerHTML = '<span>مجموع هزینه</span><span class="cost-sum-val"><span class="cost-unit">تومان</span> '+legacy("formatCost",legacy("projectCostSum",p))+'</span>';
@@ -90,7 +91,7 @@ export const dashboardModule={
             subtasks:(item.subtasks||[]).map(child=>String(child.id)===String(s.id)?{...child,trashed:true}:child),
           })));
           window.KarhaLegacy?.projectItemRuntime?.persistItems(p.id);
-          renderAll();
+          legacy('renderAll');
           legacy("showToast",'تکمیل‌شده‌ها حذف شدند');
         }, 'حذف همه');
       };
@@ -100,7 +101,7 @@ export const dashboardModule={
     chev.className = 'chev'+(p.completedOpen?'':' collapsed');
     chev.innerHTML = legacy("svgChevron",);
     header.appendChild(chev);
-    header.onclick = ()=>{ p.completedOpen = !p.completedOpen; legacy("markDirty",p.id); legacy("persist",); renderAll(); };
+    header.onclick = ()=>{ p.completedOpen = !p.completedOpen; legacy("markDirty",p.id); legacy("persist",); legacy('renderAll'); };
     content.appendChild(header);
 
     const list = document.createElement('div');
