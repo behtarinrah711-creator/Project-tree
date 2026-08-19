@@ -16,9 +16,9 @@ function findProjectItems(p){
   const roots=Array.isArray(p?.tasks)?p.tasks:[];
   const walk=(items,path=[],rootId='')=>{
     (items||[]).forEach(x=>{
-      const id=x.id; const next=[...path,x.title||x.name||''].filter(Boolean);
+      const id=x.id; const next=[...path,x.title||x.name||x.text||''].filter(Boolean);
       out.push({id,path:next.join(' / '),rootId:rootId||id,raw:x});
-      walk(x.children,next,rootId||id);
+      walk(x.subtasks||x.children,next,rootId||id);
     });
   };
   walk(roots);
@@ -115,7 +115,7 @@ export function openProjectItemPicker(projectId,state,onChange,onAddActivity){
   return openSearch({
     title:'انتخاب آیتم پروژه',listTitle:'آیتم‌های پروژه',selectedTitle:'آیتم‌های منتخب',
     contextKey:'projectItem',
-    items:all.map(x=>({id:x.id,name:x.path,_raw:x})),
+    items:all.map(x=>({id:x.id,name:x.path,_raw:{...x.raw,rootId:x.rootId,path:x.path}})),
     showStar:true,showAdd:false,
     onSelect:item=>{
       if(!selectProjectItem(projectId,state,item))return;

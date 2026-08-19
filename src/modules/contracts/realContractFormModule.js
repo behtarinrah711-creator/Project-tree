@@ -23,6 +23,8 @@ function renderContractForm(){
  const scrollHost=body.closest('.page-body')||body;
  const savedScroll=scrollHost.scrollTop||0;
  body.innerHTML='';const p=getCurrentProject();if(!p)return;const contacts=helper("getContacts",p).filter(c=>!c.trashed);const s=state;
+ const activity=helper("findActivityTemplate",s.activityId,p);
+ const actName=activity?.name||activity?.title||'';
  // تمپلیت فرم — همه فیلدها زیر هم، یک ردیف در هر سطر
  const ft=ftCreateRoot(body);
  // شماره قرارداد
