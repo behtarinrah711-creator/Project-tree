@@ -1,0 +1,88 @@
+name: Bump site version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - index.html
+      - sw.js
+      - manifest.json
+      - icon.svg
+      - src/**
+
+permissions:
+  contents: write
+
+concurrency:
+  group: site-version-main
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore: bump site version') }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fast-forward to current main
+        run: |
+          git fetch origin main
+          git checkout main
+          git merge --ff-only origin/main
+
+      - name: Increment the central site version
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const { execFileSync } = require('child_process');
+          const file = 'src/core/siteVersion.js';
+          const pattern = /^export const SITE_VERSION = 'v(\d+)';\s*$/;
+          const source = fs.readFileSync(file, 'utf8');
+          const match = source.match(pattern);
+
+          if (!match) {
+            throw new Error(`${file} does not contain the expected SITE_VERSION declaration`);
+          }
+
+          const current = Number(match[1]);
+          if (!Number.isSafeInteger(current)) {
+            throw new Error(`Invalid SITE_VERSION number: ${match[1]}`);
+          }
+
+          try {
+            const previousSource = execFileSync('git', ['show', `HEAD^:${file}`], { encoding: 'utf8' });
+            const previousMatch = previousSource.match(pattern);
+            if (previousMatch && current < Number(previousMatch[1])) {
+              throw new Error(`SITE_VERSION downgrade detected: v${previousMatch[1]} -> v${current}`);
+            }
+          } catch (error) {
+            if (error.message.includes('downgrade detected')) throw error;
+          }
+
+          fs.writeFileSync(file, `export const SITE_VERSION = 'v${current + 1}';\n`);
+          NODE
+
+      - name: Commit and push the increment
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/core/siteVersion.js
+          git diff --cached --check
+          git commit -m "chore: bump site version [skip ci]"
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+
+          echo "Failed to push the site version without rewriting main" >&2
+          exit 1
