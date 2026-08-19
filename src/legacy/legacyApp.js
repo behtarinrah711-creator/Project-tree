@@ -6051,7 +6051,7 @@ document.getElementById('shareConfirmBtn').onclick = ()=>{
 /* ---------- PWA service worker registration ---------- */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js?v=159',{updateViaCache:'none'}).then(reg=>{
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
       try{ reg.update(); }catch(e){}
       if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
     }).catch(()=>{});
