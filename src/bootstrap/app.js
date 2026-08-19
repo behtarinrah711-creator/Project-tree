@@ -6,6 +6,11 @@ import { projectModules } from '../modules/index.js';
 import { listProjects, getProject, getActiveProject, selectProject } from '../core/projectWorkspace.js';
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
+import { bindShellControls } from './shellControls.js';
+
+// Shell navigation and authentication must remain available even when the
+// project/task runtime has no active project or fails later during startup.
+bindShellControls();
 
 projectModules.forEach(moduleDefinition => moduleRegistry.register(moduleDefinition));
 
