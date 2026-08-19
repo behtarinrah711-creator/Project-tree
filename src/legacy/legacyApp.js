@@ -3117,14 +3117,12 @@ function openDrawer(){
   renderDrawerProjectList();
   const label = document.getElementById('drawerCollabLabel');
   if(label){
-    const p = data.activeTab !== 'starred' ? findProject(data.activeTab) : null;
+    const p = data && data.activeTab !== 'starred' ? findProject(data.activeTab) : null;
     label.textContent = p ? ('همکاری روی «' + p.name + '»') : 'همکاری روی این پروژه';
   }
 }
 function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('hidden'); }
-document.getElementById('hamburgerBtn').onclick = openDrawer;
-document.getElementById('avatarBtn').onclick = openDrawer;
-document.getElementById('drawerOverlay').onclick = (e)=>{ if(e.target.id==='drawerOverlay') closeDrawer(); };
+window.addEventListener('karha:drawer-open', openDrawer);
 window.addEventListener('karha:workspace-route-synced', event=>{
   renderDrawerProjectList();
   if(event.detail?.moduleId==='contracts' && event.detail?.projectId){
@@ -3132,18 +3130,6 @@ window.addEventListener('karha:workspace-route-synced', event=>{
   }
   updateWorkspaceContextBar();
 });
-
-document.getElementById('drawerSigninBtn').onclick = ()=>{
-  if(currentUser){
-    auth.signOut();
-    closeDrawer();
-  } else {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(()=>{
-      auth.signInWithRedirect(provider);
-    });
-  }
-};
 
 /* ---------- confirm dialog ---------- */
 let confirmCallback = null;
