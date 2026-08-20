@@ -1,0 +1,93 @@
+name: Auth diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/auth-console
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@latest
+          npx playwright install --with-deps chromium
+      - name: Run deployed login diagnostic
+        run: |
+          cat > /tmp/auth-diagnostic.mjs <<'EOF'
+          import { chromium } from 'playwright';
+
+          const target = 'https://behtarinrah711-creator.github.io/Project-tree/';
+          const logs = [];
+          const push = (kind, value) => {
+            const line = `[${kind}] ${value}`;
+            logs.push(line);
+            console.log(line);
+          };
+
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({
+            viewport: { width: 412, height: 915 },
+            userAgent: 'Mozilla/5.0 (Linux; Android 16; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0 Mobile Safari/537.36'
+          });
+          const page = await context.newPage();
+
+          page.on('console', msg => push(`console.${msg.type()}`, msg.text()));
+          page.on('pageerror', err => push('pageerror', err.stack || err.message));
+          page.on('requestfailed', req => push('requestfailed', `${req.method()} ${req.url()} :: ${req.failure()?.errorText || 'unknown'}`));
+          page.on('response', res => {
+            if (res.status() >= 400) push('http', `${res.status()} ${res.request().method()} ${res.url()}`);
+          });
+          page.on('popup', popup => {
+            push('popup', popup.url());
+            popup.on('console', msg => push(`popup.console.${msg.type()}`, msg.text()));
+            popup.on('pageerror', err => push('popup.pageerror', err.stack || err.message));
+            popup.on('requestfailed', req => push('popup.requestfailed', `${req.method()} ${req.url()} :: ${req.failure()?.errorText || 'unknown'}`));
+            popup.on('framenavigated', frame => {
+              if (frame === popup.mainFrame()) push('popup.url', frame.url());
+            });
+          });
+
+          push('start', target);
+          const nav = await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 45000 });
+          push('main.status', String(nav?.status() ?? 'none'));
+          push('main.url', page.url());
+
+          await page.waitForTimeout(2500);
+          push('firebase.apps', String(await page.evaluate(() => window.firebase?.apps?.length ?? -1)));
+          push('firebase.auth', String(await page.evaluate(() => {
+            try { return !!window.firebase?.auth?.(); } catch { return false; }
+          })));
+
+          const hamburger = page.locator('#hamburgerBtn');
+          if (await hamburger.count()) await hamburger.click();
+          await page.waitForTimeout(300);
+
+          const login = page.locator('#drawerSigninBtn');
+          push('login.visible', String(await login.isVisible().catch(() => false)));
+          await login.click({ timeout: 10000 });
+
+          await page.waitForTimeout(12000);
+          const toast = await page.locator('#toast').textContent().catch(() => null);
+          if (toast) push('toast', toast.trim());
+          push('final.url', page.url());
+
+          await browser.close();
+          await import('node:fs').then(fs => fs.writeFileSync('auth-diagnostic.log', logs.join('\n') + '\n'));
+          EOF
+          node /tmp/auth-diagnostic.mjs
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-diagnostic-log
+          path: auth-diagnostic.log
+          if-no-files-found: warn
