@@ -1,13 +1,14 @@
 import { projectContext } from './projectContext.js';
 import { moduleRegistry } from './moduleRegistry.js';
 
-function parseRoute(){
+export function parseRoute(){
   const hash = window.location.hash.replace(/^#\/?/, '');
   const [path] = hash.split('?');
   const parts = path.split('/').filter(Boolean);
   const projectIndex = parts.findIndex(part => part === 'project' || part === 'projects');
-  const projectId = projectIndex >= 0 ? parts[projectIndex + 1] : projectContext.getProjectId();
-  const moduleId = projectIndex >= 0 ? (parts[projectIndex + 2] || 'dashboard') : (parts[0] || 'dashboard');
+  const decode = value => { try{ return decodeURIComponent(value); }catch{ return value; } };
+  const projectId = projectIndex >= 0 ? decode(parts[projectIndex + 1]) : projectContext.getProjectId();
+  const moduleId = projectIndex >= 0 ? decode(parts[projectIndex + 2] || 'dashboard') : decode(parts[0] || 'dashboard');
   return { projectId: projectId || null, moduleId };
 }
 

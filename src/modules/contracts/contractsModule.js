@@ -2,7 +2,7 @@ import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
 import { contractRepository } from '../../data/contractRepository.js';
 
-function projectId(explicit=null){
+function resolveProjectId(explicit=null){
   return explicit || projectContext.getProjectId?.()
     || projectContext.getActiveProjectId?.() || null;
 }
@@ -53,13 +53,13 @@ function softDelete(projectId,key,id){
 export const contractsModule={
   id:'contracts', title:'قراردادها', route:'contracts',
 
-  mount({projectId}={}){
-    this.render(projectId);
-    return {projectId:projectId || projectIdOf(),moduleId:'contracts'};
+  mount({projectId: explicitProjectId}={}){
+    this.render(explicitProjectId);
+    return {projectId:explicitProjectId || resolveProjectId(),moduleId:'contracts'};
   },
 
-  render(projectId=null){
-    const id=projectId || projectIdOf();
+  render(explicitProjectId=null){
+    const id=resolveProjectId(explicitProjectId);
     const p=project(id);
     const body=document.getElementById('contractsPageBody');
     if(!body)return;
@@ -118,8 +118,8 @@ export const contractsModule={
     });
   },
 
-  renderTemplates(projectId=null){
-    const id=projectId || projectIdOf();
+  renderTemplates(explicitProjectId=null){
+    const id=resolveProjectId(explicitProjectId);
     const p=project(id);
     const body=document.getElementById('contractTemplatesPageBody');
     if(!body)return;
@@ -167,9 +167,5 @@ export const contractsModule={
     });
   }
 };
-
-function projectIdOf(){
-  return projectId();
-}
 
 export default contractsModule;
