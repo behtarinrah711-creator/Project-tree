@@ -2,7 +2,7 @@ import { appRouter } from '../core/router.js';
 import { moduleRegistry } from '../core/moduleRegistry.js';
 import { projectContext } from '../core/projectContext.js';
 import { projectRepository } from '../data/projectRepository.js';
-import { projectModules } from '../modules/index.js';
+import { loadProjectModules } from '../modules/loadProjectModules.js';
 import { listProjects, getProject, getActiveProject, selectProject } from '../core/projectWorkspace.js';
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
@@ -15,12 +15,14 @@ import { installProjectRecoveryRetention } from '../core/projectRecoveryRetentio
 export async function startApplication({
   windowRef = window,
   registry = moduleRegistry,
-  modules = projectModules,
+  modules = null,
+  loadModules = loadProjectModules,
   router = appRouter,
   loadLegacy = loadLegacyRuntime,
 } = {}){
-  modules.forEach(moduleDefinition => registry.register(moduleDefinition));
-
+  // Establish the stable application boundary before optional feature modules
+  // touch the network. Drawer/project/auth infrastructure must remain available
+  // even if one feature chunk temporarily returns 5xx from static hosting.
   const application = Object.freeze({
     modules: registry,
     router,
@@ -31,6 +33,9 @@ export async function startApplication({
     projectWorkspace: Object.freeze({ listProjects, getProject, getActiveProject, selectProject }),
   });
   windowRef.KarhaApp = application;
+
+  const moduleDefinitions = Array.isArray(modules) ? modules : await loadModules();
+  moduleDefinitions.forEach(moduleDefinition => registry.register(moduleDefinition));
 
   await loadLegacy();
   // Legacy still owns visibility of the internal page shells. Install one
