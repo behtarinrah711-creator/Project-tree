@@ -1,0 +1,252 @@
+name: One-shot project recovery fix
+
+on:
+  push:
+    branches:
+      - fix/cloud-project-source-race
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply project source synchronization fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          legacy = Path('src/legacy/legacyApp.js')
+          text = legacy.read_text()
+
+          old_decl = "let cloudUnsubOwned = null, cloudUnsubShared = null;"
+          new_decl = "let cloudUnsubOwned = null, cloudUnsubOwnedEmail = null, cloudUnsubShared = null;"
+          if old_decl not in text:
+              raise SystemExit('cloud unsubscribe declaration not found')
+          text = text.replace(old_decl, new_decl, 1)
+
+          old_owner = """    ownerUid: d.ownerUid,\n    ownerEmail: normalizeEmail(d.ownerEmail || ''),"""
+          new_owner = """    // Older project documents can predate ownerUid and only carry ownerEmail.\n    // Treat an email match as ownership in memory so task hydration and project\n    // selection keep working; no schema write/migration is performed here.\n    ownerUid: d.ownerUid || (currentUser && normalizeEmail(d.ownerEmail || '') === normalizeEmail(currentUser.email || '') ? currentUser.uid : d.ownerUid),\n    ownerEmail: normalizeEmail(d.ownerEmail || ''),"""
+          if old_owner not in text:
+              raise SystemExit('docToProject owner block not found')
+          text = text.replace(old_owner, new_owner, 1)
+
+          start = text.index('function startCloudListeners(){')
+          stop = text.index('function stopCloudListeners(){', start)
+          old_block = text[start:stop]
+          new_block = r'''function startCloudListeners(){
+  stopCloudListeners();
+  const myEmailLower = normalizeEmail(currentUser.email);
+  const sourceGate = window.KarhaApp?.createCloudProjectSourceGate?.(['owned','ownerEmail','shared']);
+  let ownedDocs = [], ownerEmailDocs = [], sharedDocs = [];
+
+  const combineOwned = ()=>{
+    if(sourceGate) return sourceGate.combine(['owned','ownerEmail']);
+    const byId = new Map();
+    [...ownedDocs, ...ownerEmailDocs].forEach(doc=>{ if(doc && doc.id) byId.set(String(doc.id),doc); });
+    return Array.from(byId.values());
+  };
+  const syncCloudProjectSources = ()=>{
+    if(sourceGate && !sourceGate.isReady()) return false;
+    const allOwned = sourceGate ? sourceGate.combine(['owned','ownerEmail']) : combineOwned();
+    const allShared = sourceGate ? sourceGate.get('shared') : sharedDocs;
+    mergeCloudSnapshots(allOwned, allShared);
+    hydrateAllCloudProjects(allOwned, allShared);
+    return true;
+  };
+  const updateSource = (name, docs)=>{
+    const value = Array.isArray(docs) ? docs : [];
+    if(name==='owned') ownedDocs=value;
+    else if(name==='ownerEmail') ownerEmailDocs=value;
+    else if(name==='shared') sharedDocs=value;
+    sourceGate?.update(name,value);
+    syncCloudProjectSources();
+  };
+  const failSource = (name, err)=>{
+    sourceGate?.fail(name);
+    if(!sourceGate) updateSource(name,[]);
+    else syncCloudProjectSources();
+    console.error(name + ' project listener', err);
+  };
+
+  // Do not rebuild data.projects from a partial first snapshot. Firestore can
+  // deliver the owned/shared listeners in either order; waiting until every
+  // source has produced its first result (or failed) prevents a transient empty
+  // source from erasing the real project list and active-project lifecycle.
+  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
+    .onSnapshot(snap => updateSource('owned',snap.docs), err => {
+      failSource('owned',err);
+      showToast('خطا در دریافت پروژه‌های خودتان');
+    });
+
+  // Backward-compatible ownership read. Some pre-migration documents only have
+  // ownerEmail. This is read-only recovery; document IDs/data shapes are kept.
+  cloudUnsubOwnedEmail = db.collection('projects').where('ownerEmail','==',myEmailLower)
+    .onSnapshot(snap => updateSource('ownerEmail',snap.docs), err => {
+      failSource('ownerEmail',err);
+      // ownerUid remains the primary source, so an old-schema fallback failure
+      // must not block the application.
+    });
+
+  // sharedWith باید دقیقاً lowercase باشد (همان‌طور که هنگام اشتراک ذخیره می‌شود)
+  cloudUnsubShared = db.collection('projects').where('sharedWith','array-contains', myEmailLower)
+    .onSnapshot(snap => {
+      updateSource('shared',snap.docs);
+      if(snap.docs.length && !window.__sharedToastShown){
+        window.__sharedToastShown = true;
+        showToast(snap.docs.length + ' پروژه اشتراکی دریافت شد');
+      }
+    }, err => {
+      failSource('shared',err);
+      const code = err && err.code ? String(err.code) : '';
+      if(code.indexOf('permission') !== -1 || code === 'permission-denied'){
+        showToast('سرور اجازهٔ دیدن پروژه‌های اشتراکی را نمی‌دهد — قوانین Firestore را به‌روز کنید');
+      } else {
+        showToast('خطا در دریافت پروژه‌های اشتراکی');
+      }
+    });
+
+  // یک‌بار واکشی فوری برای اطمینان؛ این نتیجه نیز از همان gate عبور می‌کند و
+  // هرگز به‌تنهایی data.projects را بازسازی نمی‌کند.
+  db.collection('projects').where('sharedWith','array-contains', myEmailLower).get()
+    .then(snap => { if(snap.docs.length) updateSource('shared',snap.docs); })
+    .catch(err => console.error('shared get', err));
+}
+'''
+          text = text[:start] + new_block + text[stop:]
+
+          old_stop = """function stopCloudListeners(){\n  if(cloudUnsubOwned) cloudUnsubOwned();\n  if(cloudUnsubShared) cloudUnsubShared();\n  cloudUnsubOwned = null; cloudUnsubShared = null;\n  Object.keys(cloudTaskUnsubs).forEach(stopCloudTaskListener);\n}"""
+          new_stop = """function stopCloudListeners(){\n  if(cloudUnsubOwned) cloudUnsubOwned();\n  if(cloudUnsubOwnedEmail) cloudUnsubOwnedEmail();\n  if(cloudUnsubShared) cloudUnsubShared();\n  cloudUnsubOwned = null; cloudUnsubOwnedEmail = null; cloudUnsubShared = null;\n  Object.keys(cloudTaskUnsubs).forEach(stopCloudTaskListener);\n}"""
+          if old_stop not in text:
+              raise SystemExit('stopCloudListeners block not found')
+          text = text.replace(old_stop,new_stop,1)
+          legacy.write_text(text)
+
+          startup = Path('src/bootstrap/applicationStartup.js')
+          s = startup.read_text()
+          import_anchor = "import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';\n"
+          import_line = "import { createCloudProjectSourceGate } from '../core/cloudProjectSourceGate.js';\n"
+          if import_line not in s:
+              if import_anchor not in s:
+                  raise SystemExit('startup import anchor not found')
+              s = s.replace(import_anchor, import_anchor + import_line, 1)
+          expose_anchor = "    reconcileDrawerProjectList,\n"
+          if "    createCloudProjectSourceGate,\n" not in s:
+              if expose_anchor not in s:
+                  raise SystemExit('startup exposure anchor not found')
+              s = s.replace(expose_anchor, expose_anchor + "    createCloudProjectSourceGate,\n", 1)
+          startup.write_text(s)
+
+          helper = Path('src/core/cloudProjectSourceGate.js')
+          helper.write_text(r'''function normalizeNames(names){
+  return Array.from(new Set((names || []).map(String).filter(Boolean)));
+}
+
+function dedupeDocuments(groups){
+  const byId = new Map();
+  groups.flat().forEach(doc=>{
+    if(doc && doc.id != null) byId.set(String(doc.id),doc);
+  });
+  return Array.from(byId.values());
+}
+
+/**
+ * Coordinates independent Firestore project sources during login. A merge is
+ * allowed only after every source has produced its first snapshot or failed,
+ * preventing an early empty listener from temporarily becoming authoritative.
+ */
+export function createCloudProjectSourceGate(sourceNames=['owned','ownerEmail','shared']){
+  const names=normalizeNames(sourceNames);
+  const state=new Map(names.map(name=>[name,{ready:false,docs:[]}])) ;
+
+  function ensure(name){
+    const key=String(name);
+    if(!state.has(key)) state.set(key,{ready:false,docs:[]});
+    return state.get(key);
+  }
+
+  return Object.freeze({
+    update(name,docs){
+      const entry=ensure(name);
+      entry.docs=Array.isArray(docs)?docs:[];
+      entry.ready=true;
+      return entry.docs;
+    },
+    fail(name){
+      const entry=ensure(name);
+      entry.ready=true;
+      return true;
+    },
+    isReady(){
+      return Array.from(state.values()).every(entry=>entry.ready);
+    },
+    get(name){
+      return ensure(name).docs.slice();
+    },
+    combine(selectedNames){
+      const selected=normalizeNames(selectedNames);
+      return dedupeDocuments(selected.map(name=>ensure(name).docs));
+    },
+    snapshot(){
+      return Object.fromEntries(Array.from(state.entries()).map(([name,entry])=>[
+        name,{ready:entry.ready,count:entry.docs.length}
+      ]));
+    },
+  });
+}
+''')
+
+          test = Path('src/core/cloudProjectSourceGate.test.js')
+          test.write_text(r'''import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createCloudProjectSourceGate } from './cloudProjectSourceGate.js';
+
+const doc=id=>({id});
+
+test('project source gate waits for all first snapshots before allowing merge',()=>{
+  const gate=createCloudProjectSourceGate(['owned','ownerEmail','shared']);
+  gate.update('shared',[]);
+  assert.equal(gate.isReady(),false);
+  gate.update('owned',[doc('A'),doc('B')]);
+  assert.equal(gate.isReady(),false);
+  gate.update('ownerEmail',[doc('B'),doc('C')]);
+  assert.equal(gate.isReady(),true);
+  assert.deepEqual(gate.combine(['owned','ownerEmail']).map(x=>x.id),['A','B','C']);
+  assert.deepEqual(gate.get('shared'),[]);
+});
+
+test('failed optional source becomes ready without erasing successful sources',()=>{
+  const gate=createCloudProjectSourceGate(['owned','ownerEmail','shared']);
+  gate.update('owned',[doc('A')]);
+  gate.fail('ownerEmail');
+  gate.update('shared',[doc('S')]);
+  assert.equal(gate.isReady(),true);
+  assert.deepEqual(gate.combine(['owned','ownerEmail']).map(x=>x.id),['A']);
+  assert.deepEqual(gate.get('shared').map(x=>x.id),['S']);
+});
+''')
+          PY
+      - name: Run regression suite
+        run: |
+          node --test
+          find . -type f -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
+          git diff --check
+          ! git grep -n -E '^(<<<<<<<|=======|>>>>>>>)'
+      - name: Commit patched files and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/one-shot-project-recovery-fix.yml
+          git add src/legacy/legacyApp.js src/bootstrap/applicationStartup.js src/core/cloudProjectSourceGate.js src/core/cloudProjectSourceGate.test.js
+          git commit -m 'Fix cloud project source synchronization after login'
+          git push origin HEAD:fix/cloud-project-source-race
