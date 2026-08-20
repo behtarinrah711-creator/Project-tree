@@ -2,9 +2,6 @@ const byId = (documentRef, id) => documentRef.getElementById(id);
 
 const AUTH_READY_TIMEOUT_MS = 5000;
 const AUTH_READY_POLL_MS = 50;
-const AUTH_POPUP_RETRY_MS = 250;
-const FALLBACK_AUTH_APP_NAME = 'karha-auth-webapp-fallback';
-const FALLBACK_AUTH_DOMAIN = 'tree-d92af.web.app';
 
 function sleep(windowRef, ms){
   return new Promise(resolve => (windowRef.setTimeout || setTimeout)(resolve, ms));
@@ -27,7 +24,7 @@ function authErrorMessage(error, windowRef){
     return `ورود گوگل برای ${domain} در Firebase مجاز نشده است`;
   }
   if(code.includes('popup-blocked')) return 'مرورگر پنجره ورود گوگل را مسدود کرده است';
-  if(code.includes('network-request-failed')) return 'ارتباط با سرویس ورود برقرار نشد؛ هر دو دامنه Firebase امتحان شدند';
+  if(code.includes('network-request-failed')) return 'ارتباط با سرویس ورود گوگل/Firebase برقرار نشد';
   if(code.includes('popup-closed-by-user')) return '';
   return error?.message ? `ورود انجام نشد: ${error.message}` : 'ورود با گوگل انجام نشد';
 }
@@ -44,103 +41,44 @@ function reportAuthError(error, {windowRef, documentRef}){
     windowRef.alert(message);
   }
   try{
-    windowRef.dispatchEvent(new windowRef.CustomEvent('karha:auth-error', {detail:{code:error?.code || '', message}}));
+    windowRef.dispatchEvent(new windowRef.CustomEvent('karha:auth-error', {
+      detail:{code:error?.code || '', message},
+    }));
   }catch{}
 }
 
-function getFallbackAuth(firebaseRef){
-  let fallbackApp=null;
-  try{
-    fallbackApp=firebaseRef.app(FALLBACK_AUTH_APP_NAME);
-  }catch{}
-  if(!fallbackApp){
-    const defaultOptions=firebaseRef.app().options || {};
-    fallbackApp=firebaseRef.initializeApp({...defaultOptions,authDomain:FALLBACK_AUTH_DOMAIN},FALLBACK_AUTH_APP_NAME);
-  }
-  return fallbackApp.auth();
-}
-
-async function handoffFallbackUser(firebaseRef, primaryAuth, result){
-  if(result?.user && typeof primaryAuth.updateCurrentUser === 'function'){
-    await primaryAuth.updateCurrentUser(result.user);
-    return true;
-  }
-  const credential=result?.credential || firebaseRef.auth.GoogleAuthProvider.credentialFromResult?.(result);
-  if(credential && typeof primaryAuth.signInWithCredential === 'function'){
-    await primaryAuth.signInWithCredential(credential);
-    return true;
-  }
-  const error=new Error('Google credential was not returned by fallback auth');
-  error.code='auth/fallback-credential-missing';
-  throw error;
-}
-
-async function alternateDomainSignIn(firebaseRef, primaryAuth, provider, context){
-  try{
-    const fallbackAuth=getFallbackAuth(firebaseRef);
-    const result=await fallbackAuth.signInWithPopup(provider);
-    await handoffFallbackUser(firebaseRef, primaryAuth, result);
-    try{ await fallbackAuth.signOut?.(); }catch{}
-    return true;
-  }catch(error){
-    reportAuthError(error, context);
-    return false;
-  }
-}
-
-async function redirectSignIn(auth, provider, context){
-  try{
-    await auth.signInWithRedirect(provider);
-    return true;
-  }catch(error){
-    reportAuthError(error, context);
-    return false;
-  }
-}
-
-async function startGoogleSignIn(firebaseRef, auth, provider, context){
+async function startGoogleSignIn(auth, provider, context){
   try{
     await auth.signInWithPopup(provider);
     return true;
-  }catch(firstError){
-    const firstCode = String(firstError?.code || '');
+  }catch(popupError){
+    const code = String(popupError?.code || '');
 
-    if(firstCode.includes('network-request-failed')){
-      await sleep(context.windowRef, AUTH_POPUP_RETRY_MS);
-      try{
-        await auth.signInWithPopup(provider);
-        return true;
-      }catch(retryError){
-        const retryCode = String(retryError?.code || '');
-        // A fresh-login failure on some Android networks is specific to the
-        // default *.firebaseapp.com OAuth helper. The same Firebase project also
-        // exposes the official helper on *.web.app; try that host before giving up.
-        if(retryCode.includes('network-request-failed')){
-          return alternateDomainSignIn(firebaseRef, auth, provider, context);
-        }
-        if(retryCode.includes('popup-blocked') || retryCode.includes('operation-not-supported-in-this-environment')){
-          return redirectSignIn(auth, provider, context);
-        }
-        reportAuthError(retryError, context);
-        return false;
-      }
+    // Configuration failures cannot be repaired by changing transport.
+    if(code.includes('unauthorized-domain') || code.includes('popup-closed-by-user')){
+      reportAuthError(popupError, context);
+      return false;
     }
 
-    if(firstCode.includes('popup-blocked') || firstCode.includes('operation-not-supported-in-this-environment')){
-      return redirectSignIn(auth, provider, context);
+    // Keep authentication on the SAME default Firebase app/auth instance.
+    // This mirrors the original stable flow: popup first, redirect second.
+    try{
+      await auth.signInWithRedirect(provider);
+      return true;
+    }catch(redirectError){
+      reportAuthError(redirectError, context);
+      return false;
     }
-
-    reportAuthError(firstError, context);
-    return false;
   }
 }
 
 /**
  * Bind the account drawer before the project/task runtime starts.
  *
- * These controls are deliberately project-agnostic: a missing active project,
- * empty localStorage, or a later renderer exception must not make authentication
- * unreachable.
+ * The shell may bind before the legacy runtime initializes Firebase, so the
+ * Login click waits briefly for that single default Firebase Auth instance.
+ * No secondary Firebase app, alternate authDomain, credential handoff, or
+ * retry loop is created here.
  */
 export function bindShellControls({ windowRef = window, documentRef = document } = {}){
   const drawer = byId(documentRef, 'drawerOverlay');
@@ -168,7 +106,10 @@ export function bindShellControls({ windowRef = window, documentRef = document }
     try{
       const firebaseRef = await waitForFirebaseAuth(windowRef);
       if(!firebaseRef){
-        reportAuthError({code:'auth/sdk-not-ready', message:'Firebase Auth آماده نشد'}, {windowRef, documentRef});
+        reportAuthError(
+          {code:'auth/sdk-not-ready', message:'Firebase Auth آماده نشد'},
+          {windowRef, documentRef},
+        );
         return;
       }
 
@@ -180,7 +121,7 @@ export function bindShellControls({ windowRef = window, documentRef = document }
       }
 
       const provider = new firebaseRef.auth.GoogleAuthProvider();
-      await startGoogleSignIn(firebaseRef, auth, provider, {windowRef, documentRef});
+      await startGoogleSignIn(auth, provider, {windowRef, documentRef});
     } finally {
       delete signin.dataset.authBusy;
     }
