@@ -5,9 +5,11 @@ import { loadLegacyRuntime } from './legacyBootstrap.js';
 
 function createDocumentHarness(){
   let runtimeScript = null;
+  const template = { innerHTML:'', content:{ firstElementChild:{nodeName:'DIV'} } };
   const documentRef = {
     querySelector(){ return runtimeScript; },
     createElement(tagName){
+      if(tagName === 'template') return template;
       assert.equal(tagName, 'script');
       const listeners = new Map();
       return {
@@ -24,13 +26,24 @@ function createDocumentHarness(){
       },
     },
   };
-  return { documentRef, getRuntimeScript: () => runtimeScript };
+  return { documentRef, template, getRuntimeScript: () => runtimeScript };
 }
+
+test('legacy loader installs required global HTML helper before classic runtime', async () => {
+  const harness = createDocumentHarness();
+  const windowRef = {};
+  await loadLegacyRuntime({ documentRef: harness.documentRef, windowRef, sourceUrl: '/legacyApp.js' });
+
+  assert.equal(typeof windowRef.elFromHtml, 'function');
+  assert.equal(windowRef.elFromHtml(' <div>x</div> '), harness.template.content.firstElementChild);
+  assert.equal(harness.template.innerHTML, '<div>x</div>');
+});
 
 test('legacy loader creates one ordered classic script', async () => {
   const harness = createDocumentHarness();
-  const first = await loadLegacyRuntime({ documentRef: harness.documentRef, sourceUrl: '/legacyApp.js' });
-  const second = await loadLegacyRuntime({ documentRef: harness.documentRef, sourceUrl: '/legacyApp.js' });
+  const windowRef = {};
+  const first = await loadLegacyRuntime({ documentRef: harness.documentRef, windowRef, sourceUrl: '/legacyApp.js' });
+  const second = await loadLegacyRuntime({ documentRef: harness.documentRef, windowRef, sourceUrl: '/legacyApp.js' });
 
   assert.equal(first, second);
   assert.equal(first.src, '/legacyApp.js');
