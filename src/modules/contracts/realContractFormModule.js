@@ -22,8 +22,8 @@ function activeProject(projectId = null) {
 }
 
 function legacy(name, ...args) {
-  if (typeof window?.[name] === 'function') return window[name](...args);
-  if (typeof window?.KarhaLegacy?.[name] === 'function') return window.KarhaLegacy[name](...args);
+  if (typeof window !== 'undefined' && typeof window[name] === 'function') return window[name](...args);
+  if (typeof window !== 'undefined' && typeof window.KarhaLegacy?.[name] === 'function') return window.KarhaLegacy[name](...args);
   return undefined;
 }
 
@@ -35,11 +35,6 @@ function currentProject() {
   return activeProject(activeProjectId);
 }
 
-function closeFormShell(fromPopState = false) {
-  helper('closeRealContractFormShell', fromPopState);
-  formHistoryPushed = false;
-}
-
 function openFormShell(projectId) {
   const opened = helper('openRealContractFormShell', projectId);
   if (opened === false) return false;
@@ -48,6 +43,11 @@ function openFormShell(projectId) {
     formHistoryPushed = true;
   }
   return true;
+}
+
+function closeFormShell(fromPopState = false) {
+  helper('closeRealContractFormShell', fromPopState);
+  formHistoryPushed = false;
 }
 
 function ftCreateRoot(parent) {
@@ -103,7 +103,7 @@ function ftSelectRow(root, label, displayValue, onOpen, opts = {}) {
 }
 
 function ftDateRow(root, label, value, onChange, opts = {}) {
-  const display = value ? helper('formatJalaliDisplay', value) : '';
+  const display = value ? (helper('formatJalaliDisplay', value) ?? String(value)) : '';
   return ftSelectRow(root, label, display, () => {
     helper('openJalaliPicker', value || helper('todayJalaliStr'), next => {
       onChange?.(next);
@@ -116,9 +116,12 @@ function ftDateRow(root, label, value, onChange, opts = {}) {
 function ftNumberRow(root, label, value, onChange, opts = {}) {
   let display = '';
   if (value !== '' && value != null && String(value).length) {
-    const raw = String(helper('toEnglishDigits', String(value)) ?? value).replace(/[^\d.]/g, '');
-    const shown = opts.group === false ? helper('toPersianDigits', raw) : helper('formatCost', raw);
-    display = (opts.prefix || '') + (shown ?? raw) + (opts.suffix ? ` ${opts.suffix}` : '');
+    const normalized = helper('toEnglishDigits', String(value)) ?? value;
+    const raw = String(normalized).replace(/[^\d.]/g, '');
+    const shown = opts.group === false
+      ? (helper('toPersianDigits', raw) ?? raw)
+      : (helper('formatCost', raw) ?? raw);
+    display = (opts.prefix || '') + shown + (opts.suffix ? ` ${opts.suffix}` : '');
   }
 
   return ftSelectRow(root, label, display, () => {
@@ -141,6 +144,11 @@ function ftCalcRow(root, text) {
   row.textContent = text;
   root.appendChild(row);
   return row;
+}
+
+function contactDisplayName(contact) {
+  if (!contact) return 'مخاطب';
+  return [contact.firstName, contact.lastName].filter(Boolean).join(' ') || contact.name || 'مخاطب';
 }
 
 function pickerChanged() {
@@ -167,28 +175,6 @@ function openContractPicker(kind) {
   if (kind === 'contractor') return contractPickers.openContractorPicker(project.id, state, pickerChanged, addContact);
   if (kind === 'employer') return contractPickers.openEmployerPicker(project.id, state, pickerChanged, addContact);
   return contractPickers.openProjectItemPicker(project.id, state, pickerChanged);
-}
-
-function saveDraft() {
-  try {
-    localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state));
-    dirty = false;
-    helper('showToast', 'پیش‌نویس ذخیره شد');
-    state = null;
-    editingId = null;
-    inlineAddState = null;
-    activeProjectId = null;
-    closeFormShell(false);
-    return true;
-  } catch {
-    helper('showToast', 'پیش‌نویس ذخیره نشد');
-    return false;
-  }
-}
-
-function contactDisplayName(contact) {
-  if (!contact) return 'مخاطب';
-  return [contact.firstName, contact.lastName].filter(Boolean).join(' ') || contact.name || 'مخاطب';
 }
 
 function makeInlineContractItem(text) {
@@ -268,7 +254,7 @@ function renderContractInlineAddRow(parentId = null) {
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'x-btn';
-  cancel.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  cancel.textContent = '×';
   cancel.onclick = () => {
     inlineAddState = null;
     renderContractForm();
@@ -323,10 +309,10 @@ function renderRealContractItem(item, list, index, isChild = false) {
   });
   row.appendChild(grip);
 
-  const num = document.createElement('div');
-  num.className = 'real-contract-num contract-work-number';
-  num.textContent = helper('toPersianDigits', item.number || '') ?? item.number ?? '';
-  row.appendChild(num);
+  const number = document.createElement('div');
+  number.className = 'real-contract-num contract-work-number';
+  number.textContent = helper('toPersianDigits', item.number || '') ?? item.number ?? '';
+  row.appendChild(number);
 
   const input = document.createElement('textarea');
   input.className = 'real-contract-text contract-work-input';
@@ -338,38 +324,37 @@ function renderRealContractItem(item, list, index, isChild = false) {
   };
   row.appendChild(input);
 
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'real-contract-btn danger contract-inline-delete';
-  del.textContent = 'حذف';
-  del.title = 'حذف ماده یا بند';
-  del.onclick = event => {
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'real-contract-btn danger contract-inline-delete';
+  remove.textContent = 'حذف';
+  remove.onclick = event => {
     event.preventDefault();
     event.stopPropagation();
     contractItemInteractions.removeItem(list, index, { items: state.items, dirty: true });
     dirty = true;
     renderContractForm();
   };
-  row.appendChild(del);
+  row.appendChild(remove);
   card.appendChild(row);
 
   if (!isChild) {
     if (inlineAddState?.parentId === item.id) {
       card.appendChild(renderContractInlineAddRow(item.id));
     } else {
-      const add = document.createElement('button');
-      add.type = 'button';
-      add.className = 'contract-add-child-row';
-      add.title = 'افزودن بند';
-      add.innerHTML = helper('svgPlus') || '+';
-      add.onclick = event => {
+      const addChild = document.createElement('button');
+      addChild.type = 'button';
+      addChild.className = 'contract-add-child-row';
+      addChild.title = 'افزودن بند';
+      addChild.innerHTML = helper('svgPlus') || '+';
+      addChild.onclick = event => {
         event.preventDefault();
         event.stopPropagation();
         inlineAddState = { parentId: item.id };
         renderContractForm();
         focusInlineAdd();
       };
-      card.appendChild(add);
+      card.appendChild(addChild);
     }
 
     const children = document.createElement('div');
@@ -415,18 +400,18 @@ function renderContractForm() {
   ftSelectRow(form, 'پیمانکار', state.contractorId ? contactDisplayName(findContact(state.contractorId)) : '', () => openContractPicker('contractor'), { placeholder: 'انتخاب' });
 
   const templates = contractTemplatesDomain.getContractTemplates(project).filter(template => !template.trashed);
-  const filteredTemplates = templates.filter(template => String(template.activityId) === String(state.activityId));
-  if (state.activityId && filteredTemplates.length > 1) {
-    const label = filteredTemplates.find(template => String(template.id) === String(state.templateId))?.title || '';
+  const matchingTemplates = templates.filter(template => String(template.activityId) === String(state.activityId));
+  if (state.activityId && matchingTemplates.length > 1) {
+    const label = matchingTemplates.find(template => String(template.id) === String(state.templateId))?.title || '';
     ftSelectRow(form, 'قالب قرارداد', label, () => {
       contractPickers.openStaticChoicePicker(
         'انتخاب قالب قرارداد',
         'قالب‌ها',
-        filteredTemplates.map(template => ({ value: template.id, label: template.title || 'قالب قرارداد' })),
+        matchingTemplates.map(template => ({ value: template.id, label: template.title || 'قالب قرارداد' })),
         state.templateId,
         id => {
           state.templateId = id;
-          const template = filteredTemplates.find(item => String(item.id) === String(id));
+          const template = matchingTemplates.find(item => String(item.id) === String(id));
           if (template) {
             state.items = realContractDomain.cloneTemplateIntoContract(template);
             state.paymentItems = JSON.parse(JSON.stringify(template.paymentItems || []));
@@ -436,27 +421,29 @@ function renderContractForm() {
         }
       );
     }, { placeholder: 'انتخاب' });
-  } else if (state.activityId && filteredTemplates.length === 1 && !state.templateId) {
-    state.templateId = filteredTemplates[0].id;
-    state.items = realContractDomain.cloneTemplateIntoContract(filteredTemplates[0]);
-    state.paymentItems = JSON.parse(JSON.stringify(filteredTemplates[0].paymentItems || []));
+  } else if (state.activityId && matchingTemplates.length === 1 && !state.templateId) {
+    state.templateId = matchingTemplates[0].id;
+    state.items = realContractDomain.cloneTemplateIntoContract(matchingTemplates[0]);
+    state.paymentItems = JSON.parse(JSON.stringify(matchingTemplates[0].paymentItems || []));
   }
 
   ftDateRow(form, 'تاریخ شروع قرارداد', state.startDate || '', value => { state.startDate = value; });
   ftDateRow(form, 'تاریخ پایان قرارداد', state.endDate || '', value => { state.endDate = value; });
   ftNumberRow(form, 'مبلغ کل قرارداد', state.amount, value => {
-    state.amount = String(helper('toEnglishDigits', String(value)) ?? value).replace(/[^\d]/g, '');
+    const normalized = helper('toEnglishDigits', String(value)) ?? value;
+    state.amount = String(normalized).replace(/[^\d]/g, '');
   }, { suffix: 'تومان', maxLen: 16, group: true, placeholder: 'وارد کنید' });
   ftNumberRow(form, 'درصد حسن انجام کار', state.retentionPercent, value => {
-    state.retentionPercent = String(helper('toEnglishDigits', String(value)) ?? value).replace(/[^\d]/g, '');
+    const normalized = helper('toEnglishDigits', String(value)) ?? value;
+    state.retentionPercent = String(normalized).replace(/[^\d]/g, '');
   }, { prefix: '٪', maxLen: 3, group: false, placeholder: 'وارد کنید' });
 
   const retentionAmount = (Number(state.amount) || 0) * (Number(state.retentionPercent) || 0) / 100;
   const netAmount = Math.max(0, (Number(state.amount) || 0) - retentionAmount);
   state.retentionAmount = String(Math.round(retentionAmount || 0));
   state.amountAfterRetention = String(Math.round(netAmount || 0));
-  ftCalcRow(form, 'مبلغ حسن انجام کار: ' + (retentionAmount ? helper('formatCost', retentionAmount) : '۰') + ' تومان');
-  ftCalcRow(form, 'مبلغ قرارداد پس از کسر حسن انجام کار: ' + (netAmount ? helper('formatCost', netAmount) : '۰') + ' تومان');
+  ftCalcRow(form, 'مبلغ حسن انجام کار: ' + (retentionAmount ? (helper('formatCost', retentionAmount) ?? retentionAmount) : '۰') + ' تومان');
+  ftCalcRow(form, 'مبلغ قرارداد پس از کسر حسن انجام کار: ' + (netAmount ? (helper('formatCost', netAmount) ?? netAmount) : '۰') + ' تومان');
 
   const basisOptions = [
     { value: 'پایان قرارداد', label: 'تاریخ پایان قرارداد' },
@@ -496,7 +483,9 @@ function renderContractForm() {
   if (!state.items.length) {
     const note = document.createElement('div');
     note.className = 'contract-form-note';
-    note.textContent = state.activityId ? 'برای این فعالیت هنوز قالب قراردادی ثبت نشده است.' : 'پس از انتخاب فعالیت، مواد قرارداد از قالب آن خوانده می‌شوند.';
+    note.textContent = state.activityId
+      ? 'برای این فعالیت هنوز قالب قراردادی ثبت نشده است.'
+      : 'پس از انتخاب فعالیت، مواد قرارداد از قالب آن خوانده می‌شوند.';
     body.appendChild(note);
   } else {
     realContractDomain.renumberRealContractItems(state.items);
@@ -514,20 +503,26 @@ function renderContractForm() {
 
   const escape = value => helper('escapeHtml', String(value || '')) ?? String(value || '');
   const blank = value => escape(value).trim() || '................................................';
+  const persian = value => helper('toPersianDigits', String(value ?? '')) ?? String(value ?? '');
+
   let clausesHtml = '';
   state.items.forEach((item, index) => {
-    clausesHtml += '<div class="doc-clause"><b>' + (helper('toPersianDigits', String(index + 1)) ?? String(index + 1)) + '.</b> ' + escape(item.text || '........................................................');
+    clausesHtml += '<div class="doc-clause"><b>' + persian(index + 1) + '.</b> ' + escape(item.text || '........................................................');
     (item.children || []).forEach((child, childIndex) => {
-      clausesHtml += '<div class="doc-child"><b>' + (helper('toPersianDigits', `${index + 1}-${childIndex + 1}`) ?? `${index + 1}-${childIndex + 1}`) + '.</b> ' + escape(child.text || '........................................................') + '</div>';
+      clausesHtml += '<div class="doc-child"><b>' + persian(`${index + 1}-${childIndex + 1}`) + '.</b> ' + escape(child.text || '........................................................') + '</div>';
     });
     clausesHtml += '</div>';
   });
 
   let paymentHtml = '';
   (state.paymentStages || []).forEach((stage, index) => {
-    paymentHtml += '<div><b>' + (helper('toPersianDigits', String(index + 1)) ?? String(index + 1)) + '.</b> پس از ' + (helper('toPersianDigits', String(stage.progress || '۰')) ?? stage.progress || '۰') + '٪ پیشرفت، ' + (helper('toPersianDigits', String(stage.paymentPercent || '۰')) ?? stage.paymentPercent || '۰') + '٪ از مبلغ قرارداد پرداخت می‌شود' + (stage.description ? ' — ' + escape(stage.description) : '') + '</div>';
+    const progress = stage.progress || '۰';
+    const paymentPercent = stage.paymentPercent || '۰';
+    paymentHtml += '<div><b>' + persian(index + 1) + '.</b> پس از ' + persian(progress) + '٪ پیشرفت، ' + persian(paymentPercent) + '٪ از مبلغ قرارداد پرداخت می‌شود' + (stage.description ? ' — ' + escape(stage.description) : '') + '</div>';
   });
 
+  const formattedAmount = state.amount ? (helper('formatCost', state.amount) ?? state.amount) : '................................';
+  const formattedRetention = helper('formatCost', retentionAmount) ?? retentionAmount;
   const preview = document.createElement('div');
   preview.className = 'contract-doc-preview';
   preview.innerHTML = '<div class="doc-title">' + escape('قرارداد ' + activityName) + '</div>' +
@@ -543,8 +538,8 @@ function renderContractForm() {
       '<div class="party"><span class="doc-party-label">و پیمانکار:</span> ' + blank(state.contractorName) + '</div>' +
       '<div class="party">موضوع فعالیت: ' + blank(activityName) + '</div>' +
       '<div class="party">آیتم پروژه: ' + blank(state.projectItemPath || '') + '</div>' +
-      '<div class="party">مبلغ کل قرارداد: ' + (state.amount ? helper('formatCost', state.amount) : '................................') + ' تومان</div>' +
-      '<div class="party">حسن انجام کار: ٪' + (helper('toPersianDigits', String(state.retentionPercent || '۰')) ?? state.retentionPercent || '۰') + '، معادل ' + (helper('formatCost', retentionAmount) ?? retentionAmount) + ' تومان</div>' +
+      '<div class="party">مبلغ کل قرارداد: ' + formattedAmount + ' تومان</div>' +
+      '<div class="party">حسن انجام کار: ٪' + persian(state.retentionPercent || '۰') + '، معادل ' + formattedRetention + ' تومان</div>' +
       '<div class="party">مبنای شروع نگهداری حسن انجام کار: ' + blank(state.retentionBasis) + '</div>' +
       '<div class="party">مدت نگهداری: ' + blank(state.retentionDuration) + '</div>' +
     '</div>' +
@@ -578,14 +573,36 @@ function renderContractForm() {
     actions.appendChild(bar);
   }
 
-  window.requestAnimationFrame?.(() => {
+  const raf = helper('requestAnimationFrame', () => {
     try { scrollHost.scrollTop = savedScroll; } catch {}
   });
+  if (raf === undefined && typeof window !== 'undefined') {
+    window.requestAnimationFrame?.(() => {
+      try { scrollHost.scrollTop = savedScroll; } catch {}
+    });
+  }
   setTimeout(() => {
     try { scrollHost.scrollTop = savedScroll; } catch {}
   }, 0);
 
   return true;
+}
+
+function saveDraft() {
+  try {
+    localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state));
+    dirty = false;
+    helper('showToast', 'پیش‌نویس ذخیره شد');
+    state = null;
+    editingId = null;
+    inlineAddState = null;
+    activeProjectId = null;
+    closeFormShell(false);
+    return true;
+  } catch {
+    helper('showToast', 'پیش‌نویس ذخیره نشد');
+    return false;
+  }
 }
 
 export const realContractFormModule = {
