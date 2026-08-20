@@ -4,6 +4,20 @@ function projectKey(project){
 
 const SELECT_HANDLER = Symbol('drawerProjectSelectHandler');
 
+export function resolveDrawerProjectState(projects, {
+  activeProjectId = null,
+  windowRef = typeof window !== 'undefined' ? window : null,
+} = {}){
+  const supplied = Array.isArray(projects) ? projects : [];
+  const live = windowRef?.KarhaLegacy?.getProjectsList?.();
+  const source = supplied.length ? supplied : (Array.isArray(live) ? live : supplied);
+
+  const contextProjectId = windowRef?.KarhaApp?.projectContext?.getProjectId?.() || null;
+  const selectedProjectId = contextProjectId || (activeProjectId && activeProjectId !== 'starred' ? activeProjectId : null);
+
+  return { projects: source, activeProjectId: selectedProjectId };
+}
+
 /**
  * Reconcile drawer rows by project id so an in-flight pointer interaction is
  * not detached merely because a cloud snapshot refreshed the project list.
@@ -16,13 +30,17 @@ export function reconcileDrawerProjectList(list, projects, {
 } = {}){
   if(!list || typeof createRow !== 'function' || typeof updateRow !== 'function') return [];
 
+  const resolved = resolveDrawerProjectState(projects, { activeProjectId });
+  const effectiveProjects = resolved.projects;
+  const effectiveActiveProjectId = resolved.activeProjectId;
+
   const existing = new Map();
   Array.from(list.children || []).forEach(row => {
     const id = row?.dataset?.projectId;
     if(id) existing.set(String(id), row);
   });
 
-  const rows = (projects || []).map(project => {
+  const rows = effectiveProjects.map(project => {
     const id = projectKey(project);
     let row = existing.get(id);
     if(!row){
@@ -34,7 +52,7 @@ export function reconcileDrawerProjectList(list, projects, {
     }
     row.dataset.projectId = id;
     row[SELECT_HANDLER] = onSelect;
-    updateRow(row, project, String(activeProjectId ?? '') === id);
+    updateRow(row, project, String(effectiveActiveProjectId ?? '') === id);
     return row;
   });
 
