@@ -528,14 +528,25 @@
     messagingSenderId: "401523332370",
     appId: "1:401523332370:web:3a524a2b86b967ca4d8fcb"
   };
+  console.info('[karha:auth] SDK loaded=', typeof firebase !== 'undefined');
   if (typeof firebase !== 'undefined' && !firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
+    console.info('[karha:auth] index.html initializeApp');
+  } else if (typeof firebase !== 'undefined') {
+    console.info('[karha:auth] index.html apps already=', firebase.apps.length);
   }
   // Complete any pending Google redirect flow as early as possible.
   if (typeof firebase !== 'undefined' && firebase.auth) {
-    firebase.auth().getRedirectResult().catch(function(err){
+    console.info('[karha:auth] getRedirectResult start');
+    firebase.auth().getRedirectResult().then(function(result){
+      if (result && result.user) {
+        console.info('[karha:auth] getRedirectResult user=', result.user.email || result.user.uid);
+      } else {
+        console.info('[karha:auth] getRedirectResult no user (normal for popup / first load)');
+      }
+    }).catch(function(err){
       if (err && err.code && err.code !== 'auth/no-auth-event') {
-        console.warn('Firebase redirect result:', err.code, err.message);
+        console.warn('[karha:auth] getRedirectResult error', err.code, err.message);
       }
     });
   }

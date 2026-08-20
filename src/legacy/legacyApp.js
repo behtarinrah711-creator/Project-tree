@@ -58,12 +58,26 @@ const firebaseConfig = {
 };
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
+  console.info('[karha:auth] legacyApp initializeApp (first app)');
+} else {
+  console.info('[karha:auth] legacyApp skipped initializeApp (apps=' + firebase.apps.length + ')');
 }
 const auth = firebase.auth();
 const db = firebase.firestore();
+console.info('[karha:auth] legacyApp auth+db ready, currentUser=', auth.currentUser && auth.currentUser.email);
 db.enablePersistence({ synchronizeTabs: true }).catch((err)=>{
   console.warn('Offline persistence not enabled:', err.code);
 });
+
+// Local HTML helper required by taskUI wiring and legacy export/management
+// renderers. During modular migration this lived only on KarhaLegacy; the bare
+// identifier at createUI(...) must resolve in this classic-script scope or the
+// remainder of legacyApp.js never runs (ReferenceError → half-dead runtime).
+function elFromHtml(html){
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '').trim();
+  return template.content.firstElementChild;
+}
 
 // legacy script anonymous
 const STORAGE_KEY = 'gtasks-clone-v2';
@@ -1273,12 +1287,28 @@ function updateAccountUI(){
 }
 
 auth.onAuthStateChanged(async (user)=>{
+  console.info('[karha:auth] onAuthStateChanged', user ? (user.email || user.uid) : null);
   currentUser = user;
   cloudMode = !!user;
-  updateAccountUI();
+  try{
+    updateAccountUI();
+    console.info('[karha:auth] updateAccountUI done, cloudMode=', cloudMode);
+  }catch(err){
+    console.error('[karha:auth] updateAccountUI failed', err);
+  }
   if(user){
-    await migrateGuestDataToCloud();
-    startCloudListeners();
+    try{
+      await migrateGuestDataToCloud();
+      console.info('[karha:auth] migrateGuestDataToCloud done');
+    }catch(err){
+      console.error('[karha:auth] migrateGuestDataToCloud failed', err);
+    }
+    try{
+      startCloudListeners();
+      console.info('[karha:auth] startCloudListeners done');
+    }catch(err){
+      console.error('[karha:auth] startCloudListeners failed', err);
+    }
   } else {
     stopCloudListeners();
     loadData();
