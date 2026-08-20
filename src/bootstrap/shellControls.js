@@ -11,7 +11,12 @@ async function waitForFirebaseAuth(windowRef, timeoutMs = AUTH_READY_TIMEOUT_MS)
   const started = Date.now();
   while(Date.now() - started < timeoutMs){
     const firebaseRef = windowRef.firebase;
-    if(firebaseRef?.auth && firebaseRef.auth.GoogleAuthProvider) return firebaseRef;
+    if(firebaseRef?.auth && firebaseRef.auth.GoogleAuthProvider){
+      try{
+        const auth = firebaseRef.auth();
+        if(auth) return { firebaseRef, auth };
+      }catch{}
+    }
     await sleep(windowRef, AUTH_READY_POLL_MS);
   }
   return null;
@@ -24,8 +29,9 @@ function authErrorMessage(error, windowRef){
     return `ورود گوگل برای ${domain} در Firebase مجاز نشده است`;
   }
   if(code.includes('popup-blocked')) return 'مرورگر پنجره ورود گوگل را مسدود کرده است';
-  if(code.includes('network-request-failed')) return 'ارتباط با سرویس ورود گوگل/Firebase برقرار نشد';
   if(code.includes('popup-closed-by-user')) return '';
+  if(code.includes('network-request-failed')) return 'ارتباط با سرویس ورود گوگل/Firebase برقرار نشد';
+  if(code.includes('operation-not-supported-in-this-environment')) return 'این مرورگر از روش ورود فعلی پشتیبانی نمی‌کند';
   return error?.message ? `ورود انجام نشد: ${error.message}` : 'ورود با گوگل انجام نشد';
 }
 
@@ -42,43 +48,44 @@ function reportAuthError(error, {windowRef, documentRef}){
   }
   try{
     windowRef.dispatchEvent(new windowRef.CustomEvent('karha:auth-error', {
-      detail:{code:error?.code || '', message},
+      detail: { code: error?.code || '', message }
     }));
   }catch{}
 }
 
-async function startGoogleSignIn(auth, provider, context){
+async function signInWithGoogle({firebaseRef, auth, windowRef, documentRef}){
+  const provider = new firebaseRef.auth.GoogleAuthProvider();
+  provider.setCustomParameters?.({ prompt: 'select_account' });
+
   try{
     await auth.signInWithPopup(provider);
     return true;
-  }catch(popupError){
-    const code = String(popupError?.code || '');
+  }catch(error){
+    const code = String(error?.code || '');
+    if(code.includes('popup-closed-by-user')) return false;
 
-    // Configuration failures cannot be repaired by changing transport.
-    if(code.includes('unauthorized-domain') || code.includes('popup-closed-by-user')){
-      reportAuthError(popupError, context);
-      return false;
+    if(
+      code.includes('popup-blocked') ||
+      code.includes('operation-not-supported-in-this-environment') ||
+      code.includes('network-request-failed')
+    ){
+      try{
+        await auth.signInWithRedirect(provider);
+        return true;
+      }catch(redirectError){
+        reportAuthError(redirectError, {windowRef, documentRef});
+        return false;
+      }
     }
 
-    // Keep authentication on the SAME default Firebase app/auth instance.
-    // This mirrors the original stable flow: popup first, redirect second.
-    try{
-      await auth.signInWithRedirect(provider);
-      return true;
-    }catch(redirectError){
-      reportAuthError(redirectError, context);
-      return false;
-    }
+    reportAuthError(error, {windowRef, documentRef});
+    return false;
   }
 }
 
 /**
- * Bind the account drawer before the project/task runtime starts.
- *
- * The shell may bind before the legacy runtime initializes Firebase, so the
- * Login click waits briefly for that single default Firebase Auth instance.
- * No secondary Firebase app, alternate authDomain, credential handoff, or
- * retry loop is created here.
+ * Bind the global shell independently of project/task startup.
+ * Authentication itself deliberately uses one Firebase app and one Auth instance.
  */
 export function bindShellControls({ windowRef = window, documentRef = document } = {}){
   const drawer = byId(documentRef, 'drawerOverlay');
@@ -100,31 +107,32 @@ export function bindShellControls({ windowRef = window, documentRef = document }
   drawer.addEventListener('click', event => {
     if(event.target === drawer) close();
   });
+
   signin.addEventListener('click', async () => {
     if(signin.dataset.authBusy === 'true') return;
     signin.dataset.authBusy = 'true';
     try{
-      const firebaseRef = await waitForFirebaseAuth(windowRef);
-      if(!firebaseRef){
+      const ready = await waitForFirebaseAuth(windowRef);
+      if(!ready){
         reportAuthError(
           {code:'auth/sdk-not-ready', message:'Firebase Auth آماده نشد'},
-          {windowRef, documentRef},
+          {windowRef, documentRef}
         );
         return;
       }
 
-      const auth = firebaseRef.auth();
+      const { firebaseRef, auth } = ready;
       if(auth.currentUser){
         await auth.signOut();
         close();
         return;
       }
 
-      const provider = new firebaseRef.auth.GoogleAuthProvider();
-      await startGoogleSignIn(auth, provider, {windowRef, documentRef});
+      await signInWithGoogle({firebaseRef, auth, windowRef, documentRef});
     } finally {
       delete signin.dataset.authBusy;
     }
   });
+
   return true;
 }
