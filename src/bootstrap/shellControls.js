@@ -46,7 +46,15 @@ export function bindShellControls({ windowRef = window, documentRef = document }
       return;
     }
     const provider = new firebaseRef.auth.GoogleAuthProvider();
-    // Prefer popup; fall back to redirect only when the popup is blocked or
+    const userAgent = String(windowRef.navigator?.userAgent || '');
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+    if(isMobile){
+      auth.signInWithRedirect(provider).catch(err => {
+        console.warn('Karha shell: signInWithRedirect failed', err?.code || err);
+      });
+      return;
+    }
+    // Prefer popup on desktop; fall back to redirect only when the popup is blocked or
     // the browser cannot open it. User-cancelled popup should not force redirect.
     auth.signInWithPopup(provider).catch(err => {
       const code = err && err.code;
