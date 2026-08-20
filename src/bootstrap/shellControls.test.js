@@ -16,56 +16,38 @@ function element(id){
   };
 }
 
-function harness({user=null,popupErrors=[],fallbackPopupErrors=[],withFirebase=true}={}){
+function harness({user=null,popupErrors=[],redirectErrors=[]}={}){
   const elements = Object.fromEntries(['drawerOverlay','hamburgerBtn','avatarBtn','drawerSigninBtn','toast'].map(id=>[id,element(id)]));
   const events=[];
   class CustomEvent { constructor(type,options={}){ this.type=type; this.detail=options.detail; } }
-  const errors=[...popupErrors];
-  const fallbackErrors=[...fallbackPopupErrors];
+  const popupQueue=[...popupErrors];
+  const redirectQueue=[...redirectErrors];
   const auth = {
-    currentUser:user, popupCalls:0, redirectCalls:0, signoutCalls:0, updateCurrentUserCalls:0,
+    currentUser:user, popupCalls:0, redirectCalls:0, signoutCalls:0,
     async signOut(){ this.signoutCalls++; },
-    async signInWithPopup(){ this.popupCalls++; const error=errors.shift(); if(error) throw error; return {user:{uid:'primary-user'}}; },
-    async signInWithRedirect(){ this.redirectCalls++; },
-    async updateCurrentUser(nextUser){ this.updateCurrentUserCalls++; this.currentUser=nextUser; },
-  };
-  const fallbackAuth = {
-    popupCalls:0, signoutCalls:0,
     async signInWithPopup(){
       this.popupCalls++;
-      const error=fallbackErrors.shift();
+      const error=popupQueue.shift();
       if(error) throw error;
-      return {user:{uid:'fallback-user'},credential:{providerId:'google.com'}};
+      return {user:{uid:'primary-user'}};
     },
-    async signOut(){ this.signoutCalls++; },
+    async signInWithRedirect(){
+      this.redirectCalls++;
+      const error=redirectQueue.shift();
+      if(error) throw error;
+    },
   };
-  const defaultApp={options:{apiKey:'test',projectId:'tree-d92af',authDomain:'tree-d92af.firebaseapp.com'},auth:()=>auth};
-  let fallbackApp=null;
   const authFactory=()=>auth;
   authFactory.GoogleAuthProvider=class {};
-  authFactory.GoogleAuthProvider.credentialFromResult=result=>result?.credential || null;
-  const firebaseRef={
-    auth:authFactory,
-    app(name){
-      if(!name) return defaultApp;
-      if(name==='karha-auth-webapp-fallback' && fallbackApp) return fallbackApp;
-      throw new Error('app does not exist');
-    },
-    initializeApp(options,name){
-      assert.equal(name,'karha-auth-webapp-fallback');
-      assert.equal(options.authDomain,'tree-d92af.web.app');
-      fallbackApp={options,auth:()=>fallbackAuth};
-      return fallbackApp;
-    },
-  };
+  const firebaseRef={auth:authFactory};
   const windowRef={
+    firebase:firebaseRef,
     CustomEvent,
     dispatchEvent:event=>events.push(event),
     setTimeout:fn=>{ fn(); return 1; },
     location:{hostname:'behtarinrah711-creator.github.io'},
   };
-  if(withFirebase) windowRef.firebase=firebaseRef;
-  return {elements,auth,fallbackAuth,events,windowRef,documentRef:{getElementById:id=>elements[id]}};
+  return {elements,auth,events,windowRef,documentRef:{getElementById:id=>elements[id]}};
 }
 
 test('empty-storage shell opens the drawer before project startup', async () => {
@@ -76,13 +58,14 @@ test('empty-storage shell opens the drawer before project startup', async () => 
   assert.deepEqual(h.events.map(event=>event.type),['karha:drawer-open']);
 });
 
-test('logged-out login starts Firebase popup and binding is idempotent', async () => {
+test('logged-out login starts the default Firebase popup and binding is idempotent', async () => {
   const h=harness();
   bindShellControls(h);
   bindShellControls(h);
   assert.equal(h.elements.drawerSigninBtn.listenerCount('click'),1);
   await h.elements.drawerSigninBtn.click();
   assert.equal(h.auth.popupCalls,1);
+  assert.equal(h.auth.redirectCalls,0);
 });
 
 test('logged-in account action signs out and closes the drawer', async () => {
@@ -94,7 +77,16 @@ test('logged-in account action signs out and closes the drawer', async () => {
   assert.equal(h.elements.drawerOverlay.classList.contains('hidden'),true);
 });
 
-test('unauthorized domain is surfaced instead of silently redirecting', async () => {
+test('popup network failure falls back once to redirect on the same auth instance', async () => {
+  const h=harness({popupErrors:[{code:'auth/network-request-failed',message:'network'}]});
+  bindShellControls(h);
+  await h.elements.drawerSigninBtn.click();
+  assert.equal(h.auth.popupCalls,1);
+  assert.equal(h.auth.redirectCalls,1);
+  assert.equal(h.events.some(event=>event.type==='karha:auth-error'),false);
+});
+
+test('unauthorized domain is surfaced without attempting another auth transport', async () => {
   const h=harness({popupErrors:[{code:'auth/unauthorized-domain',message:'unauthorized'}]});
   bindShellControls(h);
   await h.elements.drawerSigninBtn.click();
@@ -104,48 +96,15 @@ test('unauthorized domain is surfaced instead of silently redirecting', async ()
   assert.equal(h.events.at(-1).type,'karha:auth-error');
 });
 
-test('popup blocked falls back to redirect', async () => {
-  const h=harness({popupErrors:[{code:'auth/popup-blocked',message:'blocked'}]});
+test('redirect failure is surfaced after a popup failure', async () => {
+  const h=harness({
+    popupErrors:[{code:'auth/popup-blocked',message:'blocked'}],
+    redirectErrors:[{code:'auth/network-request-failed',message:'redirect-network'}],
+  });
   bindShellControls(h);
   await h.elements.drawerSigninBtn.click();
   assert.equal(h.auth.popupCalls,1);
   assert.equal(h.auth.redirectCalls,1);
-});
-
-test('network failure retries primary popup once and succeeds when retry works', async () => {
-  const h=harness({popupErrors:[{code:'auth/network-request-failed',message:'network'}]});
-  bindShellControls(h);
-  await h.elements.drawerSigninBtn.click();
-  assert.equal(h.auth.popupCalls,2);
-  assert.equal(h.fallbackAuth.popupCalls,0);
-});
-
-test('two primary network failures use web.app auth fallback and hand off the user', async () => {
-  const h=harness({popupErrors:[
-    {code:'auth/network-request-failed',message:'network-1'},
-    {code:'auth/network-request-failed',message:'network-2'},
-  ]});
-  bindShellControls(h);
-  await h.elements.drawerSigninBtn.click();
-  assert.equal(h.auth.popupCalls,2);
-  assert.equal(h.auth.redirectCalls,0);
-  assert.equal(h.fallbackAuth.popupCalls,1);
-  assert.equal(h.auth.updateCurrentUserCalls,1);
-  assert.equal(h.auth.currentUser.uid,'fallback-user');
-  assert.equal(h.fallbackAuth.signoutCalls,1);
-});
-
-test('alternate domain failure is surfaced without pretending login succeeded', async () => {
-  const h=harness({
-    popupErrors:[
-      {code:'auth/network-request-failed',message:'network-1'},
-      {code:'auth/network-request-failed',message:'network-2'},
-    ],
-    fallbackPopupErrors:[{code:'auth/network-request-failed',message:'fallback-network'}],
-  });
-  bindShellControls(h);
-  await h.elements.drawerSigninBtn.click();
-  assert.equal(h.fallbackAuth.popupCalls,1);
-  assert.equal(h.auth.updateCurrentUserCalls,0);
-  assert.match(h.elements.toast.textContent,/هر دو دامنه Firebase/);
+  assert.match(h.elements.toast.textContent,/Firebase/);
+  assert.equal(h.events.at(-1).type,'karha:auth-error');
 });
