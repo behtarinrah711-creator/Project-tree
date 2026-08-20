@@ -1,20 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-test('project routes decode the selected project and module identifiers', async () => {
-  globalThis.window={location:{hash:'#/projects/%D9%BE%D8%B1%D9%88%DA%98%D9%87%20%DB%B1/dashboard',search:''}};
-  const { parseRoute }=await import(`./router.js?decode=${Date.now()}`);
-  assert.deepEqual(parseRoute(),{projectId:'پروژه ۱',moduleId:'dashboard'});
-});
+const projects={
+  A:{tasks:['task-A']}, B:{tasks:['task-B']}, C:{tasks:['task-C']},
+};
 
-test('programmatic project navigation and browser history share one router lifecycle', async () => {
+async function createRouterHarness({initialHash,initialProjects,activeTab}){
   const listeners=new Map();
-  const stack=['#/projects/A/dashboard'];
+  const stack=[initialHash];
   let cursor=0;
   globalThis.CustomEvent=class { constructor(type,init={}){this.type=type;this.detail=init.detail;} };
   globalThis.document={readyState:'complete'};
   globalThis.window={
-    location:{hash:stack[0],search:''},
+    location:{hash:initialHash,search:''},
     addEventListener(type,listener){
       const values=listeners.get(type)||[]; values.push(listener); listeners.set(type,values);
     },
@@ -28,21 +26,21 @@ test('programmatic project navigation and browser history share one router lifec
     forward(){ cursor++; setLocation(stack[cursor]); window.dispatchEvent({type:'popstate'}); },
   };
 
-  const { AppRouter }=await import(`./router.js?lifecycle=${Date.now()}`);
+  const { AppRouter }=await import(`./router.js?harness=${Date.now()}-${Math.random()}`);
   const { moduleRegistry }=await import('./moduleRegistry.js');
   const { projectContext }=await import('./projectContext.js');
-  const projects={
-    A:{tasks:['task-A']}, B:{tasks:['task-B']}, C:{tasks:['task-C']},
-  };
-  const data={activeTab:'A'};
+  projectContext.setProjectId(null,{silent:true});
+  const data={projects:initialProjects,activeTab};
   const dashboardMounts=[];
   const taskReads=[];
+  const invalidDashboardMounts=[];
   const contractProjects=[];
   moduleRegistry.register({
     id:'dashboard',
     mount({projectId}){
       dashboardMounts.push(projectId);
-      taskReads.push(...projects[projectId].tasks);
+      if(!projects[projectId]) invalidDashboardMounts.push(projectId);
+      else taskReads.push(...projects[projectId].tasks);
       return {projectId,moduleId:'dashboard'};
     },
   });
@@ -51,33 +49,88 @@ test('programmatic project navigation and browser history share one router lifec
     mount({projectId}){ contractProjects.push(projectId); return {projectId,moduleId:'contracts'}; },
   });
   window.addEventListener('karha:workspace-route-synced',event=>{ data.activeTab=event.detail.projectId; });
-
   const router=new AppRouter();
   router.start();
   await new Promise(resolve=>setTimeout(resolve,0));
-  router.navigate('B','dashboard');
-  assert.deepEqual({
-    activeTab:data.activeTab,
+  return {router,projectContext,data,dashboardMounts,taskReads,invalidDashboardMounts,contractProjects};
+}
+
+function currentState(harness){
+  return {
+    activeTab:harness.data.activeTab,
     hash:window.location.hash,
-    context:projectContext.getProjectId(),
+    context:harness.projectContext.getProjectId(),
     route:window.KarhaRoute.projectId,
-    mounted:router.currentMounted.projectId,
-    dashboard:dashboardMounts.at(-1),
-    task:taskReads.at(-1),
-  },{
+    mounted:harness.router.currentMounted?.projectId ?? null,
+    dashboard:harness.dashboardMounts.at(-1) ?? null,
+    task:harness.taskReads.at(-1) ?? null,
+  };
+}
+
+test('project routes decode the selected project and module identifiers', async () => {
+  globalThis.window={location:{hash:'#/projects/%D9%BE%D8%B1%D9%88%DA%98%D9%87%20%DB%B1/dashboard',search:''}};
+  const { parseRoute }=await import(`./router.js?decode=${Date.now()}`);
+  assert.deepEqual(parseRoute(),{projectId:'پروژه ۱',moduleId:'dashboard'});
+});
+
+test('programmatic A to B to C navigation keeps router, tasks, history, and contracts synchronized', async () => {
+  const projectList=Object.keys(projects).map(id=>({id,...projects[id]}));
+  const harness=await createRouterHarness({
+    initialHash:'#/projects/A/dashboard',initialProjects:projectList,activeTab:'A',
+  });
+  assert.deepEqual(currentState(harness),{
+    activeTab:'A',hash:'#/projects/A/dashboard',context:'A',route:'A',mounted:'A',dashboard:'A',task:'task-A',
+  });
+
+  harness.router.navigate('B','dashboard');
+  assert.deepEqual(currentState(harness),{
+    activeTab:'B',hash:'#/projects/B/dashboard',context:'B',route:'B',mounted:'B',dashboard:'B',task:'task-B',
+  });
+  harness.router.navigate('C','dashboard');
+  assert.deepEqual(currentState(harness),{
+    activeTab:'C',hash:'#/projects/C/dashboard',context:'C',route:'C',mounted:'C',dashboard:'C',task:'task-C',
+  });
+
+  window.history.back();
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual([harness.data.activeTab,harness.projectContext.getProjectId(),window.KarhaRoute.projectId,harness.router.currentMounted.projectId],['B','B','B','B']);
+  window.history.forward();
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual([harness.data.activeTab,harness.projectContext.getProjectId(),window.KarhaRoute.projectId,harness.router.currentMounted.projectId,harness.taskReads.at(-1)],['C','C','C','C','task-C']);
+
+  harness.router.navigate('B','contracts');
+  assert.equal(harness.contractProjects.at(-1),'B');
+  assert.deepEqual(harness.invalidDashboardMounts,[]);
+});
+
+test('empty startup mounts restored cloud project B and preserves later navigation', async () => {
+  const harness=await createRouterHarness({initialHash:'',initialProjects:[],activeTab:null});
+  assert.deepEqual(harness.data.projects,[]);
+  assert.equal(harness.data.activeTab,null);
+  assert.equal(harness.projectContext.getProjectId(),null);
+  assert.equal(harness.router.currentMounted,null);
+
+  harness.data.projects=Object.keys(projects).map(id=>({id,...projects[id]}));
+  harness.data.activeTab='B';
+  harness.projectContext.synchronizeProjects(harness.data.projects,harness.data.activeTab);
+  harness.router.navigate(harness.data.activeTab,'dashboard',{replace:true});
+  assert.deepEqual(harness.data.projects.map(project=>project.id),['A','B','C']);
+  assert.deepEqual(currentState(harness),{
     activeTab:'B',hash:'#/projects/B/dashboard',context:'B',route:'B',mounted:'B',dashboard:'B',task:'task-B',
   });
 
-  router.navigate('C','dashboard');
-  assert.equal(taskReads.at(-1),'task-C');
-  assert.equal(router.currentMounted.projectId,'C');
+  harness.router.navigate('C','dashboard');
+  assert.deepEqual(currentState(harness),{
+    activeTab:'C',hash:'#/projects/C/dashboard',context:'C',route:'C',mounted:'C',dashboard:'C',task:'task-C',
+  });
   window.history.back();
   await new Promise(resolve=>setTimeout(resolve,0));
-  assert.deepEqual([data.activeTab,projectContext.getProjectId(),window.KarhaRoute.projectId,router.currentMounted.projectId],['B','B','B','B']);
+  assert.deepEqual([harness.data.activeTab,harness.projectContext.getProjectId(),window.KarhaRoute.projectId,harness.router.currentMounted.projectId,harness.taskReads.at(-1)],['B','B','B','B','task-B']);
   window.history.forward();
   await new Promise(resolve=>setTimeout(resolve,0));
-  assert.deepEqual([data.activeTab,projectContext.getProjectId(),window.KarhaRoute.projectId,router.currentMounted.projectId,taskReads.at(-1)],['C','C','C','C','task-C']);
+  assert.deepEqual([harness.data.activeTab,harness.projectContext.getProjectId(),window.KarhaRoute.projectId,harness.router.currentMounted.projectId,harness.taskReads.at(-1)],['C','C','C','C','task-C']);
 
-  router.navigate('B','contracts');
-  assert.equal(contractProjects.at(-1),'B');
+  harness.router.navigate('B','contracts');
+  assert.equal(harness.contractProjects.at(-1),'B');
+  assert.deepEqual(harness.invalidDashboardMounts,[]);
 });

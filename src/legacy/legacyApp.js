@@ -1103,6 +1103,14 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
     data.activeTab !== 'starred' ? data.activeTab : null
   );
   data.activeTab = synchronizedProjectId || 'starred';
+  // A cloud snapshot can establish the first valid project after Router.start
+  // already synchronized an empty route.  Context synchronization alone does
+  // not mount a module, so hand the restored project to the Router explicitly.
+  // This is the single initial-workspace render when the Projects surface is
+  // visible; do not follow it with the legacy renderer.
+  const cloudRouteMounted = mainSurface === 'projects' && synchronizedProjectId
+    ? window.KarhaApp?.router?.navigate(synchronizedProjectId, 'dashboard', {replace:true}) === true
+    : false;
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
   const wasAdding = false;
   const projectsPageVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
@@ -1126,7 +1134,7 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
       refreshCurrentFooterPage();
     }
   } else {
-    renderAll();
+    if(!cloudRouteMounted) renderAll();
     if(wasAdding) focusInlineAdd();
   }
 }
