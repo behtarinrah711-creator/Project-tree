@@ -20,9 +20,9 @@ function harness({user=null}={}){
   class CustomEvent { constructor(type){ this.type=type; } }
   const auth = {
     currentUser:user, popupCalls:0, redirectCalls:0, signoutCalls:0,
-    signOut(){ this.signoutCalls++; },
+    signOut(){ this.signoutCalls++; return Promise.resolve(); },
     signInWithPopup(){ this.popupCalls++; return Promise.resolve(); },
-    signInWithRedirect(){ this.redirectCalls++; },
+    signInWithRedirect(){ this.redirectCalls++; return Promise.resolve(); },
   };
   const authFactory=()=>auth;
   authFactory.GoogleAuthProvider=class {};
