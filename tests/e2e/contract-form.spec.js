@@ -24,7 +24,7 @@ async function bootContractHarness(page) {
     localStorage.setItem('gtasks-clone-v2', JSON.stringify(state));
   }, seededState);
 
-  await page.goto('/#/project/e2e-project', { waitUntil: 'domcontentloaded' });
+  await page.goto('/tests/e2e/fixtures/contract-harness.html', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#contractFormPage')).toBeAttached();
 
   await page.evaluate(async () => {
@@ -55,6 +55,7 @@ async function bootContractHarness(page) {
     window.showToast = () => {};
     window.openJalaliPicker = () => false;
     window.openNumpadGeneric = () => false;
+    window.requestAnimationFrame = callback => setTimeout(callback, 0);
 
     const module = await import('/src/modules/contracts/realContractFormModule.js');
     window.__e2eRealContractForm = module.realContractFormModule;
