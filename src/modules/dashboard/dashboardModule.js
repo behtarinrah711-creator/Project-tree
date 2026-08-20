@@ -8,7 +8,9 @@ function getProjectId(explicitProjectId=null){
 }
 function getProject(projectId=null){
   const id=getProjectId(projectId);
-  return id ? projectRepository.getActiveProject(id) : null;
+  if(!id) return null;
+  const liveProject=window?.KarhaLegacy?.getProject?.(id);
+  return liveProject || projectRepository.getActiveProject(id);
 }
 function legacy(name,...args){
   if(typeof window?.KarhaLegacy?.[name]==='function') return window.KarhaLegacy[name](...args);
@@ -46,7 +48,12 @@ export const dashboardModule={
     content.appendChild(summary);
   }
 
-  const visibleTasks = projectItemRepository.list(p.id).filter(t => !legacy("isPendingDeleted",'task', p.id, t.id) && !t.trashed);
+  // The legacy/cloud runtime owns the live project object.  Reading the
+  // repository again here can return the previous localStorage snapshot while
+  // a cloud hydration or debounced save is still in flight, which made an
+  // otherwise healthy project appear to have no tasks.
+  const projectTasks = Array.isArray(p.tasks) ? p.tasks : projectItemRepository.list(p.id);
+  const visibleTasks = projectTasks.filter(t => !legacy("isPendingDeleted",'task', p.id, t.id) && !t.trashed);
   const active = visibleTasks.filter(t=>!t.done);
   const completedTasks = visibleTasks.filter(t=>t.done).sort((a,b)=> (b.completedAt||0) - (a.completedAt||0));
   // فرزندان تکمیل‌شده زیر والد باز

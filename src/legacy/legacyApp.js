@@ -195,7 +195,13 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 1600);
 }
 
-function findProject(pid){ return data.projects.find(p=>p.id===pid); }
+// Route parameters are strings, while older local datasets can contain numeric
+// project ids.  Treat ids as opaque values with string identity so a reload or
+// project switch cannot leave the UI stuck on the previously selected project.
+function findProject(pid){
+  if(pid===null || pid===undefined || pid==='') return null;
+  return data.projects.find(p=>String(p.id??p.projectId)===String(pid)) || null;
+}
 function findTask(pid, tid){ return window.KarhaApp?.taskRuntime?.get(pid,tid) || null; }
 function findNestedItem(items, id){
   for(const item of (items||[])){
@@ -5717,8 +5723,16 @@ window.addEventListener('popstate', ()=>{
   goHomeProjects();
 });
 
-document.getElementById('closeProjectActivitiesPage').onclick = ()=>{ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); };
-document.getElementById('closeContactsPage').onclick = ()=>{ workspaceSubpage=null; document.getElementById('contactsPage')?.classList.remove('contact-form-mode'); const h=document.querySelector('#contactsPage .inner-section-bar h2'); if(h) h.textContent='مخاطبین'; const b=document.getElementById('contactAddBtn'); if(b) b.hidden=false; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); };
+function returnToSettingsWorkspace(){
+  workspaceSubpage=null;
+  setBottomNavActive('Settings');
+  renderTabs();
+  showOnlyWorkspacePage('settingsPage');
+  renderSettingsWorkspace();
+  updateWorkspaceContextBar();
+}
+document.getElementById('closeProjectActivitiesPage').onclick = returnToSettingsWorkspace;
+document.getElementById('closeContactsPage').onclick = ()=>{ document.getElementById('contactsPage')?.classList.remove('contact-form-mode'); const h=document.querySelector('#contactsPage .inner-section-bar h2'); if(h) h.textContent='مخاطبین'; const b=document.getElementById('contactAddBtn'); if(b) b.hidden=false; returnToSettingsWorkspace(); };
 document.getElementById('contactAddBtn').onclick = ()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
 document.getElementById('activityAddBtn').onclick = openActivityForm;
 
