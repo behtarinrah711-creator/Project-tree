@@ -1,0 +1,181 @@
+name: Apply uploaded root-cause fix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-rootcause-zip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact clean test branch
+        uses: actions/checkout@v4
+        with:
+          ref: rescue/auth-rootcause-fix
+          fetch-depth: 0
+
+      - name: Apply exact diff between the two user-provided Grok ZIPs
+        run: |
+          cat > /tmp/rootcause.patch <<'PATCH'
+          --- a/index.html
+          +++ b/index.html
+          @@ -528,14 +528,25 @@
+               messagingSenderId: "401523332370",
+               appId: "1:401523332370:web:3a524a2b86b967ca4d8fcb"
+             };
+          +  console.info('[karha:auth] SDK loaded=', typeof firebase !== 'undefined');
+             if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+               firebase.initializeApp(firebaseConfig);
+          +    console.info('[karha:auth] index.html initializeApp');
+          +  } else if (typeof firebase !== 'undefined') {
+          +    console.info('[karha:auth] index.html apps already=', firebase.apps.length);
+             }
+             // Complete any pending Google redirect flow as early as possible.
+             if (typeof firebase !== 'undefined' && firebase.auth) {
+          -    firebase.auth().getRedirectResult().catch(function(err){
+          +    console.info('[karha:auth] getRedirectResult start');
+          +    firebase.auth().getRedirectResult().then(function(result){
+          +      if (result && result.user) {
+          +        console.info('[karha:auth] getRedirectResult user=', result.user.email || result.user.uid);
+          +      } else {
+          +        console.info('[karha:auth] getRedirectResult no user (normal for popup / first load)');
+          +      }
+          +    }).catch(function(err){
+                 if (err && err.code && err.code !== 'auth/no-auth-event') {
+          -        console.warn('Firebase redirect result:', err.code, err.message);
+          +        console.warn('[karha:auth] getRedirectResult error', err.code, err.message);
+                 }
+               });
+             }
+          --- a/src/legacy/legacyApp.js
+          +++ b/src/legacy/legacyApp.js
+          @@ -58,12 +58,26 @@
+           };
+           if (!firebase.apps.length) {
+             firebase.initializeApp(firebaseConfig);
+          +  console.info('[karha:auth] legacyApp initializeApp (first app)');
+          +} else {
+          +  console.info('[karha:auth] legacyApp skipped initializeApp (apps=' + firebase.apps.length + ')');
+           }
+           const auth = firebase.auth();
+           const db = firebase.firestore();
+          +console.info('[karha:auth] legacyApp auth+db ready, currentUser=', auth.currentUser && auth.currentUser.email);
+           db.enablePersistence({ synchronizeTabs: true }).catch((err)=>{
+             console.warn('Offline persistence not enabled:', err.code);
+           });
+          +
+          +// Local HTML helper required by taskUI wiring and legacy export/management
+          +// renderers. During modular migration this lived only on KarhaLegacy; the bare
+          +// identifier at createUI(...) must resolve in this classic-script scope or the
+          +// remainder of legacyApp.js never runs (ReferenceError → half-dead runtime).
+          +function elFromHtml(html){
+          +  const template = document.createElement('template');
+          +  template.innerHTML = String(html || '').trim();
+          +  return template.content.firstElementChild;
+          +}
+           
+           // legacy script anonymous
+           const STORAGE_KEY = 'gtasks-clone-v2';
+          @@ -1273,12 +1287,28 @@
+           }
+           
+           auth.onAuthStateChanged(async (user)=>{
+          +  console.info('[karha:auth] onAuthStateChanged', user ? (user.email || user.uid) : null);
+             currentUser = user;
+             cloudMode = !!user;
+          -  updateAccountUI();
+          +  try{
+          +    updateAccountUI();
+          +    console.info('[karha:auth] updateAccountUI done, cloudMode=', cloudMode);
+          +  }catch(err){
+          +    console.error('[karha:auth] updateAccountUI failed', err);
+          +  }
+             if(user){
+          -    await migrateGuestDataToCloud();
+          -    startCloudListeners();
+          +    try{
+          +      await migrateGuestDataToCloud();
+          +      console.info('[karha:auth] migrateGuestDataToCloud done');
+          +    }catch(err){
+          +      console.error('[karha:auth] migrateGuestDataToCloud failed', err);
+          +    }
+          +    try{
+          +      startCloudListeners();
+          +      console.info('[karha:auth] startCloudListeners done');
+          +    }catch(err){
+          +      console.error('[karha:auth] startCloudListeners failed', err);
+          +    }
+             } else {
+               stopCloudListeners();
+               loadData();
+          --- a/src/bootstrap/shellControls.js
+          +++ b/src/bootstrap/shellControls.js
+          @@ -28,35 +28,42 @@
+               if(event.target === drawer) close();
+             });
+             signin.addEventListener('click', () => {
+          +    console.info('[karha:auth] login click');
+               const firebaseRef = windowRef.firebase;
+               if(!firebaseRef?.auth){
+          -      console.warn('Karha shell: Firebase Auth SDK is not available yet');
+          +      console.warn('[karha:auth] login click: Firebase Auth SDK missing');
+                 return;
+               }
+               let auth;
+               try{
+                 auth = firebaseRef.auth();
+          +      console.info('[karha:auth] login click: auth ready, currentUser=', auth.currentUser && auth.currentUser.email);
+               }catch(err){
+          -      console.warn('Karha shell: Firebase Auth not initialized', err);
+          +      console.warn('[karha:auth] login click: auth() failed', err);
+                 return;
+               }
+               if(auth.currentUser){
+          -      auth.signOut().catch(err => console.warn('Karha shell: signOut failed', err));
+          +      console.info('[karha:auth] signOut start');
+          +      auth.signOut().catch(err => console.warn('[karha:auth] signOut failed', err));
+                 close();
+                 return;
+               }
+               const provider = new firebaseRef.auth.GoogleAuthProvider();
+               // Prefer popup; fall back to redirect only when the popup is blocked or
+               // the browser cannot open it. User-cancelled popup should not force redirect.
+          -    auth.signInWithPopup(provider).catch(err => {
+          +    console.info('[karha:auth] signInWithPopup start');
+          +    auth.signInWithPopup(provider).then(function(result){
+          +      console.info('[karha:auth] signInWithPopup ok', result && result.user && (result.user.email || result.user.uid));
+          +    }).catch(err => {
+                 const code = err && err.code;
+          +      console.warn('[karha:auth] signInWithPopup error', code || err);
+                 if(code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'){
+          +        console.info('[karha:auth] signInWithRedirect start (popup blocked)');
+                   return auth.signInWithRedirect(provider);
+                 }
+                 if(code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request'){
+                   return;
+                 }
+          -      console.warn('Karha shell: signInWithPopup failed', code || err);
+               });
+             });
+             return true;
+          PATCH
+          git apply --check /tmp/rootcause.patch
+          git apply /tmp/rootcause.patch
+
+      - name: Verify files exactly match uploaded ZIP SHA256
+        run: |
+          echo 'a88bb1e2a31355cf83de8d4bcd437deebe202cfd74076208fe13e77d71c1fb4a  index.html' | sha256sum -c -
+          echo '005e287bfddf0f1cb60c5ce5e4e57631570df768c3947447d4bf5ebb4e496001  src/legacy/legacyApp.js' | sha256sum -c -
+          echo '99407a175c424f90b81b07ae431f20fbbe2a28b9a4fd50d1412df943b1f3a92f  src/bootstrap/shellControls.js' | sha256sum -c -
+          echo 'ad638e6780615f39a356386c8fe68ec6d55d9cfc6cbc6977799b8c313eac73ab  src/bootstrap/shellControls.test.js' | sha256sum -c -
+
+      - name: Commit exact uploaded fix to target branch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html src/legacy/legacyApp.js src/bootstrap/shellControls.js src/bootstrap/shellControls.test.js
+          git commit -m 'Apply Grok auth root-cause fix exactly'
+          git push origin HEAD:rescue/auth-rootcause-fix

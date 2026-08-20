@@ -123,6 +123,7 @@ export function startCloudProjectRecovery({windowRef=window,projectContext,route
     const email=normalizeEmail(user.email);
     const sources={owned:[],ownerEmail:[],shared:[]};
     const hydrated=new Set();
+    const hydrating=new Set();
     let running=false;
     let rerun=false;
 
@@ -165,23 +166,31 @@ export function startCloudProjectRecovery({windowRef=window,projectContext,route
           refreshOpenDrawer(windowRef);
 
           for(const project of recovered){
-            if(token!==generation || hydrated.has(String(project.id))) continue;
-            hydrated.add(String(project.id));
+            const projectId=String(project.id);
+            if(token!==generation || hydrated.has(projectId) || hydrating.has(projectId)) continue;
+            hydrating.add(projectId);
             try{
               const snap=await db.collection('projects').doc(project.id).collection('tasks').get();
+              if(token!==generation) return;
               const taskDocs=snap.docs.map(taskDoc=>({id:taskDoc.id,...(taskDoc.data?.() || {})}));
               if(taskDocs.length){
-                const current=legacy?.getProject?.(project.id) || live.find(item=>String(item.id)===String(project.id));
+                const current=legacy?.getProject?.(project.id) || live.find(item=>String(item.id)===projectId);
                 if(current){
                   current.tasks=mergeById(taskDocs,current.tasks);
                   legacy?.persist?.();
                   const active=legacy?.getActiveProjectId?.();
                   const moduleId=windowRef?.KarhaRoute?.moduleId || 'dashboard';
-                  if(String(active)===String(project.id) && moduleId==='dashboard') legacy?.renderAll?.();
+                  if(String(active)===projectId && moduleId==='dashboard') legacy?.renderAll?.();
                 }
               }
+              // Mark hydration complete only after Firestore answered successfully.
+              // A transient failure during a fresh login must be retried by the
+              // next ownership/shared snapshot instead of hiding tasks all session.
+              hydrated.add(projectId);
             }catch(err){
-              console.warn('project task recovery skipped',project.id,err);
+              console.warn('project task recovery skipped; will retry',project.id,err);
+            }finally{
+              hydrating.delete(projectId);
             }
           }
 
