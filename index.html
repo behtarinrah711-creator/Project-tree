@@ -516,6 +516,31 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* Firebase must be initialized independently of the modular/legacy runtime so
+   account login remains reachable even when application startup fails or is slow. */
+(function(){
+  var firebaseConfig = {
+    apiKey: "AIzaSyBbRk4MsdHtj-gWnjbJExvQgW0sY6Z4uK8",
+    authDomain: "tree-d92af.firebaseapp.com",
+    projectId: "tree-d92af",
+    storageBucket: "tree-d92af.firebasestorage.app",
+    messagingSenderId: "401523332370",
+    appId: "1:401523332370:web:3a524a2b86b967ca4d8fcb"
+  };
+  if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+  // Complete any pending Google redirect flow as early as possible.
+  if (typeof firebase !== 'undefined' && firebase.auth) {
+    firebase.auth().getRedirectResult().catch(function(err){
+      if (err && err.code && err.code !== 'auth/no-auth-event') {
+        console.warn('Firebase redirect result:', err.code, err.message);
+      }
+    });
+  }
+})();
+</script>
 
 
 

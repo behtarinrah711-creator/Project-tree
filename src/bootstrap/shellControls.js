@@ -29,15 +29,35 @@ export function bindShellControls({ windowRef = window, documentRef = document }
   });
   signin.addEventListener('click', () => {
     const firebaseRef = windowRef.firebase;
-    if(!firebaseRef?.auth) return;
-    const auth = firebaseRef.auth();
+    if(!firebaseRef?.auth){
+      console.warn('Karha shell: Firebase Auth SDK is not available yet');
+      return;
+    }
+    let auth;
+    try{
+      auth = firebaseRef.auth();
+    }catch(err){
+      console.warn('Karha shell: Firebase Auth not initialized', err);
+      return;
+    }
     if(auth.currentUser){
-      auth.signOut();
+      auth.signOut().catch(err => console.warn('Karha shell: signOut failed', err));
       close();
       return;
     }
     const provider = new firebaseRef.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(() => auth.signInWithRedirect(provider));
+    // Prefer popup; fall back to redirect only when the popup is blocked or
+    // the browser cannot open it. User-cancelled popup should not force redirect.
+    auth.signInWithPopup(provider).catch(err => {
+      const code = err && err.code;
+      if(code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'){
+        return auth.signInWithRedirect(provider);
+      }
+      if(code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request'){
+        return;
+      }
+      console.warn('Karha shell: signInWithPopup failed', code || err);
+    });
   });
   return true;
 }
