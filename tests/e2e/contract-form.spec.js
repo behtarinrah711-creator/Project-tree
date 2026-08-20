@@ -18,10 +18,7 @@ const seededState = {
   ]
 };
 
-test.beforeEach(async ({ page }) => {
-  const pageErrors = [];
-  page.on('pageerror', error => pageErrors.push(error.message));
-
+async function bootSeededProject(page) {
   await page.addInitScript(state => {
     localStorage.clear();
     localStorage.setItem('gtasks-clone-v2', JSON.stringify(state));
@@ -29,11 +26,13 @@ test.beforeEach(async ({ page }) => {
 
   await page.goto('/#/project/e2e-project');
   await page.waitForFunction(() => Boolean(window.KarhaRealContractForm));
-
-  page.__pageErrors = pageErrors;
-});
+}
 
 test('real contract form opens and renders required fields', async ({ page }) => {
+  const browserErrors = [];
+  page.on('pageerror', error => browserErrors.push(error.message));
+  await bootSeededProject(page);
+
   const opened = await page.evaluate(() => window.KarhaRealContractForm.open(null, 'e2e-project'));
   expect(opened).toBe(true);
 
@@ -46,16 +45,17 @@ test('real contract form opens and renders required fields', async ({ page }) =>
   await expect(page.locator('#contractFormBody')).toContainText('مبلغ کل قرارداد');
   await expect(page.locator('#contractFormActions .if-save')).toBeVisible();
 
-  const errors = await page.evaluate(() => window.__contractFormE2EErrors || []);
-  expect(errors).toEqual([]);
+  expect(browserErrors).toEqual([]);
 });
 
-test('opening the form does not throw an uncaught browser error', async ({ page }) => {
-  const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
+test('contract form can close back to contracts page without an uncaught error', async ({ page }) => {
+  const browserErrors = [];
+  page.on('pageerror', error => browserErrors.push(error.message));
+  await bootSeededProject(page);
 
   await page.evaluate(() => window.KarhaRealContractForm.open(null, 'e2e-project'));
-  await page.waitForTimeout(250);
+  await page.locator('#contractFormActions .if-cancel').click();
 
-  expect(errors).toEqual([]);
+  await expect(page.locator('#contractFormPage')).toHaveClass(/hidden/);
+  expect(browserErrors).toEqual([]);
 });
