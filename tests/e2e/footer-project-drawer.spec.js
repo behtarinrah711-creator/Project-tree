@@ -26,14 +26,35 @@ async function openDrawerAndAssert(page) {
 
 test('selected project remains listed and highlighted across all four footer tabs', async ({ page }) => {
   const pageErrors = [];
-  page.on('pageerror', err => pageErrors.push(String(err)));
+  const browserLog = [];
+  page.on('pageerror', err => { pageErrors.push(String(err)); console.log('[pageerror]', String(err)); });
+  page.on('console', msg => {
+    const line = `[console:${msg.type()}] ${msg.text()}`;
+    browserLog.push(line);
+    if(msg.type()==='error' || msg.type()==='warning') console.log(line);
+  });
 
   await page.addInitScript(value => {
     localStorage.setItem('gtasks-clone-v2', JSON.stringify(value));
+    window.addEventListener('karha:startup-error', event => {
+      console.error('[e2e:startup-error]', event.detail?.error?.stack || event.detail?.error || 'unknown');
+    });
   }, seed);
 
   await page.goto('/');
-  await page.waitForFunction(() => window.KarhaApp && window.KarhaLegacy, null, { timeout: 15_000 });
+  try {
+    await page.waitForFunction(() => window.KarhaApp && window.KarhaLegacy, null, { timeout: 15_000 });
+  } catch (error) {
+    const state = await page.evaluate(() => ({
+      karhaApp: !!window.KarhaApp,
+      karhaLegacy: !!window.KarhaLegacy,
+      route: window.KarhaRoute || null,
+      hash: location.hash,
+    }));
+    console.log('[e2e:startup-state]', JSON.stringify(state));
+    console.log('[e2e:browser-log]', browserLog.join('\n'));
+    throw error;
+  }
 
   for (const id of ['bottomProjectsBtn', 'bottomReportsBtn', 'bottomAccountingBtn', 'bottomSettingsBtn']) {
     await page.locator(`#${id}`).click();
