@@ -37,6 +37,15 @@ export async function startApplication({
   const moduleDefinitions = Array.isArray(modules) ? modules : await loadModules();
   moduleDefinitions.forEach(moduleDefinition => registry.register(moduleDefinition));
 
+  // Migration compatibility: legacy still passes `focusInlineAdd` into the
+  // task UI dependency bag even though the migrated TaskRuntime owns that
+  // helper internally and does not consume the dependency. The old helper was
+  // removed from legacy scope, so the free identifier aborts the classic
+  // script before KarhaLegacy can be installed. Provide a temporary global
+  // binding at the migration boundary; it has no behavior and can disappear
+  // when the obsolete dependency entry is removed from legacyApp.js.
+  if(typeof windowRef.focusInlineAdd !== 'function') windowRef.focusInlineAdd = () => {};
+
   await loadLegacy();
   // Legacy still owns visibility of the internal page shells. Install one
   // explicit handoff before Router starts so Dashboard navigation always
