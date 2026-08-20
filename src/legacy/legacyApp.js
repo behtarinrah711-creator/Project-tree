@@ -45,6 +45,9 @@ const APP_FORM_ARCHITECTURE = Object.freeze({
   exitChoices: ['بله','خیر']
 });
 
+// Firebase is initialized early in index.html so login works even if this
+// legacy runtime fails to load. Guard against double-init when the shell
+// already started the app.
 const firebaseConfig = {
   apiKey: "AIzaSyBbRk4MsdHtj-gWnjbJExvQgW0sY6Z4uK8",
   authDomain: "tree-d92af.firebaseapp.com",
@@ -53,7 +56,9 @@ const firebaseConfig = {
   messagingSenderId: "401523332370",
   appId: "1:401523332370:web:3a524a2b86b967ca4d8fcb"
 };
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 const auth = firebase.auth();
 const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch((err)=>{
