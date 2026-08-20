@@ -1,5 +1,15 @@
 const LEGACY_RUNTIME_SELECTOR = 'script[data-karha-legacy-runtime]';
 
+function installLegacyGlobalHelpers(windowRef, documentRef){
+  if(typeof windowRef.elFromHtml !== 'function'){
+    windowRef.elFromHtml = function elFromHtml(html){
+      const template = documentRef.createElement('template');
+      template.innerHTML = String(html || '').trim();
+      return template.content.firstElementChild;
+    };
+  }
+}
+
 /**
  * Loads the remaining legacy runtime with classic-script semantics.
  *
@@ -11,8 +21,14 @@ const LEGACY_RUNTIME_SELECTOR = 'script[data-karha-legacy-runtime]';
  */
 export function loadLegacyRuntime({
   documentRef = document,
+  windowRef = window,
   sourceUrl = new URL('../legacy/legacyApp.js', import.meta.url).href,
 } = {}){
+  // legacyApp still passes the bare `elFromHtml` identifier into taskRuntime
+  // before it installs KarhaLegacy. If the helper is missing, evaluation stops
+  // halfway through and footer navigation/forms become non-interactive.
+  installLegacyGlobalHelpers(windowRef, documentRef);
+
   const existing = documentRef.querySelector(LEGACY_RUNTIME_SELECTOR);
   if(existing){
     if(existing.dataset.loaded === 'true') return Promise.resolve(existing);
