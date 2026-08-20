@@ -13,16 +13,45 @@ export function parseRoute(){
 }
 
 export class AppRouter{
-  constructor(){ this.currentMounted = null; }
+  constructor(){
+    this.currentMounted = null;
+    this.started = false;
+    this.syncQueued = false;
+  }
 
   start(){
-    const sync = () => this.sync();
+    if(this.started) return;
+    this.started = true;
+    const sync = () => {
+      if(this.syncQueued) return;
+      this.syncQueued = true;
+      queueMicrotask(() => {
+        this.syncQueued = false;
+        this.sync();
+      });
+    };
     window.addEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', sync, { once: true });
     } else {
       queueMicrotask(sync);
     }
+  }
+
+  navigate(projectId, moduleId = 'dashboard', { replace = false } = {}){
+    if(!projectId) return false;
+    const route = `#/projects/${encodeURIComponent(projectId)}/${encodeURIComponent(moduleId || 'dashboard')}`;
+    const method = replace ? 'replaceState' : 'pushState';
+    if(window.location.hash !== route){
+      window.history[method]({ projectId, moduleId }, '', route);
+    }
+    // The History API does not emit hashchange or popstate. Routing owns the
+    // complete programmatic-navigation lifecycle, so synchronize it here once
+    // startup has installed the route listeners. Pre-start route setup is
+    // consumed by start()'s initial synchronization after Legacy is loaded.
+    if(this.started) this.sync();
+    return true;
   }
 
   sync(){

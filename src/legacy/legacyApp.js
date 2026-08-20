@@ -359,6 +359,10 @@ function addProject(name){
 
 function setWorkspaceRoute(projectId, moduleId='dashboard'){
   if(!projectId) return;
+  if(window.KarhaApp?.router?.navigate){
+    window.KarhaApp.router.navigate(projectId,moduleId);
+    return;
+  }
   const next = '#/projects/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(moduleId || 'dashboard');
   if(location.hash !== next){
     try{ history.pushState({projectId, moduleId}, '', next); }catch(e){ location.hash = next; }
@@ -367,6 +371,10 @@ function setWorkspaceRoute(projectId, moduleId='dashboard'){
 }
 function replaceWorkspaceRoute(projectId, moduleId='dashboard'){
   if(!projectId) return;
+  if(window.KarhaApp?.router?.navigate){
+    window.KarhaApp.router.navigate(projectId,moduleId,{replace:true});
+    return;
+  }
   const next = '#/projects/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(moduleId || 'dashboard');
   if(location.hash !== next){
     try{ history.replaceState({projectId, moduleId}, '', next); }catch(e){ location.hash = next; }
@@ -388,9 +396,11 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
   // the project that happened to be active before the tap.
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
   if(updateRoute) setWorkspaceRoute(p.id,moduleId);
-  if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
+  else if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
   if(closeDrawerOnSelect) closeDrawer();
-  if(render) renderAll();
+  // Programmatic navigation renders through Router -> module.mount. Callers
+  // that explicitly suppress routing still retain the legacy render option.
+  if(render && !updateRoute) renderAll();
   renderDrawerProjectList();
   return true;
 }
@@ -1093,6 +1103,14 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
     data.activeTab !== 'starred' ? data.activeTab : null
   );
   data.activeTab = synchronizedProjectId || 'starred';
+  // A cloud snapshot can establish the first valid project after Router.start
+  // already synchronized an empty route.  Context synchronization alone does
+  // not mount a module, so hand the restored project to the Router explicitly.
+  // This is the single initial-workspace render when the Projects surface is
+  // visible; do not follow it with the legacy renderer.
+  const cloudRouteMounted = mainSurface === 'projects' && synchronizedProjectId
+    ? window.KarhaApp?.router?.navigate(synchronizedProjectId, 'dashboard', {replace:true}) === true
+    : false;
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
   const wasAdding = false;
   const projectsPageVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
@@ -1116,7 +1134,7 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
       refreshCurrentFooterPage();
     }
   } else {
-    renderAll();
+    if(!cloudRouteMounted) renderAll();
     if(wasAdding) focusInlineAdd();
   }
 }
