@@ -112,6 +112,10 @@ function getRecoveredLocalTasks(p){
 
 function normalizeProjectScopedData(p){
   if(!p) return;
+  // Some older project metadata documents contain no embedded `tasks` field;
+  // their tasks live only in the normalized Firestore subcollection.  All UI
+  // renderers nevertheless require an array while that collection hydrates.
+  if(!Array.isArray(p.tasks)) p.tasks=[];
   if(!Array.isArray(p.contacts)) p.contacts=[];
   if(!Array.isArray(p.activityTemplates)) p.activityTemplates=[];
   if(!Array.isArray(p.contractTemplates)) p.contractTemplates=[];
@@ -195,7 +199,13 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 1600);
 }
 
-function findProject(pid){ return data.projects.find(p=>p.id===pid); }
+// Route parameters are strings, while older local datasets can contain numeric
+// project ids.  Treat ids as opaque values with string identity so a reload or
+// project switch cannot leave the UI stuck on the previously selected project.
+function findProject(pid){
+  if(pid===null || pid===undefined || pid==='') return null;
+  return data.projects.find(p=>String(p.id??p.projectId)===String(pid)) || null;
+}
 function findTask(pid, tid){ return window.KarhaApp?.taskRuntime?.get(pid,tid) || null; }
 function findNestedItem(items, id){
   for(const item of (items||[])){
@@ -373,7 +383,10 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
   if(!p || p.trashed || p.archived) return false;
   data.activeTab=p.id;
   taskUI?.setAddItemActive(false);
-  persist();
+  // Project selection is navigation state, not a debounced content edit. Save
+  // it synchronously so a quick reload/backgrounding on mobile cannot restore
+  // the project that happened to be active before the tap.
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
   if(updateRoute) setWorkspaceRoute(p.id,moduleId);
   if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
   if(render) renderAll();
@@ -383,27 +396,32 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
 function renderDrawerProjectList(){
   const list=document.getElementById('drawerProjectList');
   if(!list || !data) return;
-  list.innerHTML='';
   const source = window.KarhaApp?.projectWorkspace?.listProjects?.() || data.projects || [];
   const projects=source.filter(p=>p && !p.trashed && !p.archived && !isPendingDeleted('project',p.id));
   if(!projects.length){
+    list.innerHTML='';
     const empty=document.createElement('div'); empty.className='drawer-empty-projects'; empty.textContent='هنوز پروژه فعالی وجود ندارد. از «پروژه جدید» شروع کنید.'; list.appendChild(empty); return;
   }
+  list.querySelector('.drawer-empty-projects')?.remove();
+  const existingRows=new Map(Array.from(list.querySelectorAll('.drawer-project-row')).map(row=>[row.dataset.projectId,row]));
+  const visibleIds=new Set();
   projects.forEach(p=>{
-    const row=document.createElement('button'); row.type='button'; row.className='drawer-project-row'+(data.activeTab===p.id?' active':''); row.dataset.projectId=p.id;
-    const name=document.createElement('span'); name.className='drawer-project-name'; name.textContent=p.name||'پروژه بدون نام'; row.appendChild(name);
+    const projectId=String(p.id);
+    visibleIds.add(projectId);
+    let row=existingRows.get(projectId);
+    if(!row){
+      row=document.createElement('button'); row.type='button'; row.className='drawer-project-row'; row.dataset.projectId=projectId;
+      const name=document.createElement('span'); name.className='drawer-project-name'; row.appendChild(name);
+      const count=document.createElement('span'); count.className='drawer-project-count'; row.appendChild(count);
+      window.KarhaApp.bindProjectSelectionRow(row);
+    }
+    row.classList.toggle('active',String(data.activeTab)===projectId);
+    row.querySelector('.drawer-project-name').textContent=p.name||'پروژه بدون نام';
     const undone=(p.tasks||[]).filter(t=>!t.done&&!t.trashed&&!isPendingDeleted('task',p.id,t.id)).length;
-    const count=document.createElement('span'); count.className='drawer-project-count'; count.textContent=toPersianDigits(String(undone)); row.appendChild(count);
-    row.onclick=()=>{
-      closeDrawer();
-      if(window.KarhaApp?.projectWorkspace?.selectProject){
-        window.KarhaApp.projectWorkspace.selectProject(p.id,{moduleId:'dashboard'});
-      } else {
-        setActiveProject(p.id,{updateRoute:true,render:true,moduleId:'dashboard'});
-      }
-    };
+    row.querySelector('.drawer-project-count').textContent=toPersianDigits(String(undone));
     list.appendChild(row);
   });
+  existingRows.forEach((row,id)=>{ if(!visibleIds.has(id)) row.remove(); });
 }
 function openGlobalTrashFromDrawer(){
   closeDrawer();
@@ -521,7 +539,12 @@ function stopCloudTaskListener(pid){
 }
 function startCloudTaskListener(p){
   if(!cloudMode || !p || !p.ownerUid || cloudTaskUnsubs[p.id]) return;
+  const projectId=p.id;
   cloudTaskUnsubs[p.id] = taskCollection(p.id).onSnapshot(snap=>{
+    // Project metadata snapshots replace objects in `data.projects`. Never
+    // keep mutating the object captured when this listener was installed.
+    const current=findProject(projectId);
+    if(!current) return;
     const incoming = snap.docs.map(d=>normalizeTaskRecord({id:d.id, ...d.data()}));
 
     // CRITICAL: an empty subcollection must never erase a non-empty local/legacy
@@ -532,8 +555,8 @@ function startCloudTaskListener(p){
     // هیچ Snapshot ابری، حتی Snapshot خالی/ناقص، حق ندارد دستورکارهای
     // محلی یا نسخهٔ بازیابی را حذف کند. اول همهٔ منابع موجود را با ID پایدار
     // ادغام می‌کنیم و سپس همان مجموعهٔ کامل را برای repair به سرور می‌فرستیم.
-    const localTasks = Array.isArray(p.tasks) ? p.tasks.map(normalizeTaskRecord) : [];
-    const recoveryTasks = getRecoveredLocalTasks(p);
+    const localTasks = Array.isArray(current.tasks) ? current.tasks.map(normalizeTaskRecord) : [];
+    const recoveryTasks = getRecoveredLocalTasks(current);
     const byId = new Map();
     [...incoming, ...recoveryTasks, ...localTasks].forEach(t=>{
       if(t && t.id && !byId.has(String(t.id))) byId.set(String(t.id), t);
@@ -541,16 +564,16 @@ function startCloudTaskListener(p){
     const merged = Array.from(byId.values());
     if(!incoming.length && !merged.length) return;
     if(!merged.length) return;
-    p.tasks = merged;
-    rememberProjectTasks(p);
-    if(merged.length > incoming.length && !dirtyProjectIds.has(p.id) && !pendingCloudWrites.has(p.id)){
-      pendingCloudWrites.add(p.id);
-      writeTaskRecordsNormalized(p.id, merged)
-        .finally(()=>pendingCloudWrites.delete(p.id));
+    current.tasks = merged;
+    rememberProjectTasks(current);
+    if(merged.length > incoming.length && !dirtyProjectIds.has(projectId) && !pendingCloudWrites.has(projectId)){
+      pendingCloudWrites.add(projectId);
+      writeTaskRecordsNormalized(projectId, merged)
+        .finally(()=>pendingCloudWrites.delete(projectId));
     }
-    p.schemaVersion = DATA_SCHEMA_VERSION;
+    current.schemaVersion = DATA_SCHEMA_VERSION;
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
-    if(data.activeTab === p.id && mainSurface === 'projects') renderAll();
+    if(String(data.activeTab) === String(projectId) && mainSurface === 'projects') renderAll();
     else if(mainSurface === 'workspace') refreshCurrentFooterPage();
   }, err=>console.warn('task listener', p.id, err));
 }
@@ -616,20 +639,27 @@ async function recoverLegacyTasksForProject(p, projectDocData){
 
 async function hydrateProjectTasksFromCloud(p, projectDocData){
   if(!cloudMode || !p || !p.ownerUid) return false;
+  const projectId=p.id;
+  // Subscribe first. Recovery performs several optional network reads and must
+  // not delay the normal task collection from reaching the visible project.
+  startCloudTaskListener(p);
   try{
-    const snap = await taskCollection(p.id).get();
+    const snap = await taskCollection(projectId).get();
     const normalizedTasks = snap.docs.map(d => normalizeTaskRecord({id:d.id, ...d.data()}));
     const legacyTasks = Array.isArray(projectDocData && projectDocData.tasks)
       ? projectDocData.tasks.map(normalizeTaskRecord) : [];
-    const cachedTasks = Array.isArray(p.tasks)
-      ? p.tasks.map(normalizeTaskRecord) : [];
-    const recoveryTasks = getRecoveredLocalTasks(p);
 
     // مهم: وجود حتی یک رکورد در مجموعه جدید به معنی کامل بودن مهاجرت نیست.
     // علاوه بر سند فعلی و کش، رکوردهای قدیمی پروژه‌های هم‌نام و taskهای دارای
     // projectId را هم بازیابی می‌کنیم. هیچ رکوردی صرفاً به دلیل وجود رکورد جدید
     // حذف یا جایگزین نمی‌شود.
     const recoveredTasks = await recoverLegacyTasksForProject(p, projectDocData);
+    // Either of the awaited reads above may overlap a metadata snapshot. Merge
+    // into the current object, not the now-detached `p` passed by the caller.
+    const current=findProject(projectId) || p;
+    const cachedTasks = Array.isArray(current.tasks)
+      ? current.tasks.map(normalizeTaskRecord) : [];
+    const recoveryTasks = getRecoveredLocalTasks(current);
     const byId = new Map();
     normalizedTasks.forEach(t => byId.set(String(t.id), t));
     legacyTasks.forEach(t => { const id=String(t.id); if(!byId.has(id)) byId.set(id,t); });
@@ -646,17 +676,17 @@ async function hydrateProjectTasksFromCloud(p, projectDocData){
                             !legacyTasks.some(l => String(l.id)===String(t.id)));
 
     if(mergedTasks.length){
-      p.tasks = mergedTasks;
-      rememberProjectTasks(p);
-      p.schemaVersion = DATA_SCHEMA_VERSION;
+      current.tasks = mergedTasks;
+      rememberProjectTasks(current);
+      current.schemaVersion = DATA_SCHEMA_VERSION;
       try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
 
       if(needsRepair || Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-        pendingCloudWrites.add(p.id);
+        pendingCloudWrites.add(projectId);
         try{
           // رکوردهای موجود حفظ می‌شوند و رکوردهای گمشده دوباره در مجموعه مستقل نوشته می‌شوند.
-          await writeTaskRecordsNormalized(p.id, mergedTasks);
-          const verify = await taskCollection(p.id).get();
+          await writeTaskRecordsNormalized(projectId, mergedTasks);
+          const verify = await taskCollection(projectId).get();
           const verifiedIds = new Set(verify.docs.map(d => d.id));
           if(mergedTasks.some(t => !verifiedIds.has(String(t.id)))){
             throw new Error('task repair verification failed');
@@ -665,34 +695,35 @@ async function hydrateProjectTasksFromCloud(p, projectDocData){
           // پایداری داده‌ها در نسخه‌های بعدی ثابت شود، به‌عنوان recovery backup
           // باقی می‌ماند و هرگز نباید به خاطر یک Snapshot ناقص از بین برود.
           if(Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-            await db.collection('projects').doc(p.id).update({schemaVersion:DATA_SCHEMA_VERSION});
+            await db.collection('projects').doc(projectId).update({schemaVersion:DATA_SCHEMA_VERSION});
           }
         } finally {
-          pendingCloudWrites.delete(p.id);
+          pendingCloudWrites.delete(projectId);
         }
       }
-      startCloudTaskListener(p);
+      startCloudTaskListener(current);
       return true;
     }
 
     // پروژه واقعاً بدون دستورکار است.
     if(Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-      pendingCloudWrites.add(p.id);
+      pendingCloudWrites.add(projectId);
       try{
-        await db.collection('projects').doc(p.id).update({
+        await db.collection('projects').doc(projectId).update({
           tasks: firebase.firestore.FieldValue.delete(),
           schemaVersion: DATA_SCHEMA_VERSION
         });
-      } finally { pendingCloudWrites.delete(p.id); }
+      } finally { pendingCloudWrites.delete(projectId); }
     }
-    p.tasks = [];
-    p.schemaVersion = DATA_SCHEMA_VERSION;
-    startCloudTaskListener(p);
+    current.tasks = [];
+    current.schemaVersion = DATA_SCHEMA_VERSION;
+    startCloudTaskListener(current);
     return true;
   }catch(err){
     // در هیچ خطایی آرایه دستورکارهای موجود را با [] جایگزین نکن.
-    console.warn('task hydration/repair failed; keeping cached tasks:', p.id, err);
-    if(!Array.isArray(p.tasks)) p.tasks = [];
+    console.warn('task hydration/repair failed; keeping cached tasks:', projectId, err);
+    const current=findProject(projectId) || p;
+    if(!Array.isArray(current.tasks)) current.tasks = [];
     return false;
   }
 }
@@ -1094,19 +1125,23 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
 async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
   const docs = [...(ownedDocs||[]), ...(sharedDocs||[])];
   const seen = new Set();
+  const hydrations=[];
   for(const doc of docs){
     if(seen.has(doc.id)) continue;
     seen.add(doc.id);
     const p = findProject(doc.id);
     if(!p) continue;
     const before = p.tasks.length;
-    const hydrated = await hydrateProjectTasksFromCloud(p, doc.data());
-    if(hydrated && (p.tasks.length !== before || p.schemaVersion !== DATA_SCHEMA_VERSION)){
-      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
-      if(data.activeTab === p.id && mainSurface === 'projects') renderAll();
-      else if(mainSurface === 'workspace') refreshCurrentFooterPage();
-    }
+    hydrations.push(hydrateProjectTasksFromCloud(p, doc.data()).then(hydrated=>{
+      const current=findProject(doc.id);
+      if(hydrated && current && (current.tasks.length !== before || current.schemaVersion !== DATA_SCHEMA_VERSION)){
+        try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+        if(String(data.activeTab) === String(doc.id) && mainSurface === 'projects') renderAll();
+        else if(mainSurface === 'workspace') refreshCurrentFooterPage();
+      }
+    }));
   }
+  await Promise.allSettled(hydrations);
 }
 
 function startCloudListeners(){
@@ -3120,6 +3155,20 @@ const taskUI = window.KarhaApp.taskRuntime.createUI({
 const {renderProjectView,refreshProjectPartial,renderInlineAddRow,renderTaskBlock,renderStarredView,
   buildStarredGroup,openTaskDetail,openSubDetail,closeSheet,renderSheet}=taskUI;
 
+window.KarhaApp.projectSelection.configure({
+  getProjects:()=>data.projects || [],
+  setActiveProjectId:projectId=>{ data.activeTab=projectId; },
+  setProjectContext:projectId=>window.KarhaApp.projectContext.setProjectId(projectId),
+  setRoute:(projectId,moduleId)=>setWorkspaceRoute(projectId,moduleId),
+  persist:()=>{ try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); }catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); } },
+  closeDrawer,
+  renderWorkspace:projectId=>{
+    taskUI.setAddItemActive(false);
+    if(findProject(projectId)) renderAll();
+  },
+  renderDrawer:()=>renderDrawerProjectList(),
+});
+
 /* ---------- side drawer (menu) ---------- */
 function openDrawer(){
   document.getElementById('drawerOverlay').classList.remove('hidden');
@@ -3133,6 +3182,11 @@ function openDrawer(){
 function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('hidden'); }
 window.addEventListener('karha:drawer-open', openDrawer);
 window.addEventListener('karha:workspace-route-synced', event=>{
+  const routeProjectId=event.detail?.projectId;
+  if(routeProjectId && String(data.activeTab)!==String(routeProjectId)){
+    setActiveProject(routeProjectId,{updateRoute:false,render:false,moduleId:event.detail?.moduleId||'dashboard'});
+    if(event.detail?.moduleId==='dashboard') renderAll();
+  }
   renderDrawerProjectList();
   if(event.detail?.moduleId==='contracts' && event.detail?.projectId){
     openContractsPage(event.detail.projectId,{updateRoute:false,pushHistory:false});
@@ -5717,8 +5771,16 @@ window.addEventListener('popstate', ()=>{
   goHomeProjects();
 });
 
-document.getElementById('closeProjectActivitiesPage').onclick = ()=>{ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); };
-document.getElementById('closeContactsPage').onclick = ()=>{ workspaceSubpage=null; document.getElementById('contactsPage')?.classList.remove('contact-form-mode'); const h=document.querySelector('#contactsPage .inner-section-bar h2'); if(h) h.textContent='مخاطبین'; const b=document.getElementById('contactAddBtn'); if(b) b.hidden=false; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); };
+function returnToSettingsWorkspace(){
+  workspaceSubpage=null;
+  setBottomNavActive('Settings');
+  renderTabs();
+  showOnlyWorkspacePage('settingsPage');
+  renderSettingsWorkspace();
+  updateWorkspaceContextBar();
+}
+document.getElementById('closeProjectActivitiesPage').onclick = returnToSettingsWorkspace;
+document.getElementById('closeContactsPage').onclick = ()=>{ document.getElementById('contactsPage')?.classList.remove('contact-form-mode'); const h=document.querySelector('#contactsPage .inner-section-bar h2'); if(h) h.textContent='مخاطبین'; const b=document.getElementById('contactAddBtn'); if(b) b.hidden=false; returnToSettingsWorkspace(); };
 document.getElementById('contactAddBtn').onclick = ()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
 document.getElementById('activityAddBtn').onclick = openActivityForm;
 
