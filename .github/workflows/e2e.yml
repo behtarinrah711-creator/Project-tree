@@ -24,6 +24,9 @@ jobs:
       - name: Install test dependencies
         run: npm install
 
+      - name: Run unit regression tests
+        run: node --test src/**/*.test.js
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
