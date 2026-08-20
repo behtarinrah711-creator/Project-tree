@@ -16,14 +16,15 @@ function element(id){
   };
 }
 
-function harness({user=null,popupError=null,withFirebase=true}={}){
+function harness({user=null,popupErrors=[],withFirebase=true}={}){
   const elements = Object.fromEntries(['drawerOverlay','hamburgerBtn','avatarBtn','drawerSigninBtn','toast'].map(id=>[id,element(id)]));
   const events=[];
   class CustomEvent { constructor(type,options={}){ this.type=type; this.detail=options.detail; } }
+  const errors=[...popupErrors];
   const auth = {
     currentUser:user, popupCalls:0, redirectCalls:0, signoutCalls:0,
     async signOut(){ this.signoutCalls++; },
-    async signInWithPopup(){ this.popupCalls++; if(popupError) throw popupError; },
+    async signInWithPopup(){ this.popupCalls++; const error=errors.shift(); if(error) throw error; },
     async signInWithRedirect(){ this.redirectCalls++; },
   };
   const authFactory=()=>auth;
@@ -65,7 +66,7 @@ test('logged-in account action signs out and closes the drawer', async () => {
 });
 
 test('unauthorized domain is surfaced instead of silently redirecting', async () => {
-  const h=harness({popupError:{code:'auth/unauthorized-domain',message:'unauthorized'}});
+  const h=harness({popupErrors:[{code:'auth/unauthorized-domain',message:'unauthorized'}]});
   bindShellControls(h);
   await h.elements.drawerSigninBtn.click();
   assert.equal(h.auth.popupCalls,1);
@@ -75,9 +76,28 @@ test('unauthorized domain is surfaced instead of silently redirecting', async ()
 });
 
 test('popup blocked falls back to redirect', async () => {
-  const h=harness({popupError:{code:'auth/popup-blocked',message:'blocked'}});
+  const h=harness({popupErrors:[{code:'auth/popup-blocked',message:'blocked'}]});
   bindShellControls(h);
   await h.elements.drawerSigninBtn.click();
   assert.equal(h.auth.popupCalls,1);
+  assert.equal(h.auth.redirectCalls,1);
+});
+
+test('network failure retries popup once and succeeds without redirect when retry works', async () => {
+  const h=harness({popupErrors:[{code:'auth/network-request-failed',message:'network'}]});
+  bindShellControls(h);
+  await h.elements.drawerSigninBtn.click();
+  assert.equal(h.auth.popupCalls,2);
+  assert.equal(h.auth.redirectCalls,0);
+});
+
+test('two popup network failures fall back to redirect', async () => {
+  const h=harness({popupErrors:[
+    {code:'auth/network-request-failed',message:'network-1'},
+    {code:'auth/network-request-failed',message:'network-2'},
+  ]});
+  bindShellControls(h);
+  await h.elements.drawerSigninBtn.click();
+  assert.equal(h.auth.popupCalls,2);
   assert.equal(h.auth.redirectCalls,1);
 });
