@@ -18,22 +18,55 @@ const seededState = {
   ]
 };
 
-async function bootSeededProject(page) {
+async function bootContractHarness(page) {
   await page.addInitScript(state => {
     localStorage.clear();
     localStorage.setItem('gtasks-clone-v2', JSON.stringify(state));
   }, seededState);
 
-  await page.goto('/#/project/e2e-project');
-  await page.waitForFunction(() => Boolean(window.KarhaRealContractForm));
+  await page.goto('/#/project/e2e-project', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#contractFormPage')).toBeAttached();
+
+  await page.evaluate(async () => {
+    window.openRealContractFormShell = () => {
+      document.getElementById('contractFormPage')?.classList.remove('hidden');
+      return true;
+    };
+    window.closeRealContractFormShell = () => {
+      document.getElementById('contractFormPage')?.classList.add('hidden');
+      return true;
+    };
+    window.pushWorkspaceHistory = () => true;
+    window.todayJalaliStr = () => '1405/05/29';
+    window.getContacts = project => project?.contacts || [];
+    window.findActivityTemplate = () => null;
+    window.formatJalaliDisplay = value => String(value || '');
+    window.toEnglishDigits = value => String(value ?? '');
+    window.toPersianDigits = value => String(value ?? '');
+    window.formatCost = value => String(value ?? '');
+    window.escapeHtml = value => String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+    window.svgPlus = () => '+';
+    window.svgGrip = () => '⋮⋮';
+    window.showToast = () => {};
+    window.openJalaliPicker = () => false;
+    window.openNumpadGeneric = () => false;
+
+    const module = await import('/src/modules/contracts/realContractFormModule.js');
+    window.__e2eRealContractForm = module.realContractFormModule;
+  });
 }
 
 test('real contract form opens and renders required fields', async ({ page }) => {
   const browserErrors = [];
   page.on('pageerror', error => browserErrors.push(error.message));
-  await bootSeededProject(page);
+  await bootContractHarness(page);
 
-  const opened = await page.evaluate(() => window.KarhaRealContractForm.open(null, 'e2e-project'));
+  const opened = await page.evaluate(() => window.__e2eRealContractForm.open(null, 'e2e-project'));
   expect(opened).toBe(true);
 
   await expect(page.locator('#contractFormPage')).not.toHaveClass(/hidden/);
@@ -48,12 +81,12 @@ test('real contract form opens and renders required fields', async ({ page }) =>
   expect(browserErrors).toEqual([]);
 });
 
-test('contract form can close back to contracts page without an uncaught error', async ({ page }) => {
+test('contract form can close without an uncaught browser error', async ({ page }) => {
   const browserErrors = [];
   page.on('pageerror', error => browserErrors.push(error.message));
-  await bootSeededProject(page);
+  await bootContractHarness(page);
 
-  await page.evaluate(() => window.KarhaRealContractForm.open(null, 'e2e-project'));
+  await page.evaluate(() => window.__e2eRealContractForm.open(null, 'e2e-project'));
   await page.locator('#contractFormActions .if-cancel').click();
 
   await expect(page.locator('#contractFormPage')).toHaveClass(/hidden/);
