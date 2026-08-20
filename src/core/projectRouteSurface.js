@@ -6,7 +6,8 @@ const WORKSPACE_PAGE_IDS = [
   'shareFormPage',
 ];
 
-export function showProjectsDashboardSurface({ documentRef = document } = {}){
+export function showProjectsDashboardSurface({ documentRef = globalThis.document } = {}){
+  if(!documentRef) return false;
   WORKSPACE_PAGE_IDS.forEach(id => documentRef.getElementById?.(id)?.classList?.add?.('hidden'));
 
   documentRef.querySelectorAll?.('.bottom-nav-item')?.forEach?.(item => item.classList?.remove?.('active'));
@@ -18,6 +19,7 @@ export function showProjectsDashboardSurface({ documentRef = document } = {}){
 
   const tabbar = documentRef.getElementById?.('tabbar');
   tabbar?.setAttribute?.('aria-hidden', 'false');
+  return true;
 }
 
 /**
@@ -27,7 +29,11 @@ export function showProjectsDashboardSurface({ documentRef = document } = {}){
  * previously visible internal page cannot keep covering the freshly mounted
  * project/task content.
  */
-export function installProjectRouteSurfaceSync({ windowRef = window, documentRef = document } = {}){
+export function installProjectRouteSurfaceSync({
+  windowRef = globalThis.window,
+  documentRef = windowRef?.document || globalThis.document,
+} = {}){
+  if(!windowRef?.addEventListener || !documentRef) return false;
   if(windowRef.__karhaProjectRouteSurfaceSyncInstalled) return false;
   windowRef.__karhaProjectRouteSurfaceSyncInstalled = true;
 
