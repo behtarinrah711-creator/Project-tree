@@ -57,6 +57,44 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Diagnose currently deployed login
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from '@playwright/test';
+          const target='https://behtarinrah711-creator.github.io/Project-tree/';
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({
+            viewport:{width:412,height:915},
+            userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0 Mobile Safari/537.36'
+          });
+          const page=await context.newPage();
+          const out=(k,v)=>console.log(`AUTHDIAG [${k}] ${v}`);
+          page.on('console',m=>out(`console.${m.type()}`,m.text()));
+          page.on('pageerror',e=>out('pageerror',e.stack||e.message));
+          page.on('requestfailed',r=>out('requestfailed',`${r.method()} ${r.url()} :: ${r.failure()?.errorText||'unknown'}`));
+          page.on('response',r=>{ if(r.status()>=400) out('http',`${r.status()} ${r.request().method()} ${r.url()}`); });
+          page.on('popup',p=>{
+            out('popup.open',p.url());
+            p.on('framenavigated',f=>{if(f===p.mainFrame()) out('popup.url',f.url());});
+            p.on('console',m=>out(`popup.console.${m.type()}`,m.text()));
+            p.on('pageerror',e=>out('popup.pageerror',e.stack||e.message));
+            p.on('requestfailed',r=>out('popup.requestfailed',`${r.method()} ${r.url()} :: ${r.failure()?.errorText||'unknown'}`));
+          });
+          const res=await page.goto(target,{waitUntil:'domcontentloaded',timeout:45000});
+          out('main.status',res?.status()??'none');
+          await page.waitForTimeout(2500);
+          out('firebase.apps',await page.evaluate(()=>window.firebase?.apps?.length??-1));
+          out('firebase.auth',await page.evaluate(()=>{try{return !!window.firebase?.auth?.()}catch{return false}}));
+          await page.locator('#hamburgerBtn').click();
+          await page.waitForTimeout(250);
+          out('login.visible',await page.locator('#drawerSigninBtn').isVisible());
+          await page.locator('#drawerSigninBtn').click();
+          await page.waitForTimeout(12000);
+          out('toast',(await page.locator('#toast').textContent().catch(()=>''))?.trim()||'');
+          out('final.url',page.url());
+          await browser.close();
+          NODE
+
       - name: Run Playwright E2E
         run: npm run test:e2e
 
