@@ -8,6 +8,7 @@ import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
 import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
+import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -31,6 +32,11 @@ export async function startApplication({
   windowRef.KarhaApp = application;
 
   await loadLegacy();
+  // Legacy still owns visibility of the internal page shells. Install one
+  // explicit handoff before Router starts so Dashboard navigation always
+  // exposes the mounted project/task surface instead of leaving Reports,
+  // Settings or another internal page covering it.
+  installProjectRouteSurfaceSync({windowRef,documentRef:windowRef.document});
   router.start();
   // Recovery runs beside the legacy listeners and only adds readable project
   // records back into the live array. This covers pre-ownerUid cloud documents
