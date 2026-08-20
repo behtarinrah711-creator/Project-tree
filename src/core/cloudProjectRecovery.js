@@ -1,5 +1,3 @@
-const STORAGE_KEY = 'gtasks-clone-v2';
-
 function normalizeEmail(value){
   return String(value || '').trim().toLowerCase();
 }
@@ -67,10 +65,10 @@ export function mergeRecoveredProjects(liveProjects,recoveredProjects){
   return live;
 }
 
-export function chooseRecoveredProjectId(projects,{contextProjectId=null,routeProjectId=null}={}){
+export function chooseRecoveredProjectId(projects,{activeProjectId=null,contextProjectId=null,routeProjectId=null}={}){
   const visible=asArray(projects).filter(project=>project && !project.trashed && !project.archived);
   const ids=new Set(visible.map(project=>String(project.id ?? project.projectId)));
-  for(const candidate of [contextProjectId,routeProjectId]){
+  for(const candidate of [activeProjectId,contextProjectId,routeProjectId]){
     if(candidate!=null && ids.has(String(candidate))) return String(candidate);
   }
   return visible.length ? String(visible[0].id ?? visible[0].projectId) : null;
@@ -88,6 +86,12 @@ function dedupeDocs(groups){
   const byId=new Map();
   groups.flat().forEach(doc=>{if(doc?.id!=null) byId.set(String(doc.id),doc);});
   return Array.from(byId.values());
+}
+
+function refreshOpenDrawer(windowRef){
+  const drawer=windowRef?.document?.getElementById?.('drawerOverlay');
+  if(!drawer || drawer.classList?.contains?.('hidden')) return;
+  try{ windowRef.dispatchEvent(new windowRef.CustomEvent('karha:drawer-open')); }catch{}
 }
 
 /**
@@ -139,16 +143,26 @@ export function startCloudProjectRecovery({windowRef=window,projectContext,route
           const recovered=docs.map(doc=>projectFromCloudDoc(doc,user,existingById.get(String(doc.id))));
           mergeRecoveredProjects(live,recovered);
 
-          const contextId=projectContext?.getProjectId?.() || null;
-          const preferred=chooseRecoveredProjectId(live,{contextProjectId:contextId,routeProjectId:routeProjectId(windowRef)});
           const activeId=legacy?.getActiveProjectId?.() || null;
-          if(preferred && (!activeId || !live.some(project=>String(project.id)===String(activeId)))){
+          const contextId=projectContext?.getProjectId?.() || null;
+          const preferred=chooseRecoveredProjectId(live,{
+            activeProjectId:activeId,
+            contextProjectId:contextId,
+            routeProjectId:routeProjectId(windowRef),
+          });
+
+          // If the legacy snapshot race erased the active project, route through
+          // the normal selection lifecycle so activeTab, Context, Router and UI
+          // are restored together. Otherwise keep the user's current project.
+          const activeStillExists=activeId && live.some(project=>String(project.id)===String(activeId) && !project.trashed && !project.archived);
+          if(preferred && !activeStillExists){
             legacy?.selectProject?.(preferred,{moduleId:'dashboard'});
           }else if(preferred && !projectContext?.getProjectId?.()){
             projectContext?.setProjectId?.(preferred);
             router?.navigate?.(preferred,'dashboard',{replace:true});
           }
           legacy?.persist?.();
+          refreshOpenDrawer(windowRef);
 
           for(const project of recovered){
             if(token!==generation || hydrated.has(String(project.id))) continue;
@@ -199,7 +213,8 @@ export function startCloudProjectRecovery({windowRef=window,projectContext,route
     if(email) listen('shared',db.collection('projects').where('sharedWith','array-contains',email));
   };
 
+  // Firebase immediately emits the current auth state to this listener, so do
+  // not attach a second copy from auth.currentUser.
   authUnsub=auth.onAuthStateChanged(attach);
-  if(auth.currentUser) attach(auth.currentUser);
   return ()=>{generation++;stopSources();try{authUnsub?.();}catch{}};
 }
