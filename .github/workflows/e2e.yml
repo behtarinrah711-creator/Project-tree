@@ -24,6 +24,29 @@ jobs:
       - name: Install test dependencies
         run: npm install
 
+      - name: Probe Firebase Auth public config
+        run: |
+          node - <<'NODE'
+          const apiKey='AIzaSyBbRk4MsdHtj-gWnjbJExvQgW0sY6Z4uK8';
+          const requiredDomain='behtarinrah711-creator.github.io';
+          const response=await fetch(`https://identitytoolkit.googleapis.com/v1/projects?key=${apiKey}`);
+          const text=await response.text();
+          console.log('Firebase Auth config HTTP status:', response.status);
+          if(!response.ok){
+            console.error(text);
+            process.exit(1);
+          }
+          const config=JSON.parse(text);
+          const domains=Array.isArray(config.authorizedDomains)?config.authorizedDomains:[];
+          const providers=Array.isArray(config.idpConfig)?config.idpConfig:[];
+          console.log('Authorized domains:', domains.join(', '));
+          console.log('OAuth providers:', providers.map(item=>item.provider || item.providerId || item.id).filter(Boolean).join(', '));
+          if(!domains.includes(requiredDomain)){
+            console.error(`Missing Firebase authorized domain: ${requiredDomain}`);
+            process.exit(2);
+          }
+          NODE
+
       - name: Run unit regression tests
         run: node --test src/**/*.test.js
 
