@@ -20,6 +20,7 @@ export async function startApplication({
 
   const application = Object.freeze({
     modules: registry,
+    router,
     projectContext,
     projectRepository,
     taskRuntime: taskRuntimeModule,
