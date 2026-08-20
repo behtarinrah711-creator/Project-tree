@@ -32,18 +32,22 @@ jobs:
           const response=await fetch(`https://identitytoolkit.googleapis.com/v1/projects?key=${apiKey}`);
           const text=await response.text();
           console.log('Firebase Auth config HTTP status:', response.status);
-          if(!response.ok){
-            console.error(text);
-            process.exit(1);
-          }
+          if(!response.ok){ console.error(text); process.exit(1); }
           const config=JSON.parse(text);
           const domains=Array.isArray(config.authorizedDomains)?config.authorizedDomains:[];
-          const providers=Array.isArray(config.idpConfig)?config.idpConfig:[];
           console.log('Authorized domains:', domains.join(', '));
-          console.log('OAuth providers:', providers.map(item=>item.provider || item.providerId || item.id).filter(Boolean).join(', '));
           if(!domains.includes(requiredDomain)){
             console.error(`Missing Firebase authorized domain: ${requiredDomain}`);
             process.exit(2);
+          }
+          for(const host of ['tree-d92af.firebaseapp.com','tree-d92af.web.app']){
+            const url=`https://${host}/__/auth/handler`;
+            const probe=await fetch(url,{redirect:'manual'});
+            console.log(`${host} auth handler HTTP status:`,probe.status);
+            if(probe.status < 200 || probe.status >= 400){
+              console.error(`Firebase auth handler unavailable on ${host}`);
+              process.exit(3);
+            }
           }
           NODE
 
