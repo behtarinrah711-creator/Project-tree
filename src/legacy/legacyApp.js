@@ -35,7 +35,7 @@
    8) The same rules apply to every internal form under Reports, Accounting and Settings, current and future.
    9) This is a global architecture rule, not a per-page exception. New forms MUST reuse the same
       form-state/back-guard mechanism rather than implementing a separate one.
-============================================================================ */
+---------------------------------------------------------------------------- */
 const APP_FORM_ARCHITECTURE = Object.freeze({
   fullPage: true,
   hideFooter: true,
@@ -378,7 +378,7 @@ function getProjectIdFromRoute(){
   if(!m || !m[1]) return null;
   try{return decodeURIComponent(m[1]);}catch(e){return m[1];}
 }
-function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dashboard'}={}){
+function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dashboard',closeDrawerOnSelect=false}={}){
   const p=findProject(projectId);
   if(!p || p.trashed || p.archived) return false;
   data.activeTab=p.id;
@@ -389,6 +389,7 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
   if(updateRoute) setWorkspaceRoute(p.id,moduleId);
   if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
+  if(closeDrawerOnSelect) closeDrawer();
   if(render) renderAll();
   renderDrawerProjectList();
   return true;
@@ -396,25 +397,29 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
 function renderDrawerProjectList(){
   const list=document.getElementById('drawerProjectList');
   if(!list || !data) return;
-  list.innerHTML='';
   const source = window.KarhaApp?.projectWorkspace?.listProjects?.() || data.projects || [];
   const projects=source.filter(p=>p && !p.trashed && !p.archived && !isPendingDeleted('project',p.id));
   if(!projects.length){
+    list.replaceChildren();
     const empty=document.createElement('div'); empty.className='drawer-empty-projects'; empty.textContent='هنوز پروژه فعالی وجود ندارد. از «پروژه جدید» شروع کنید.'; list.appendChild(empty); return;
   }
-  projects.forEach(p=>{
-    const row=document.createElement('button'); row.type='button'; row.className='drawer-project-row'+(data.activeTab===p.id?' active':''); row.dataset.projectId=p.id;
-    const name=document.createElement('span'); name.className='drawer-project-name'; name.textContent=p.name||'پروژه بدون نام'; row.appendChild(name);
-    const undone=(p.tasks||[]).filter(t=>!t.done&&!t.trashed&&!isPendingDeleted('task',p.id,t.id)).length;
-    const count=document.createElement('span'); count.className='drawer-project-count'; count.textContent=toPersianDigits(String(undone)); row.appendChild(count);
-    row.onclick=()=>{
-      closeDrawer();
-      // Keep the click on the runtime that owns `data`. Going out through the
-      // workspace bridge and immediately back into legacy added two sources of
-      // active-project state and made cloud-login races difficult to recover.
-      setActiveProject(p.id,{updateRoute:true,render:true,moduleId:'dashboard'});
-    };
-    list.appendChild(row);
+  window.KarhaApp?.reconcileDrawerProjectList?.(list,projects,{
+    activeProjectId:data.activeTab,
+    createRow(){
+      const row=document.createElement('button'); row.type='button';
+      const name=document.createElement('span'); name.className='drawer-project-name'; row.appendChild(name);
+      const count=document.createElement('span'); count.className='drawer-project-count'; row.appendChild(count);
+      return row;
+    },
+    updateRow(row,p,active){
+      row.className='drawer-project-row'+(active?' active':'');
+      row.querySelector('.drawer-project-name').textContent=p.name||'پروژه بدون نام';
+      const undone=(p.tasks||[]).filter(t=>!t.done&&!t.trashed&&!isPendingDeleted('task',p.id,t.id)).length;
+      row.querySelector('.drawer-project-count').textContent=toPersianDigits(String(undone));
+    },
+    onSelect(projectId){
+      setActiveProject(projectId,{updateRoute:true,render:true,moduleId:'dashboard',closeDrawerOnSelect:true});
+    }
   });
 }
 function openGlobalTrashFromDrawer(){

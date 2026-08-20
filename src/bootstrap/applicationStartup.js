@@ -6,6 +6,7 @@ import { projectModules } from '../modules/index.js';
 import { listProjects, getProject, getActiveProject, selectProject } from '../core/projectWorkspace.js';
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
+import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -22,6 +23,7 @@ export async function startApplication({
     projectContext,
     projectRepository,
     taskRuntime: taskRuntimeModule,
+    reconcileDrawerProjectList,
     projectWorkspace: Object.freeze({ listProjects, getProject, getActiveProject, selectProject }),
   });
   windowRef.KarhaApp = application;
