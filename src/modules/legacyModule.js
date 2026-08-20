@@ -8,7 +8,9 @@ export function createLegacyModule({ id, title, route, open, render, selectors =
     mount(context) {
       const projectId = context?.projectId || null;
       const legacy = window.KarhaLegacy;
-      if (projectId && legacy?.setActiveProject) legacy.setActiveProject(projectId);
+      if (projectId && legacy?.setActiveProject) {
+        legacy.setActiveProject(projectId, { updateRoute: false, render: false });
+      }
       if (open && typeof legacy?.[open] === 'function') {
         legacy[open]();
       } else if (render && typeof legacy?.[render] === 'function') {

@@ -359,6 +359,10 @@ function addProject(name){
 
 function setWorkspaceRoute(projectId, moduleId='dashboard'){
   if(!projectId) return;
+  if(window.KarhaApp?.router?.navigate){
+    window.KarhaApp.router.navigate(projectId,moduleId);
+    return;
+  }
   const next = '#/projects/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(moduleId || 'dashboard');
   if(location.hash !== next){
     try{ history.pushState({projectId, moduleId}, '', next); }catch(e){ location.hash = next; }
@@ -367,6 +371,10 @@ function setWorkspaceRoute(projectId, moduleId='dashboard'){
 }
 function replaceWorkspaceRoute(projectId, moduleId='dashboard'){
   if(!projectId) return;
+  if(window.KarhaApp?.router?.navigate){
+    window.KarhaApp.router.navigate(projectId,moduleId,{replace:true});
+    return;
+  }
   const next = '#/projects/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(moduleId || 'dashboard');
   if(location.hash !== next){
     try{ history.replaceState({projectId, moduleId}, '', next); }catch(e){ location.hash = next; }
@@ -388,9 +396,11 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
   // the project that happened to be active before the tap.
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
   if(updateRoute) setWorkspaceRoute(p.id,moduleId);
-  if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
+  else if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
   if(closeDrawerOnSelect) closeDrawer();
-  if(render) renderAll();
+  // Programmatic navigation renders through Router -> module.mount. Callers
+  // that explicitly suppress routing still retain the legacy render option.
+  if(render && !updateRoute) renderAll();
   renderDrawerProjectList();
   return true;
 }
