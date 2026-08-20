@@ -2,6 +2,7 @@ const byId = (documentRef, id) => documentRef.getElementById(id);
 
 const AUTH_READY_TIMEOUT_MS = 5000;
 const AUTH_READY_POLL_MS = 50;
+const AUTH_POPUP_RETRY_MS = 250;
 
 function sleep(windowRef, ms){
   return new Promise(resolve => (windowRef.setTimeout || setTimeout)(resolve, ms));
@@ -24,7 +25,7 @@ function authErrorMessage(error, windowRef){
     return `ورود گوگل برای ${domain} در Firebase مجاز نشده است`;
   }
   if(code.includes('popup-blocked')) return 'مرورگر پنجره ورود گوگل را مسدود کرده است';
-  if(code.includes('network-request-failed')) return 'ارتباط با سرویس ورود برقرار نشد؛ اینترنت را بررسی کنید';
+  if(code.includes('network-request-failed')) return 'ارتباط با سرویس ورود برقرار نشد؛ مسیر جایگزین ورود نیز امتحان شد';
   if(code.includes('popup-closed-by-user')) return '';
   return error?.message ? `ورود انجام نشد: ${error.message}` : 'ورود با گوگل انجام نشد';
 }
@@ -36,13 +37,58 @@ function reportAuthError(error, {windowRef, documentRef}){
   if(toast){
     toast.textContent = message;
     toast.classList.add('show');
-    (windowRef.setTimeout || setTimeout)(()=>toast.classList.remove('show'), 5000);
+    (windowRef.setTimeout || setTimeout)(()=>toast.classList.remove('show'), 7000);
   } else if(typeof windowRef.alert === 'function'){
     windowRef.alert(message);
   }
   try{
     windowRef.dispatchEvent(new windowRef.CustomEvent('karha:auth-error', {detail:{code:error?.code || '', message}}));
   }catch{}
+}
+
+async function redirectSignIn(auth, provider, context){
+  try{
+    await auth.signInWithRedirect(provider);
+    return true;
+  }catch(error){
+    reportAuthError(error, context);
+    return false;
+  }
+}
+
+async function startGoogleSignIn(auth, provider, context){
+  try{
+    await auth.signInWithPopup(provider);
+    return true;
+  }catch(firstError){
+    const firstCode = String(firstError?.code || '');
+
+    // Popup/redirect auth behaves differently across Android browsers and after
+    // site data is cleared. A transient Firebase network failure on the popup
+    // should not strand the user: retry once, then use redirect as the final
+    // mobile-safe path. Configuration errors remain visible immediately.
+    if(firstCode.includes('network-request-failed')){
+      await sleep(context.windowRef, AUTH_POPUP_RETRY_MS);
+      try{
+        await auth.signInWithPopup(provider);
+        return true;
+      }catch(retryError){
+        const retryCode = String(retryError?.code || '');
+        if(retryCode.includes('network-request-failed') || retryCode.includes('popup-blocked') || retryCode.includes('operation-not-supported-in-this-environment')){
+          return redirectSignIn(auth, provider, context);
+        }
+        reportAuthError(retryError, context);
+        return false;
+      }
+    }
+
+    if(firstCode.includes('popup-blocked') || firstCode.includes('operation-not-supported-in-this-environment')){
+      return redirectSignIn(auth, provider, context);
+    }
+
+    reportAuthError(firstError, context);
+    return false;
+  }
 }
 
 /**
@@ -90,22 +136,7 @@ export function bindShellControls({ windowRef = window, documentRef = document }
       }
 
       const provider = new firebaseRef.auth.GoogleAuthProvider();
-      try{
-        await auth.signInWithPopup(provider);
-      }catch(error){
-        const code = String(error?.code || '');
-        // Redirect is only a useful fallback when the browser prevented a popup.
-        // Configuration/network errors must be surfaced instead of being hidden.
-        if(code.includes('popup-blocked') || code.includes('operation-not-supported-in-this-environment')){
-          try{
-            await auth.signInWithRedirect(provider);
-          }catch(redirectError){
-            reportAuthError(redirectError, {windowRef, documentRef});
-          }
-        }else{
-          reportAuthError(error, {windowRef, documentRef});
-        }
-      }
+      await startGoogleSignIn(auth, provider, {windowRef, documentRef});
     } finally {
       delete signin.dataset.authBusy;
     }
