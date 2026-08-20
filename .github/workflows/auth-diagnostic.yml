@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - diagnostic/auth-console
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
