@@ -7,6 +7,7 @@ import { listProjects, getProject, getActiveProject, selectProject } from '../co
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
 import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
+import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -31,6 +32,10 @@ export async function startApplication({
 
   await loadLegacy();
   router.start();
+  // Recovery runs beside the legacy listeners and only adds readable project
+  // records back into the live array. This covers pre-ownerUid cloud documents
+  // and protects login from listener-order races without changing cloud data.
+  startCloudProjectRecovery({windowRef,projectContext,router});
   windowRef.dispatchEvent(new windowRef.CustomEvent('karha:ready'));
   return application;
 }
