@@ -1,0 +1,70 @@
+name: Finalize migration phase 2.1
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.head_ref == 'migration/phase-2-1-activity-api'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/phase-2-1-activity-api
+          fetch-depth: 0
+      - name: Materialize reviewed snapshot
+        shell: python
+        run: |
+          import base64, io, re, zipfile
+          from pathlib import Path
+          carrier = Path('.github/workflows/apply-phase21.yml').read_text(encoding='utf-8')
+          match = re.search(r"payload = '''(.*?)'''", carrier, re.S)
+          if not match:
+              raise SystemExit('payload not found')
+          with zipfile.ZipFile(io.BytesIO(base64.b64decode(match.group(1)))) as z:
+              z.extractall('.')
+          p = Path('src/legacy/legacyApp.js')
+          s = p.read_text(encoding='utf-8')
+          old = """function persist(){
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(()=>{
+              (data.projects||[]).forEach(rememberProjectTasks);
+              try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+              catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
+              if(cloudMode && currentUser){"""
+          new = """function persist(options){
+            const writeLocal = !options || options.local !== false;
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(()=>{
+              if(writeLocal){
+                (data.projects||[]).forEach(rememberProjectTasks);
+                try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+                catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
+              }
+              if(cloudMode && currentUser){"""
+          if s.count(old) != 1:
+              raise SystemExit('persist patch anchor mismatch')
+          s = s.replace(old, new, 1)
+          old = """  } else if(type === 'activity'){
+            const p=findProject(pid); const a=p ? findActivityTemplate(gid,p) : null;
+            if(a){ a.trashed=true; a.deletedAt=Date.now(); a.deletedType='activity'; markDirty(pid); }
+          }"""
+          new = """  } else if(type === 'activity'){
+            window.KarhaApp?.activityApi?.trash?.(pid,gid);
+          }"""
+          if s.count(old) != 1:
+              raise SystemExit('activity patch anchor mismatch')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+      - name: Commit phase 2.1
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/domain src/data/activityRepository.js src/data/activityRepository.test.js src/modules/activities src/legacy/legacyApp.js
+          git rm .github/workflows/apply-phase21.yml .github/workflows/trigger-phase21.yml
+          git commit -m "Migrate activity writes to domain API"
+          git push origin HEAD:migration/phase-2-1-activity-api
