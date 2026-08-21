@@ -10,6 +10,7 @@ import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
 import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
 import { installProjectRecoveryRetention } from '../core/projectRecoveryRetention.js';
+import { installContractLinkedTaskRecovery } from '../core/contractLinkedTaskRecovery.js';
 import { installLogoutSessionGuard } from './logoutSessionGuard.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
@@ -47,6 +48,11 @@ export async function startApplication({
   // A later legacy Firestore snapshot must not erase projects already restored
   // by the authenticated recovery bridge during this same session.
   installProjectRecoveryRetention({windowRef});
+  // A project item referenced by an active contract is an authoritative linked
+  // record. If migration lost that task while the contract still carries its
+  // stable projectItemId/path, restore the minimum task hierarchy and persist it
+  // through the normal project-item migration boundary.
+  installContractLinkedTaskRecovery({windowRef,router});
   router.start();
   // Recovery runs beside the legacy listeners and only adds readable project
   // records back into the live array. This covers pre-ownerUid cloud documents
