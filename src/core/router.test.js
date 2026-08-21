@@ -103,6 +103,26 @@ test('programmatic A to B to C navigation keeps router, tasks, history, and cont
   assert.deepEqual(harness.invalidDashboardMounts,[]);
 });
 
+test('same-route child history does not remount the routed module', async () => {
+  const projectList=Object.keys(projects).map(id=>({id,...projects[id]}));
+  const harness=await createRouterHarness({
+    initialHash:'#/projects/B/contracts',initialProjects:projectList,activeTab:'B',
+  });
+  const mountsBefore=harness.contractProjects.length;
+  assert.equal(mountsBefore,1);
+
+  // Pickers, numpads and form layers push history entries without changing the
+  // hash route. Back through those entries belongs to the child UI layer, not
+  // to the app router.
+  window.history.pushState({karhaSearchTemplate:true},'',window.location.hash);
+  window.history.back();
+  await new Promise(resolve=>setTimeout(resolve,0));
+
+  assert.equal(harness.contractProjects.length,mountsBefore);
+  assert.equal(harness.router.currentMounted?.moduleId,'contracts');
+  assert.equal(window.location.hash,'#/projects/B/contracts');
+});
+
 test('empty startup mounts restored cloud project B and preserves later navigation', async () => {
   const harness=await createRouterHarness({initialHash:'',initialProjects:[],activeTab:null});
   assert.deepEqual(harness.data.projects,[]);

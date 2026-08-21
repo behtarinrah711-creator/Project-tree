@@ -47,6 +47,10 @@ function openFormShell(projectId) {
 
 function closeFormShell(fromPopState = false) {
   helper('closeRealContractFormShell', fromPopState);
+  if (formHistoryPushed && !fromPopState) {
+    helper('suppressWorkspaceBack');
+    try { history.back(); } catch {}
+  }
   formHistoryPushed = false;
 }
 
@@ -658,7 +662,27 @@ export const realContractFormModule = {
   },
 
   requestClose(fromPopState = false) {
-    return this.close(fromPopState);
+    if (fromPopState) formHistoryPushed = false;
+    if (!dirty) return this.close(fromPopState);
+
+    const restoreHistory = () => {
+      if (!fromPopState || formHistoryPushed) return;
+      helper('pushWorkspaceHistory', 'contractForm');
+      formHistoryPushed = true;
+    };
+    helper('showIncompleteFormExitChoice', {
+      onYes: () => {
+        try { localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state)); } catch {}
+        dirty = false;
+        this.close(true);
+      },
+      onNo: () => this.close(true),
+      onStay: restoreHistory
+    });
+    // Back consumed the form entry. Keep the still-mounted form as the parent
+    // while its existing save-draft decision is visible.
+    restoreHistory();
+    return false;
   },
 
   saveDraft,
