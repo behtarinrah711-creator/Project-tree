@@ -20,17 +20,19 @@ export class AppRouter{
     this.lastSyncedHash = null;
   }
 
+  queueSync(){
+    if(this.syncQueued) return;
+    this.syncQueued = true;
+    queueMicrotask(() => {
+      this.syncQueued = false;
+      this.sync();
+    });
+  }
+
   start(){
     if(this.started) return;
     this.started = true;
-    const sync = () => {
-      if(this.syncQueued) return;
-      this.syncQueued = true;
-      queueMicrotask(() => {
-        this.syncQueued = false;
-        this.sync();
-      });
-    };
+    const sync = () => this.queueSync();
     const syncPopState = () => {
       // Legacy child UI layers (picker/search/numpad/form history) deliberately
       // push same-URL history entries. Traversing those entries must not remount
@@ -44,7 +46,7 @@ export class AppRouter{
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', sync, { once: true });
     } else {
-      queueMicrotask(sync);
+      this.queueSync();
     }
   }
 
@@ -52,14 +54,19 @@ export class AppRouter{
     if(!projectId) return false;
     const route = `#/projects/${encodeURIComponent(projectId)}/${encodeURIComponent(moduleId || 'dashboard')}`;
     const method = replace ? 'replaceState' : 'pushState';
-    if(window.location.hash !== route){
+    const routeChanged = window.location.hash !== route;
+    if(routeChanged){
       window.history[method]({ projectId, moduleId }, '', route);
     }
-    // The History API does not emit hashchange or popstate. Routing owns the
-    // complete programmatic-navigation lifecycle, so synchronize it here once
-    // startup has installed the route listeners. Pre-start route setup is
-    // consumed by start()'s initial synchronization after Legacy is loaded.
-    if(this.started) this.sync();
+    // The History API does not emit hashchange or popstate. Normal programmatic
+    // navigation synchronizes immediately. Legacy renderAll(), however, calls a
+    // same-route replace while it is still rendering the old dashboard. Queue
+    // that remount to the next microtask so the modular dashboard becomes the
+    // single final renderer instead of being appended to by the legacy renderer.
+    if(this.started){
+      if(!routeChanged && replace) this.queueSync();
+      else this.sync();
+    }
     return true;
   }
 
