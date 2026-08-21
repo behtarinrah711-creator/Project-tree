@@ -11,7 +11,7 @@ async function waitForFirebaseAuth(windowRef, timeoutMs = AUTH_READY_TIMEOUT_MS)
   const started = Date.now();
   while(Date.now() - started < timeoutMs){
     const firebaseRef = windowRef.firebase;
-    if(firebaseRef?.auth && firebaseRef.auth.GoogleAuthProvider){
+    if(firebaseRef?.auth){
       try{
         const auth = firebaseRef.auth();
         if(auth) return { firebaseRef, auth };
