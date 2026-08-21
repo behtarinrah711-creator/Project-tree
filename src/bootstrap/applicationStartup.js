@@ -10,6 +10,7 @@ import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
 import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
 import { installProjectRecoveryRetention } from '../core/projectRecoveryRetention.js';
+import { installLogoutSessionGuard } from './logoutSessionGuard.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -33,6 +34,10 @@ export async function startApplication({
   windowRef.KarhaApp = application;
 
   await loadLegacy();
+  // Logout is a session boundary. Clear Project-tree's local user cache only
+  // when Firebase actually transitions from an authenticated user to guest,
+  // then reload so legacy in-memory recovery state cannot resurrect it.
+  installLogoutSessionGuard({windowRef});
   // Legacy still owns visibility of the internal page shells. Install one
   // explicit handoff before Router starts so Dashboard navigation always
   // exposes the mounted project/task surface instead of leaving Reports,
