@@ -10,6 +10,78 @@ function installLegacyGlobalHelpers(windowRef, documentRef){
   }
 }
 
+function installGuestFirebaseFallback(windowRef){
+  if(windowRef.firebase) return;
+
+  const resolved = value => Promise.resolve(value);
+  const rejected = error => Promise.reject(error);
+  const authInstance = {
+    currentUser: null,
+    onAuthStateChanged(callback){
+      queueMicrotask(() => callback(null));
+      return () => {};
+    },
+    signInWithPopup(){ return rejected(new Error('Firebase SDK unavailable')); },
+    signInWithRedirect(){ return rejected(new Error('Firebase SDK unavailable')); },
+    signOut(){ return resolved(); },
+  };
+
+  const unavailableQuery = () => ({
+    where(){ return unavailableQuery(); },
+    orderBy(){ return unavailableQuery(); },
+    limit(){ return unavailableQuery(); },
+    onSnapshot(_next, error){
+      if(typeof error === 'function') queueMicrotask(() => error(new Error('Firebase SDK unavailable')));
+      return () => {};
+    },
+    get(){ return resolved({ empty: true, docs: [], forEach(){} }); },
+  });
+
+  const unavailableDoc = () => ({
+    get(){ return resolved({ exists: false, data(){ return undefined; } }); },
+    set(){ return resolved(); },
+    update(){ return resolved(); },
+    delete(){ return resolved(); },
+    collection(){ return unavailableQuery(); },
+    onSnapshot(_next, error){
+      if(typeof error === 'function') queueMicrotask(() => error(new Error('Firebase SDK unavailable')));
+      return () => {};
+    },
+  });
+
+  const firestoreInstance = {
+    enablePersistence(){ return resolved(); },
+    collection(){
+      const query = unavailableQuery();
+      query.doc = unavailableDoc;
+      return query;
+    },
+    runTransaction(){ return rejected(new Error('Firebase SDK unavailable')); },
+  };
+
+  const FieldValue = {
+    delete(){ return null; },
+    serverTimestamp(){ return new Date(); },
+    arrayRemove(...values){ return { __op: 'arrayRemove', values }; },
+    arrayUnion(...values){ return { __op: 'arrayUnion', values }; },
+  };
+
+  const authFactory = () => authInstance;
+  authFactory.GoogleAuthProvider = class GoogleAuthProvider {};
+  const firestoreFactory = () => firestoreInstance;
+  firestoreFactory.FieldValue = FieldValue;
+
+  windowRef.firebase = {
+    __karhaGuestFallback: true,
+    apps: [],
+    initializeApp(){ this.apps.push({ name: '[DEFAULT]' }); return this.apps[0]; },
+    auth: authFactory,
+    firestore: firestoreFactory,
+  };
+
+  console.warn('Karha: Firebase SDK unavailable; continuing in local guest mode.');
+}
+
 /**
  * Loads the remaining legacy runtime with classic-script semantics.
  *
@@ -28,6 +100,11 @@ export function loadLegacyRuntime({
   // before it installs KarhaLegacy. If the helper is missing, evaluation stops
   // halfway through and footer navigation/forms become non-interactive.
   installLegacyGlobalHelpers(windowRef, documentRef);
+
+  // Firebase is optional for the local/guest workspace. If the CDN is blocked
+  // (as it can be in CI, offline mode, or restrictive networks), legacyApp must
+  // still finish booting so project navigation and local data remain usable.
+  installGuestFirebaseFallback(windowRef);
 
   const existing = documentRef.querySelector(LEGACY_RUNTIME_SELECTOR);
   if(existing){
