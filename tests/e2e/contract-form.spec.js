@@ -24,9 +24,31 @@ async function openRealContractForm(page, errors) {
       schemaVersion: 4, projects: [seed], activeTab: seed.id, viewMode: 'simple', starredOrder: []
     }));
   }, project);
-  await page.goto('/index.html#/projects/e2e-contract-project/contracts');
+
+  // Boot through the supported dashboard lifecycle instead of cold-loading an
+  // internal Contracts hash route. Then select the project and enter Contracts
+  // through the same real UI path a user follows.
+  await page.goto('/index.html#/projects/e2e-contract-project/dashboard');
   await page.waitForFunction(() => Boolean(window.KarhaLegacy && window.KarhaApp));
+
+  await page.locator('#hamburgerBtn').click();
+  const drawer = page.locator('#drawerOverlay');
+  await expect(drawer).not.toHaveClass(/\bhidden\b/);
+  const projectRow = page.locator('#drawerProjectList .drawer-project-row[data-project-id="e2e-contract-project"]');
+  await expect(projectRow).toBeVisible();
+  await projectRow.click();
+  await expect(drawer).toHaveClass(/\bhidden\b/);
+  await expect(page).toHaveURL(/#\/projects\/e2e-contract-project\/dashboard$/);
+
+  await page.locator('#bottomReportsBtn').click();
+  await expect(page.locator('#bottomReportsBtn')).toHaveClass(/\bactive\b/);
+
+  const contractsEntry = page.getByText('قرارداد پیمانکاران', { exact: true }).first();
+  await expect(contractsEntry).toBeVisible();
+  await contractsEntry.click();
+
   await expect(page.locator('#contractsPage')).toBeVisible();
+  await expect(page.locator('#contractAddBtn')).toBeVisible();
   await page.locator('#contractAddBtn').click();
   await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(page.locator('#contractFormBody .form-template')).toBeVisible();
