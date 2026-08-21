@@ -13,7 +13,10 @@ let dirty = false;
 let editingId = null;
 let inlineAddState = null;
 let activeProjectId = null;
-let formHistoryPushed = false;
+// True only while the current browser entry is owned by this mounted form.
+// A popstate consumes that entry before requestClose runs, so this is ownership
+// of the real stack entry rather than merely a record that open once pushed.
+let formHistoryOwned = false;
 const REAL_CONTRACT_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
 
 function activeProject(projectId = null) {
@@ -38,20 +41,20 @@ function currentProject() {
 function openFormShell(projectId) {
   const opened = helper('openRealContractFormShell', projectId);
   if (opened === false) return false;
-  if (!formHistoryPushed) {
+  if (!formHistoryOwned) {
     helper('pushWorkspaceHistory', 'contractForm');
-    formHistoryPushed = true;
+    formHistoryOwned = true;
   }
   return true;
 }
 
 function closeFormShell(fromPopState = false) {
   helper('closeRealContractFormShell', fromPopState);
-  if (formHistoryPushed && !fromPopState) {
+  if (formHistoryOwned) {
     helper('suppressWorkspaceBack');
     try { history.back(); } catch {}
   }
-  formHistoryPushed = false;
+  formHistoryOwned = false;
 }
 
 function ftCreateRoot(parent) {
@@ -662,13 +665,14 @@ export const realContractFormModule = {
   },
 
   requestClose(fromPopState = false) {
-    if (fromPopState) formHistoryPushed = false;
+    // The browser already consumed the form entry before dispatching popstate.
+    if (fromPopState) formHistoryOwned = false;
     if (!dirty) return this.close(fromPopState);
 
     const restoreHistory = () => {
-      if (!fromPopState || formHistoryPushed) return;
+      if (!fromPopState || formHistoryOwned) return;
       helper('pushWorkspaceHistory', 'contractForm');
-      formHistoryPushed = true;
+      formHistoryOwned = true;
     };
     helper('showIncompleteFormExitChoice', {
       onYes: () => {
