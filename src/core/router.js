@@ -1,5 +1,7 @@
 import { projectContext } from './projectContext.js';
 import { moduleRegistry } from './moduleRegistry.js';
+import { getSession } from './session.js';
+import { isProjectVisibleForSession } from './projectVisibility.js';
 
 export function parseRoute(){
   const hash = window.location.hash.replace(/^#\/?/, '');
@@ -66,16 +68,24 @@ export class AppRouter{
   sync(){
     const route = parseRoute();
     this.lastSyncedHash = window.location.hash;
-    projectContext.setProjectId(route.projectId);
+    const session = getSession();
+    const rawProject = route.projectId
+      ? (window.KarhaLegacy?.getProject?.(route.projectId)
+        || window.KarhaApp?.projectRepository?.find?.(route.projectId)
+        || null)
+      : null;
+    const allowed = !rawProject || isProjectVisibleForSession(rawProject, session);
+    const projectId = allowed ? route.projectId : null;
+    projectContext.setProjectId(projectId);
     const module = moduleRegistry.get(route.moduleId) || moduleRegistry.get('dashboard');
-    window.KarhaRoute = { ...route, module };
-    if(module && route.projectId){
-      this.currentMounted = module.mount({ projectId: route.projectId, route, registry: moduleRegistry });
+    window.KarhaRoute = { ...route, projectId, module };
+    if(module && projectId){
+      this.currentMounted = module.mount({ projectId, route: { ...route, projectId }, registry: moduleRegistry });
     } else {
       this.currentMounted = null;
     }
     window.dispatchEvent(new CustomEvent('karha:workspace-route-synced', {
-      detail: { ...route, moduleId: route.moduleId }
+      detail: { projectId, moduleId: route.moduleId }
     }));
   }
 }
