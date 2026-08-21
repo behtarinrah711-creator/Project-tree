@@ -1,7 +1,9 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
-import { activityRepository } from '../../data/activityRepository.js';
+import { activityApi } from '../../domain/activityApi.js';
 import { openActivityForm, openActivityEditForm, requestCloseActivityForm } from './activityFormModule.js';
+
+const PAGE_SIZE = 50;
 
 function getProjectId(explicit = null){
   return explicit
@@ -27,12 +29,72 @@ function getContracts(project){
 }
 
 function deleteActivity(projectId, activityId){
-  const check = window.KarhaLegacy?.canDeleteProjectRecord?.('activity', activityId);
-  if(check && check.ok === false){
-    window.KarhaLegacy?.showRecordDeleteBlocked?.('activity', check.refs);
+  const result = activityApi.trash(projectId, activityId);
+  if(!result.ok){
+    if(result.code === 'in_use'){
+      window.KarhaLegacy?.showRecordDeleteBlocked?.('activity', result.refs);
+    }else{
+      window.KarhaLegacy?.showToast?.(result.message || 'حذف فعالیت انجام نشد');
+    }
     return false;
   }
-  return !!activityRepository.softDelete(projectId, activityId);
+  return true;
+}
+
+function appendActivityRow({ list, rows, project, activity, projectId, rerender }){
+  const row=document.createElement('div');
+  row.className='activity-row';
+
+  const main=document.createElement('div');
+  main.className='activity-main';
+
+  const name=document.createElement('div');
+  name.className='activity-name';
+  name.textContent=activity.name || 'فعالیت بدون نام';
+
+  const templateCount=getContractTemplates(project)
+    .filter(t=>String(t.activityId)===String(activity.id)).length;
+  const contractCount=getContracts(project)
+    .filter(c=>String(c.activityId)===String(activity.id)).length;
+
+  const meta=document.createElement('div');
+  meta.className='activity-contract-meta';
+  meta.textContent=templateCount
+    ? `قالب قرارداد: ${templateCount} · قرارداد واقعی: ${contractCount}`
+    : 'بدون قالب قرارداد';
+
+  main.append(name,meta);
+
+  const actions=document.createElement('div');
+  actions.className='activity-actions';
+
+  const edit=document.createElement('button');
+  edit.type='button';
+  edit.className='activity-action';
+  edit.title='ویرایش';
+  edit.textContent='ویرایش';
+  edit.addEventListener('click',e=>{
+    e.stopPropagation();
+    openActivityEditForm(activity);
+  });
+
+  const del=document.createElement('button');
+  del.type='button';
+  del.className='activity-action danger';
+  del.title='حذف';
+  del.textContent='حذف';
+  del.addEventListener('click',e=>{
+    e.stopPropagation();
+    if(!confirm('آیا از حذف این فعالیت اطمینان دارید؟')) return;
+    if(deleteActivity(projectId,activity.id)) rerender();
+  });
+
+  actions.append(edit,del);
+  row.append(main,actions);
+  row.dataset.searchText=`${activity.name || ''} ${meta.textContent}`.toLocaleLowerCase('fa');
+  row.addEventListener('click',()=>openActivityEditForm(activity));
+  rows.push(row);
+  list.appendChild(row);
 }
 
 export const activitiesModule = {
@@ -61,9 +123,8 @@ export const activitiesModule = {
       return;
     }
 
-    const activities=activityRepository.list(activeId).filter(activity => !activity.trashed);
-
-    if(!activities.length){
+    const firstPage=activityApi.listPage(activeId, { cursor:0, limit:PAGE_SIZE });
+    if(!firstPage.items.length){
       const empty=document.createElement('div');
       empty.className='mgmt-empty';
       empty.textContent='هنوز فعالیتی ثبت نشده است.';
@@ -73,7 +134,6 @@ export const activitiesModule = {
 
     const searchWrap=document.createElement('div');
     searchWrap.className='workspace-search';
-
     const search=document.createElement('input');
     search.type='search';
     search.className='workspace-search-input';
@@ -83,69 +143,12 @@ export const activitiesModule = {
 
     const list=document.createElement('div');
     list.className='activity-list';
-
     const rows=[];
+    const rerender=()=>this.render(activeId);
 
-    activities.forEach(activity=>{
-      const row=document.createElement('div');
-      row.className='activity-row';
-
-      const main=document.createElement('div');
-      main.className='activity-main';
-
-      const name=document.createElement('div');
-      name.className='activity-name';
-      name.textContent=activity.name || 'فعالیت بدون نام';
-
-      const templateCount=getContractTemplates(project)
-        .filter(t=>String(t.activityId)===String(activity.id)).length;
-
-      const contractCount=getContracts(project)
-        .filter(c=>String(c.activityId)===String(activity.id)).length;
-
-      const meta=document.createElement('div');
-      meta.className='activity-contract-meta';
-      meta.textContent=templateCount
-        ? `قالب قرارداد: ${templateCount} · قرارداد واقعی: ${contractCount}`
-        : 'بدون قالب قرارداد';
-
-      main.append(name,meta);
-
-      const actions=document.createElement('div');
-      actions.className='activity-actions';
-
-      const edit=document.createElement('button');
-      edit.type='button';
-      edit.className='activity-action';
-      edit.title='ویرایش';
-      edit.textContent='ویرایش';
-      edit.addEventListener('click',e=>{
-        e.stopPropagation();
-        openActivityEditForm(activity);
-      });
-
-      const del=document.createElement('button');
-      del.type='button';
-      del.className='activity-action danger';
-      del.title='حذف';
-      del.textContent='حذف';
-      del.addEventListener('click',e=>{
-        e.stopPropagation();
-        if(!confirm('آیا از حذف این فعالیت اطمینان دارید؟')) return;
-        if(deleteActivity(activeId,activity.id)) this.render(activeId);
-      });
-
-      actions.append(edit,del);
-      row.append(main,actions);
-
-      row.dataset.searchText=
-        `${activity.name || ''} ${meta.textContent}`.toLocaleLowerCase('fa');
-
-      row.addEventListener('click',()=>openActivityEditForm(activity));
-
-      rows.push(row);
-      list.appendChild(row);
-    });
+    firstPage.items.forEach(activity => appendActivityRow({
+      list, rows, project, activity, projectId:activeId, rerender,
+    }));
 
     search.addEventListener('input',()=>{
       const q=String(search.value || '').trim().toLocaleLowerCase('fa');
@@ -155,7 +158,24 @@ export const activitiesModule = {
     });
 
     body.append(searchWrap,list);
-  }
+
+    if(firstPage.cursor != null){
+      const more=document.createElement('button');
+      more.type='button';
+      more.className='activity-action';
+      more.textContent='بارگذاری بیشتر';
+      let cursor=firstPage.cursor;
+      more.addEventListener('click',()=>{
+        const page=activityApi.listPage(activeId,{ cursor, limit:PAGE_SIZE });
+        page.items.forEach(activity => appendActivityRow({
+          list, rows, project, activity, projectId:activeId, rerender,
+        }));
+        cursor=page.cursor;
+        if(cursor==null) more.remove();
+      });
+      body.appendChild(more);
+    }
+  },
 };
 
 export default activitiesModule;
