@@ -674,9 +674,12 @@ export const realContractFormModule = {
       onYes: () => {
         try { localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state)); } catch {}
         dirty = false;
-        this.close(true);
+        // Whether the prompt came from Back or the UI, the form owns an entry
+        // here: Back restores one below, while a UI close still has the
+        // original entry. Consume that owned entry when the decision closes.
+        this.close(false);
       },
-      onNo: () => this.close(true),
+      onNo: () => this.close(false),
       onStay: restoreHistory
     });
     // Back consumed the form entry. Keep the still-mounted form as the parent

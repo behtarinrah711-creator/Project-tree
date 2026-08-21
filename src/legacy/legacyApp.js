@@ -1660,7 +1660,7 @@ function showIncompleteFormExitChoice({onYes,onNo,onStay}={}){
   const close=()=>ov.remove();
   ov.querySelector('[data-exit="yes"]').onclick=()=>{close();if(onYes) onYes();};
   ov.querySelector('[data-exit="no"]').onclick=()=>{close();if(onNo) onNo();};
-  ov.addEventListener('pointerdown',e=>{if(e.target===ov && onStay) onStay();});
+  ov.addEventListener('pointerdown',e=>{if(e.target===ov && onStay){close();onStay();}});
 }
 
 function formRequiredComplete(root){
