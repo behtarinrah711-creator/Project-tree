@@ -11,7 +11,10 @@ const project = {
   contractTemplates: [], contracts: [], statusForms: [], trashed: false, archived: false
 };
 
-const row = (page, label) => page.locator('#contractFormBody .ft-row').filter({ hasText: label }).first();
+const escapeRegExp = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const row = (page, label) => page.locator('#contractFormBody .ft-row').filter({
+  has: page.locator('.ft-label').filter({ hasText: new RegExp(`^${escapeRegExp(label)}:?$`) })
+}).first();
 
 async function openRealContractForm(page, errors) {
   page.on('pageerror', error => errors.push(`pageerror: ${error.message}`));
