@@ -17,6 +17,7 @@ export class AppRouter{
     this.currentMounted = null;
     this.started = false;
     this.syncQueued = false;
+    this.lastSyncedHash = null;
   }
 
   start(){
@@ -30,8 +31,16 @@ export class AppRouter{
         this.sync();
       });
     };
+    const syncPopState = () => {
+      // Legacy child UI layers (picker/search/numpad/form history) deliberately
+      // push same-URL history entries. Traversing those entries must not remount
+      // the routed module underneath them. Only synchronize a pop when the hash
+      // route itself actually changed.
+      if(window.location.hash === this.lastSyncedHash) return;
+      sync();
+    };
     window.addEventListener('hashchange', sync);
-    window.addEventListener('popstate', sync);
+    window.addEventListener('popstate', syncPopState);
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', sync, { once: true });
     } else {
@@ -56,6 +65,7 @@ export class AppRouter{
 
   sync(){
     const route = parseRoute();
+    this.lastSyncedHash = window.location.hash;
     projectContext.setProjectId(route.projectId);
     const module = moduleRegistry.get(route.moduleId) || moduleRegistry.get('dashboard');
     window.KarhaRoute = { ...route, module };
