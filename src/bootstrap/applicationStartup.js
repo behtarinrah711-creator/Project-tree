@@ -10,6 +10,8 @@ import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
 import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
 import { installProjectRecoveryRetention } from '../core/projectRecoveryRetention.js';
+import { installBackGestureGuard } from '../core/backGestureGuard.js';
+import { installContractFormExitBridge } from '../modules/contracts/contractFormExitBridge.js';
 import { installLogoutSessionGuard } from './logoutSessionGuard.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
@@ -34,6 +36,12 @@ export async function startApplication({
   windowRef.KarhaApp = application;
 
   await loadLegacy();
+  // Child overlays (search template / numpad / Jalali picker) own their Back
+  // gesture and must never cascade into closing the parent contract form.
+  installBackGestureGuard({windowRef,documentRef:windowRef.document});
+  // Contract forms use a reusable baseline/dirty policy. New records may save
+  // drafts; edits never draft and save changes back to the same contract.
+  installContractFormExitBridge({windowRef});
   // Logout is a session boundary. Clear Project-tree's local user cache only
   // when Firebase actually transitions from an authenticated user to guest,
   // then reload so legacy in-memory recovery state cannot resurrect it.
