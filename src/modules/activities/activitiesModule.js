@@ -27,6 +27,11 @@ function getContracts(project){
 }
 
 function deleteActivity(projectId, activityId){
+  const check = window.KarhaLegacy?.canDeleteProjectRecord?.('activity', activityId);
+  if(check && check.ok === false){
+    window.KarhaLegacy?.showRecordDeleteBlocked?.('activity', check.refs);
+    return false;
+  }
   return !!activityRepository.softDelete(projectId, activityId);
 }
 
