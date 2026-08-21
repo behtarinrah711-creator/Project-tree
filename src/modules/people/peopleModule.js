@@ -28,6 +28,11 @@ function openPeopleContactForm(contact){
 }
 
 function softDeleteContact(projectId, contactId){
+  const check = window.KarhaLegacy?.canDeleteProjectRecord?.('contact', contactId);
+  if(check && check.ok === false){
+    window.KarhaLegacy?.showRecordDeleteBlocked?.('contact', check.refs);
+    return false;
+  }
   const deleted=Boolean(contactRepository.softDelete(projectId, contactId));
   if(deleted) window.KarhaLegacy?.contactFormRuntime?.persistContacts?.(projectId);
   return deleted;

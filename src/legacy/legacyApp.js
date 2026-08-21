@@ -1316,60 +1316,78 @@ function findProjectRecordReferences(type, id){
   const addRef = (project, label) => {
     refs.push({projectId:project?.id || '', projectName:project?.name || '', label});
   };
+  const liveContracts = (project) => (project.contracts || []).filter(c => c && !c.trashed);
+  const liveTemplates = (project) => (project.contractTemplates || []).filter(t => t && !t.trashed);
+  const liveReports = (project) => (project.contractStatusReports || []).filter(r => r && !r.trashed);
+  const liveContacts = (project) => (project.contacts || []).filter(c => c && !c.trashed);
+  const liveTasks = (project) => (project.tasks || []).filter(t => t && !t.trashed);
 
   (data.projects || []).forEach(project=>{
-    if(!project) return;
+    if(!project || project.trashed) return;
 
-    // مخاطب‌ها در قراردادها و گزارش‌های قرارداد
     if(type === 'contact'){
-      (project.contracts || []).forEach(c=>{
-        if(!c) return;
+      liveContracts(project).forEach(c=>{
         if(String(c.contractorId || '') === targetId ||
-           String(c.employerId || '') === targetId ||
-           String(c.contactId || '') === targetId ||
-           String(c.employerContactId || '') === targetId){
-          addRef(project, 'قرارداد');
+ String(c.employerId || '') === targetId ||
+ String(c.contactId || '') === targetId ||
+ String(c.employerContactId || '') === targetId){
+addRef(project, 'قرارداد');
         }
       });
-      (project.contractStatusReports || []).forEach(r=>{
-        if(r && String(r.contactId || '') === targetId){
-          addRef(project, 'صورت وضعیت / گزارش قرارداد');
+      liveReports(project).forEach(r=>{
+        if(String(r.contactId || '') === targetId){
+addRef(project, 'صورت وضعیت / گزارش قرارداد');
         }
       });
     }
 
-    // فعالیت‌ها در مخاطبین، فعالیت‌های آیتم‌های پروژه، قالب/قرارداد و گزارش‌ها
     if(type === 'activity'){
-      (project.contacts || []).forEach(c=>{
-        if(c && Array.isArray(c.activities) && c.activities.some(x=>String(x)===targetId)){
-          addRef(project, 'مخاطب');
+      liveContacts(project).forEach(c=>{
+        if(Array.isArray(c.activities) && c.activities.some(x=>String(x)===targetId)){
+addRef(project, 'مخاطب');
         }
       });
-      (project.tasks || []).forEach(t=>{
-        if(!t) return;
+      liveTasks(project).forEach(t=>{
         if(Array.isArray(t.activities) && t.activities.some(x=>String(x)===targetId)){
-          addRef(project, 'آیتم پروژه');
+addRef(project, 'آیتم پروژه');
         }
         walkItems(t.subtasks,(item)=>{
-          if(item && Array.isArray(item.activities) && item.activities.some(x=>String(x)===targetId)){
-            addRef(project, 'زیرآیتم پروژه');
-          }
+if(item && !item.trashed && Array.isArray(item.activities) && item.activities.some(x=>String(x)===targetId)){
+  addRef(project, 'زیرآیتم پروژه');
+}
         });
       });
-      (project.contractTemplates || []).forEach(t=>{
-        if(t && String(t.activityId || '') === targetId){
-          addRef(project, 'قالب قرارداد');
+      liveTemplates(project).forEach(t=>{
+        if(String(t.activityId || '') === targetId){
+addRef(project, 'قالب قرارداد');
         }
       });
-      (project.contracts || []).forEach(c=>{
-        if(c && (String(c.activityId || '') === targetId ||
-                 (Array.isArray(c.activityIds) && c.activityIds.some(x=>String(x)===targetId)))){
-          addRef(project, 'قرارداد');
+      liveContracts(project).forEach(c=>{
+        if(String(c.activityId || '') === targetId ||
+ (Array.isArray(c.activityIds) && c.activityIds.some(x=>String(x)===targetId))){
+addRef(project, 'قرارداد');
         }
       });
-      (project.contractStatusReports || []).forEach(r=>{
-        if(r && String(r.activityId || '') === targetId){
-          addRef(project, 'صورت وضعیت / گزارش قرارداد');
+      liveReports(project).forEach(r=>{
+        if(String(r.activityId || '') === targetId){
+addRef(project, 'صورت وضعیت / گزارش قرارداد');
+        }
+      });
+    }
+
+    if(type === 'task' || type === 'subtask' || type === 'sub'){
+      const itemIds = new Set([targetId]);
+      if(type === 'task'){
+        liveTasks(project).forEach(t=>{
+if(String(t.id) !== targetId) return;
+walkItems(t.subtasks,(item)=>{
+  if(item && item.id != null) itemIds.add(String(item.id));
+});
+        });
+      }
+      liveContracts(project).forEach(c=>{
+        if(itemIds.has(String(c.projectItemId || ''))){
+addRef(project, 'قرارداد');
         }
       });
     }
@@ -1391,7 +1409,10 @@ function canDeleteProjectRecord(type, id){
 }
 
 function showRecordDeleteBlocked(type, refs){
-  const noun = type === 'contact' ? 'مخاطب' : 'فعالیت';
+  const noun = type === 'contact' ? 'مخاطب'
+    : (type === 'activity' ? 'فعالیت'
+    : (type === 'task' ? 'آیتم پروژه'
+    : (type === 'sub' || type === 'subtask' ? 'زیرآیتم پروژه' : 'مورد')));
   const places = (refs || []).map(r=>r.label).filter(Boolean);
   const uniquePlaces = [...new Set(places)];
   const where = uniquePlaces.length ? ' (استفاده در: '+uniquePlaces.join('، ')+')' : '';
@@ -1411,6 +1432,15 @@ function isPendingDeleted(type, pid, tid, sid){
 }
 
 function softDelete(type, pid, tid, sid, label){
+  if(type === 'task' || type === 'sub'){
+    const checkId = type === 'task' ? tid : sid;
+    const checkType = type === 'task' ? 'task' : 'subtask';
+    const check = canDeleteProjectRecord(checkType, checkId);
+    if(!check.ok){
+      showRecordDeleteBlocked(checkType, check.refs);
+      return false;
+    }
+  }
   if(pendingDelete) finalizePendingDelete();
   pendingDelete = { type, pid, tid, sid };
   renderAll();
@@ -1418,6 +1448,7 @@ function softDelete(type, pid, tid, sid, label){
   if(type === 'project' && !document.getElementById('projectsPage').classList.contains('hidden')) renderManagementPage();
   showUndoToast(label);
   pendingDelete.timeoutId = setTimeout(finalizePendingDelete, 4000);
+  return true;
 }
 
 // حذف سراسری رکوردهای خارج از ساختار پروژه؛ همان چرخه Undo → حذف‌شده‌ها را دارد.
@@ -1853,14 +1884,23 @@ function renderAll(){
   renderModeToggle();
   const content = document.getElementById('content');
   content.innerHTML = '';
+  if(data.activeTab === 'starred'){
+    renderStarredView(content);
+    return;
+  }
   const p = findProject(data.activeTab);
   if(!p || p.archived || p.trashed){
     content.innerHTML = '<div class="workspace-no-project">برای ورود به Workspace، از منوی سه‌خطی بالای صفحه یک پروژه را انتخاب کنید. تب «پروژه‌ها» فقط محتوای کاری پروژه فعال را نمایش می‌دهد.</div>';
     return;
   }
+  if(window.KarhaApp?.router?.navigate){
+    replaceWorkspaceRoute(p.id,'dashboard');
+    return;
+  }
   replaceWorkspaceRoute(p.id,'dashboard');
   renderProjectView(content, p);
 }
+
 function refreshStarredPartial(){
   // keep activeTab as starred; only refresh content (and tab counts via renderTabs)
   renderTabs();
@@ -6048,6 +6088,9 @@ window.KarhaLegacy = Object.freeze({
   getContacts,
   openNumpadGeneric,
   suppressWorkspaceBack(){ suppressWorkspaceBackOnce=true; },
+  canDeleteProjectRecord,
+  showRecordDeleteBlocked,
+  findProjectRecordReferences,
   showIncompleteFormExitChoice,
   pushWorkspaceHistory,
   requestAnimationFrame(callback){ return window.requestAnimationFrame(callback); },
