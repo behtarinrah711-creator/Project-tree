@@ -16,6 +16,16 @@ export class ActivityRepository{
     return this.projectRepository.scoped(projectId, 'activityTemplates');
   }
 
+  listPage(projectId, { cursor = 0, limit = 50, includeTrashed = false } = {}){
+    const start = Math.max(0, Number(cursor) || 0);
+    const size = Math.min(200, Math.max(1, Number(limit) || 50));
+    const all = this.list(projectId).filter(item => includeTrashed || !item.trashed);
+    return {
+      items: all.slice(start, start + size),
+      cursor: start + size < all.length ? start + size : null,
+    };
+  }
+
   get(projectId, activityId){
     if(!activityId) return null;
     return this.list(projectId).find(activity =>
