@@ -1729,6 +1729,7 @@ document.getElementById('promptOverlay').onclick = (e)=>{
 let numpadBuffer = '';
 let numpadOnDone = null; // generic callback(valueStr)
 let numpadOpts = { suffix: ' تومان', maxLen: 13, group: true };
+let numpadHistoryPushed = false;
 
 /** نام‌پد عمومی برای صورت وضعیت و فیلدهای عددی */
 function openNumpadGeneric(initial, onDone, opts){
@@ -1738,10 +1739,20 @@ function openNumpadGeneric(initial, onDone, opts){
   numpadBuffer = raw;
   updateNumpadDisplay();
   document.getElementById('numpadOverlay').classList.remove('hidden');
+  if(!numpadHistoryPushed){
+    try{ history.pushState({karhaNumpad:true},'',location.href); numpadHistoryPushed=true; }catch(e){}
+  }
 }
-function closeNumpad(){
+function closeNumpad(fromPopState=false){
   document.getElementById('numpadOverlay').classList.add('hidden');
   numpadOnDone = null;
+  if(numpadHistoryPushed){
+    numpadHistoryPushed=false;
+    if(!fromPopState){
+      suppressWorkspaceBackOnce=true;
+      try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
+    }
+  }
 }
 function updateNumpadDisplay(){
   const el = document.getElementById('numpadDisplay');
@@ -1784,6 +1795,13 @@ document.getElementById('numpadCancelBtn').onclick = closeNumpad;
 document.getElementById('numpadOverlay').onclick = (e)=>{
   if(e.target.id==='numpadOverlay') closeNumpad();
 };
+window.addEventListener('popstate',()=>{
+  const overlay=document.getElementById('numpadOverlay');
+  if(!numpadHistoryPushed || !overlay || overlay.classList.contains('hidden')) return;
+  numpadHistoryPushed=false;
+  suppressWorkspaceBackOnce=true;
+  closeNumpad(true);
+});
 
 /* ---------- content ---------- */
 
@@ -2358,7 +2376,9 @@ function shouldSuppressWorkspaceBack(){
   // تمپلیت جستجو (یا حالت جستجوی آن) باز است → بک مال همان است
   if(typeof isSearchTemplateOpen==='function' && isSearchTemplateOpen()) return true;
   if(suppressWorkspaceBackOnce){
-    suppressWorkspaceBackOnce=false;
+    // All legacy popstate listeners see the same suppression. Clearing this
+    // synchronously let a later listener close the parent form.
+    setTimeout(()=>{ suppressWorkspaceBackOnce=false; },0);
     return true;
   }
   return false;
@@ -5806,7 +5826,13 @@ window.addEventListener('popstate', ()=>{
   }
 
   // Back از فرم قرارداد واقعی -> لیست قراردادها.
-  if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){ requestCloseContractForm(true); return; }
+  if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){
+    // This listener owns the form pop. Prevent the later compatibility
+    // listener from handling the same browser event a second time.
+    suppressWorkspaceBackOnce=true;
+    requestCloseContractForm(true);
+    return;
+  }
   if(document.getElementById('contractsPage') && !document.getElementById('contractsPage').classList.contains('hidden')){ closeContractsPage(); return; }
 
   // Back از لیست صورت وضعیت‌ها -> حسابداری پروژه.
@@ -5981,6 +6007,8 @@ window.KarhaLegacy = Object.freeze({
   formatJalaliDisplay,
   getContacts,
   openNumpadGeneric,
+  suppressWorkspaceBack(){ suppressWorkspaceBackOnce=true; },
+  showIncompleteFormExitChoice,
   pushWorkspaceHistory,
   requestAnimationFrame(callback){ return window.requestAnimationFrame(callback); },
   svgGrip,
