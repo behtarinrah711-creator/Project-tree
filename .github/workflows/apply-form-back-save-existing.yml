@@ -1,0 +1,380 @@
+name: Apply form back save-existing hotfix
+on:
+  push:
+    branches:
+      - hotfix/form-back-save-existing
+    paths:
+      - .github/workflows/apply-form-back-save-existing.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/form-back-save-existing
+          fetch-depth: 0
+      - name: Apply hotfix
+        shell: bash
+        run: |
+          cat > /tmp/legacy.patch <<'PATCH'
+          --- a/src/legacy/legacyApp.js
+          +++ b/src/legacy/legacyApp.js
+          @@ -1652,13 +1652,18 @@
+             if(footer) footer.classList.toggle('global-form-footer-hidden',!!active);
+           }
+           
+          -/* Global exit guard for incomplete forms. Only two choices are shown. */
+          -function showIncompleteFormExitChoice({onYes,onNo,onStay}={}){
+          +/* Global exit guard for incomplete / dirty forms. Only two choices are shown.
+          + * Optional title/text distinguish "new draft" vs "edit changes". */
+          +function showIncompleteFormExitChoice({onYes,onNo,onStay,title,text}={}){
+             const existing=document.querySelector('.global-incomplete-exit-choice');
+             if(existing) return;
+             const ov=document.createElement('div');
+             ov.className='contact-exit-choice global-incomplete-exit-choice';
+          -  ov.innerHTML='<div class="contact-exit-card"><div class="contact-exit-title">اطلاعات کامل نشده است</div><div class="contact-exit-text">آیا اطلاعات فعلی به‌صورت پیش‌نویس ذخیره شود؟</div><div class="contact-exit-actions"><button type="button" class="mini-btn primary" data-exit="yes">بله</button><button type="button" class="mini-btn ghost" data-exit="no">خیر</button></div></div>';
+          +  const heading = title || 'اطلاعات کامل نشده است';
+          +  const body = text || 'آیا اطلاعات فعلی به‌صورت پیش‌نویس ذخیره شود؟';
+          +  ov.innerHTML='<div class="contact-exit-card"><div class="contact-exit-title"></div><div class="contact-exit-text"></div><div class="contact-exit-actions"><button type="button" class="mini-btn primary" data-exit="yes">بله</button><button type="button" class="mini-btn ghost" data-exit="no">خیر</button></div></div>';
+          +  ov.querySelector('.contact-exit-title').textContent = heading;
+          +  ov.querySelector('.contact-exit-text').textContent = body;
+             document.body.appendChild(ov);
+             const close=()=>ov.remove();
+             ov.querySelector('[data-exit="yes"]').onclick=()=>{close();if(onYes) onYes();};
+          @@ -1800,8 +1805,8 @@
+             if(numpadHistoryPushed){
+               numpadHistoryPushed=false;
+               if(!fromPopState){
+          -      suppressWorkspaceBackOnce=true;
+          -      try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
+          +      markSuppressWorkspaceBack();
+          +      try{ history.back(); }catch(e){}
+               }
+             }
+           }
+          @@ -1848,12 +1853,10 @@
+           };
+           window.addEventListener('popstate',()=>{
+             const overlay=document.getElementById('numpadOverlay');
+          -  // If the numpad is visible, this back belongs to it — close only the overlay
+          -  // and suppress parent form/list handlers (do not rely solely on the flag).
+          +  // If the numpad is visible, this back belongs to it — close only the overlay.
+             if(!overlay || overlay.classList.contains('hidden')) return;
+             numpadHistoryPushed=false;
+          -  suppressWorkspaceBackOnce=true;
+          -  try{ window.__karhaSuppressWorkspaceBackOnce=true; }catch(e){}
+          +  markSuppressWorkspaceBack();
+             closeNumpad(true);
+           });
+           
+          @@ -2434,35 +2437,42 @@
+           let searchTemplateHistoryPushed = false;
+           /** لایهٔ جدا برای حالت جستجوی داخل تمپلیت (کیبورد/فوکس) */
+           let searchTemplateSearchModePushed = false;
+          -/** وقتی فقط تمپلیت جستجو / نامبرپد / تقویم بسته می‌شود، بک فرم قرارداد / ورک‌اسپیس یک‌بار نادیده گرفته شود */
+          +/** وقتی فقط تمپلیت جستجو / نامبرپد / تقویم بسته می‌شود، بک فرم قرارداد / ورک‌اسپیس نادیده گرفته شود.
+          + *  Token stays active for the whole popstate cascade + a short settle window so
+          + *  every listener in the same back gesture sees the same decision. */
+           let suppressWorkspaceBackOnce = false;
+          +let suppressWorkspaceBackToken = 0;
+          +function markSuppressWorkspaceBack(){
+          +  suppressWorkspaceBackOnce = true;
+          +  suppressWorkspaceBackToken = (suppressWorkspaceBackToken + 1) | 0;
+          +  const token = suppressWorkspaceBackToken;
+          +  try{ window.__karhaSuppressWorkspaceBackOnce = true; }catch(e){}
+          +  setTimeout(()=>{
+          +    if(suppressWorkspaceBackToken !== token) return;
+          +    suppressWorkspaceBackOnce = false;
+          +    try{ window.__karhaSuppressWorkspaceBackOnce = false; }catch(e){}
+          +  }, 80);
+          +}
+           function shouldSuppressWorkspaceBack(){
+             if(typeof window!=='undefined' && window.__karhaSuppressWorkspaceBackOnce){
+          -    window.__karhaSuppressWorkspaceBackOnce=false;
+          -    suppressWorkspaceBackOnce=true;
+          +    suppressWorkspaceBackOnce = true;
+             }
+             if(typeof isSearchTemplateOpen==='function' && isSearchTemplateOpen()) return true;
+             if(typeof window!=='undefined' && window.KarhaSearchTemplate?.isOpen?.()) return true;
+             const numpad=document.getElementById('numpadOverlay');
+             if(numpad && !numpad.classList.contains('hidden')) return true;
+             const jalali=document.getElementById('jalaliPop');
+             if(jalali && !jalali.classList.contains('hidden')) return true;
+          -  if(suppressWorkspaceBackOnce){
+          -    setTimeout(()=>{ suppressWorkspaceBackOnce=false; },0);
+          -    return true;
+          -  }
+          +  if(suppressWorkspaceBackOnce) return true;
+             return false;
+           }
+           
+           window.KarhaSearchTemplateHooks = Object.assign({}, window.KarhaSearchTemplateHooks || {}, {
+          -  suppressBack(){ suppressWorkspaceBackOnce = true; try{ window.__karhaSuppressWorkspaceBackOnce = true; }catch(e){} }
+          +  suppressBack(){ markSuppressWorkspaceBack(); }
+           });
+          @@ -2553,17 +2563,20 @@
+             if(top) top.classList.remove('search-mode');
+             const inp=document.getElementById('searchTemplateInput');
+             if(inp){ inp.value=''; try{ inp.blur(); }catch(e){} }
+          -  const needBack = !fromPop && (searchTemplateHistoryPushed || searchTemplateSearchModePushed);
+             const steps = (!fromPop ? ((searchTemplateHistoryPushed?1:0)+(searchTemplateSearchModePushed?1:0)) : 0);
+             searchTemplateHistoryPushed=false;
+             searchTemplateSearchModePushed=false;
+             if(steps>0){
+          -    suppressWorkspaceBackOnce=true;
+          +    markSuppressWorkspaceBack();
+               try{
+                 if(steps===1) history.back();
+                 else history.go(-steps);
+          -    }catch(e){ suppressWorkspaceBackOnce=false; }
+          +    }catch(e){}
+          +  }else if(!fromPop){
+          +    markSuppressWorkspaceBack();
+             }
+           }
+          @@ -2576,8 +2589,8 @@
+               exitSearchTemplateSearchMode();
+               if(searchTemplateSearchModePushed){
+                 searchTemplateSearchModePushed=false;
+          -      suppressWorkspaceBackOnce=true;
+          -      try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
+          +      markSuppressWorkspaceBack();
+          +      try{ history.back(); }catch(e){}
+               }
+               return true;
+             }
+          @@ -2762,11 +2775,12 @@
+               exitSearchTemplateSearchMode();
+               searchTemplateSearchModePushed=false;
+          +    markSuppressWorkspaceBack();
+               return;
+             }
+           
+          -  suppressWorkspaceBackOnce=true;
+          +  markSuppressWorkspaceBack();
+             searchTemplateHistoryPushed=false;
+             searchTemplateSearchModePushed=false;
+             closeSearchTemplate(true);
+          @@ -4783,8 +4797,8 @@
+             if(jalaliPickerHistoryPushed){
+               jalaliPickerHistoryPushed=false;
+               if(!fromPopState){
+          -      suppressWorkspaceBackOnce=true;
+          -      try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
+          +      markSuppressWorkspaceBack();
+          +      try{ history.back(); }catch(e){}
+               }
+             }
+           }
+          @@ -4794,8 +4808,7 @@
+             if(!pop || pop.classList.contains('hidden')) return;
+             jalaliPickerHistoryPushed=false;
+          -  suppressWorkspaceBackOnce=true;
+          -  try{ window.__karhaSuppressWorkspaceBackOnce=true; }catch(e){}
+          +  markSuppressWorkspaceBack();
+             closeJalaliPicker(true);
+           });
+          @@ -5910,10 +5923,12 @@
+             }
+           
+             if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){
+          -    suppressWorkspaceBackOnce=true;
+          +    markSuppressWorkspaceBack();
+               requestCloseContractForm(true);
+               return;
+             }
+          @@ -6091,7 +6106,8 @@
+             formatJalaliDisplay,
+             getContacts,
+             openNumpadGeneric,
+          -  suppressWorkspaceBack(){ suppressWorkspaceBackOnce=true; },
+          +  suppressWorkspaceBack(){ markSuppressWorkspaceBack(); },
+          +  markSuppressWorkspaceBack,
+             canDeleteProjectRecord,
+             showRecordDeleteBlocked,
+             findProjectRecordReferences,
+          PATCH
+
+          cat > /tmp/contract.patch <<'PATCH'
+          --- a/src/modules/contracts/realContractFormModule.js
+          +++ b/src/modules/contracts/realContractFormModule.js
+          @@ -1,6 +1,7 @@
+           import { projectContext } from '../../core/projectContext.js';
+           import { projectRepository } from '../../data/projectRepository.js';
+           import { localStorageAdapter } from '../../data/storageAdapter.js';
+          +import { createFormExitSession } from '../../core/formExitPolicy.js';
+           import * as realContractDomain from './realContractDomain.js';
+           import { saveRealContract } from './realContractPersistence.js';
+           import * as contractPickers from './contractPickers.js';
+          @@ -14,6 +15,7 @@
+           let inlineAddState = null;
+           let activeProjectId = null;
+           let formHistoryPushed = false;
+          +let exitSession = null;
+           const REAL_CONTRACT_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
+          @@ -635,6 +637,30 @@
+               );
+               dirty = false;
+               inlineAddState = null;
+          +    exitSession = createFormExitSession({
+          +      isNew: () => !editingId,
+          +      getState: () => state,
+          +      showChoice: cfg => helper('showIncompleteFormExitChoice', cfg),
+          +      onSaveDraft: () => {
+          +        try { localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state)); } catch {}
+          +        dirty = false;
+          +        realContractFormModule.close(true);
+          +      },
+          +      onSaveChanges: () => {
+          +        realContractFormModule.save(activeProjectId, false);
+          +      },
+          +      onDiscard: fromPop => realContractFormModule.close(!!fromPop),
+          +      onStay: fromPop => {
+          +        if (fromPop && !formHistoryPushed) {
+          +          helper('pushWorkspaceHistory', 'contractForm');
+          +          formHistoryPushed = true;
+          +        }
+          +      },
+          +    });
+          +    exitSession.captureBaseline();
+          +
+               const title = document.getElementById('contractFormTitle');
+          @@ -667,15 +693,32 @@
+             requestClose(fromPopState = false) {
+               if (fromPopState) formHistoryPushed = false;
+          +    if (exitSession) {
+          +      if (dirty) exitSession.markDirty();
+          +      const result = exitSession.requestExit(fromPopState);
+          +      if (result === 'prompt' && fromPopState && !formHistoryPushed) {
+          +        helper('pushWorkspaceHistory', 'contractForm');
+          +        formHistoryPushed = true;
+          +      }
+          +      return result === 'closed';
+          +    }
+               if (!dirty) return this.close(fromPopState);
+               const restoreHistory = () => {
+                 if (!fromPopState || formHistoryPushed) return;
+                 helper('pushWorkspaceHistory', 'contractForm');
+                 formHistoryPushed = true;
+               };
+               helper('showIncompleteFormExitChoice', {
+          +      title: editingId ? 'تغییرات ذخیره نشده' : 'اطلاعات کامل نشده است',
+          +      text: editingId ? 'آیا تغییرات این فرم ذخیره شود؟' : 'آیا اطلاعات فعلی به‌صورت پیش‌نویس ذخیره شود؟',
+                 onYes: () => {
+          +        if(editingId){
+          +          this.save(activeProjectId, false);
+          +          return;
+          +        }
+                   try { localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state)); } catch {}
+                   dirty = false;
+                   this.close(true);
+          @@ -683,8 +726,6 @@
+                 onNo: () => this.close(true),
+                 onStay: restoreHistory
+               });
+          -    // Back consumed the form entry. Keep the still-mounted form as the parent
+          -    // while its existing save-draft decision is visible.
+               restoreHistory();
+               return false;
+             },
+          @@ -697,13 +738,17 @@
+               editingId = null;
+               inlineAddState = null;
+               activeProjectId = null;
+          +    exitSession = null;
+               closeFormShell(fromPopState);
+               return true;
+             },
+           
+             getState() { return state; },
+          -  isDirty() { return dirty; },
+          -  setDirty(value = true) { dirty = !!value; },
+          +  isDirty() { return dirty || !!exitSession?.isDirty?.(); },
+          +  setDirty(value = true) {
+          +    dirty = !!value;
+          +    if (value) exitSession?.markDirty?.();
+          +  },
+             setState(value) { state = value; }
+           };
+          PATCH
+
+          cat > src/core/formExitPolicy.js <<'JS'
+          export function stableSerialize(value){
+            try{
+              return JSON.stringify(value, (_key, v) => {
+                if(v && typeof v === 'object' && !Array.isArray(v)){
+                  const sorted = {};
+                  Object.keys(v).sort().forEach(k => { sorted[k] = v[k]; });
+                  return sorted;
+                }
+                return v;
+              });
+            }catch{
+              return String(value);
+            }
+          }
+
+          export function createFormExitSession({
+            isNew,
+            getState,
+            showChoice,
+            onSaveDraft,
+            onSaveChanges,
+            onDiscard,
+            onStay,
+          } = {}){
+            let baseline = stableSerialize(typeof getState === 'function' ? getState() : null);
+            let forcedDirty = false;
+            return {
+              captureBaseline(){
+                baseline = stableSerialize(typeof getState === 'function' ? getState() : null);
+                forcedDirty = false;
+              },
+              markDirty(){ forcedDirty = true; },
+              isDirty(){
+                if(forcedDirty) return true;
+                if(typeof getState !== 'function') return false;
+                return stableSerialize(getState()) !== baseline;
+              },
+              requestExit(fromPopState = false){
+                if(!this.isDirty()){
+                  onDiscard?.(fromPopState);
+                  return 'closed';
+                }
+                const creating = typeof isNew === 'function' ? !!isNew() : false;
+                const title = creating ? 'اطلاعات کامل نشده است' : 'تغییرات ذخیره نشده';
+                const text = creating ? 'آیا اطلاعات فعلی به‌صورت پیش‌نویس ذخیره شود؟' : 'آیا تغییرات این فرم ذخیره شود؟';
+                showChoice?.({
+                  title,
+                  text,
+                  onYes: () => {
+                    if(creating){
+                      if(typeof onSaveDraft === 'function') onSaveDraft(fromPopState);
+                      else onDiscard?.(fromPopState);
+                      return;
+                    }
+                    if(typeof onSaveChanges === 'function') onSaveChanges(fromPopState);
+                    else onDiscard?.(fromPopState);
+                  },
+                  onNo: () => onDiscard?.(fromPopState),
+                  onStay: () => onStay?.(fromPopState),
+                });
+                return 'prompt';
+              },
+            };
+          }
+
+          export default { createFormExitSession, stableSerialize };
+          JS
+
+          git apply /tmp/legacy.patch
+          git apply /tmp/contract.patch
+          rm -f .github/workflows/apply-form-back-save-existing.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/core/formExitPolicy.js src/legacy/legacyApp.js src/modules/contracts/realContractFormModule.js .github/workflows/apply-form-back-save-existing.yml
+          git commit -m "Fix contract form back flow and save edits"
+          git push origin HEAD:hotfix/form-back-save-existing
