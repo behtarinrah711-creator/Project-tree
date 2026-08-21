@@ -15,7 +15,7 @@ function createMemoryStorage(initialEntries = {}){
 
 export function assertActivityRepositoryContract(){
   const repository=new ActivityRepository(new ProjectRepository(createMemoryStorage()));
-  for(const method of ['list','get','save','update','softDelete']){
+  for(const method of ['list','listPage','get','save','update','softDelete']){
     if(typeof repository[method] !== 'function'){
       throw new Error(`ActivityRepository contract missing: ${method}`);
     }
