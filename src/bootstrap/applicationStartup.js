@@ -13,6 +13,7 @@ import { installProjectRecoveryRetention } from '../core/projectRecoveryRetentio
 import { installBackGestureGuard } from '../core/backGestureGuard.js';
 import { installContractFormExitBridge } from '../modules/contracts/contractFormExitBridge.js';
 import { installLogoutSessionGuard } from './logoutSessionGuard.js';
+import { getSession, installSessionObserver } from '../core/session.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -32,10 +33,13 @@ export async function startApplication({
     taskRuntime: taskRuntimeModule,
     reconcileDrawerProjectList,
     projectWorkspace: Object.freeze({ listProjects, getProject, getActiveProject, selectProject }),
+    getSession,
   });
   windowRef.KarhaApp = application;
 
   await loadLegacy();
+  // Observe uid only. Does not own login, logout, or cloud migrate.
+  installSessionObserver({windowRef});
   // Child overlays (search template / numpad / Jalali picker) own their Back
   // gesture and must never cascade into closing the parent contract form.
   installBackGestureGuard({windowRef,documentRef:windowRef.document});

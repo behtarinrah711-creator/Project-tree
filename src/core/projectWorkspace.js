@@ -1,5 +1,7 @@
 import { projectContext } from './projectContext.js';
 import { projectRepository } from '../data/projectRepository.js';
+import { getSession } from './session.js';
+import { isProjectVisibleForSession, projectsVisibleForSession } from './projectVisibility.js';
 
 function normalizeProject(project){
   if(!project) return null;
@@ -11,17 +13,21 @@ function normalizeProject(project){
 }
 
 export function listProjects(){
+  const session = getSession();
   const legacy = window.KarhaLegacy;
   const fromLegacy = legacy?.getProjectsList?.();
-  if(Array.isArray(fromLegacy) && fromLegacy.length) return fromLegacy.map(normalizeProject);
-  return projectRepository.getProjectsList().map(normalizeProject);
+  const source = Array.isArray(fromLegacy) && fromLegacy.length
+    ? fromLegacy
+    : projectRepository.getProjectsList();
+  return projectsVisibleForSession(source, session).map(normalizeProject);
 }
 
 export function getProject(projectId = projectContext.getProjectId()){
   if(!projectId) return null;
   const legacy = window.KarhaLegacy;
-  const project = legacy?.getProject?.(projectId);
-  return normalizeProject(project) || normalizeProject(projectRepository.getActiveProject(projectId));
+  const project = normalizeProject(legacy?.getProject?.(projectId))
+    || normalizeProject(projectRepository.getActiveProject(projectId));
+  return isProjectVisibleForSession(project, getSession()) ? project : null;
 }
 
 export function getActiveProject(){
