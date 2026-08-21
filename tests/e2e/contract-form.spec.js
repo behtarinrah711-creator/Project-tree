@@ -57,6 +57,12 @@ async function openRealContractForm(page, errors) {
   await expect(page.locator('#contractFormBody .form-template')).toBeVisible();
 }
 
+async function openEmptyContractFromList(page) {
+  await page.locator('#contractAddBtn').click();
+  await expect(page.locator('#contractFormPage')).toBeVisible();
+  await expect(page.locator('#contractFormBody .form-template')).toBeVisible();
+}
+
 async function waitForSearchHistoryToSettle(page) {
   await page.waitForFunction(() => {
     const state = window.history.state || {};
@@ -155,5 +161,48 @@ test('real New Contract preserves its state and owns child Back navigation', asy
   await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(page.locator('#contractsPage')).toBeHidden();
   await expect(place).toHaveValue('کارگاه مرکزی');
+  expect(errors).toEqual([]);
+});
+
+test('real contract form consumes exactly one history entry across repeated sessions', async ({ page }) => {
+  const errors = [];
+  await openRealContractForm(page, errors);
+
+  for (let session = 0; session < 3; session += 1) {
+    if (session > 0) await openEmptyContractFromList(page);
+
+    await page.goBack();
+    await expect(page.locator('#contractFormPage')).toBeHidden();
+    await expect(page.locator('#contractsPage')).toBeVisible();
+  }
+
+  expect(errors).toEqual([]);
+});
+
+test('dirty Back restore is consumed after exit and retained once after Stay', async ({ page }) => {
+  const errors = [];
+  await openRealContractForm(page, errors);
+  const place = row(page, 'محل انعقاد قرارداد').locator('input');
+  await place.fill('کارگاه مرکزی');
+
+  await page.goBack();
+  const prompt = page.locator('.global-incomplete-exit-choice');
+  await expect(prompt).toBeVisible();
+  // Tapping the dialog backdrop is the existing "Stay" action.
+  await prompt.click({ position: { x: 5, y: 5 } });
+  await expect(prompt).toBeHidden();
+  await expect(page.locator('#contractFormPage')).toBeVisible();
+
+  await page.goBack();
+  await expect(prompt).toBeVisible();
+  await prompt.locator('[data-exit="no"]').click();
+  await expect(page.locator('#contractFormPage')).toBeHidden();
+  await expect(page.locator('#contractsPage')).toBeVisible();
+
+  // A new form must not inherit the restored entry from the prior session.
+  await openEmptyContractFromList(page);
+  await page.goBack();
+  await expect(page.locator('#contractFormPage')).toBeHidden();
+  await expect(page.locator('#contractsPage')).toBeVisible();
   expect(errors).toEqual([]);
 });

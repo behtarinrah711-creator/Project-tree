@@ -1660,7 +1660,7 @@ function showIncompleteFormExitChoice({onYes,onNo,onStay}={}){
   const close=()=>ov.remove();
   ov.querySelector('[data-exit="yes"]').onclick=()=>{close();if(onYes) onYes();};
   ov.querySelector('[data-exit="no"]').onclick=()=>{close();if(onNo) onNo();};
-  ov.addEventListener('pointerdown',e=>{if(e.target===ov && onStay) onStay();});
+  ov.addEventListener('pointerdown',e=>{if(e.target===ov && onStay){close();onStay();}});
 }
 
 function formRequiredComplete(root){
@@ -5907,9 +5907,9 @@ window.addEventListener('popstate', ()=>{
 
   // Back از فرم قرارداد واقعی -> لیست قراردادها.
   if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){
-    // This listener owns the form pop. Prevent the later compatibility
-    // listener from handling the same browser event a second time.
-    suppressWorkspaceBackOnce=true;
+    // The browser has already consumed the form-owned entry. This callback
+    // returns below, so do not leave an overlay-suppression token behind: it
+    // would swallow the next session's legitimate form Back.
     requestCloseContractForm(true);
     return;
   }
