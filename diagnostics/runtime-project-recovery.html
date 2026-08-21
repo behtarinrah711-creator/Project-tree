@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Karha Runtime Recovery Diagnostic</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Tahoma,sans-serif;margin:0;background:#f5f6f8;color:#111}
+    main{max-width:900px;margin:auto;padding:20px}
+    .card{background:#fff;border:1px solid #ddd;border-radius:16px;padding:16px;margin-bottom:14px}
+    input,button,textarea{font:inherit}
+    input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #bbb;border-radius:10px}
+    button{padding:11px 14px;border:0;border-radius:10px;background:#151c7a;color:#fff;cursor:pointer;margin-left:8px;margin-top:10px}
+    button.secondary{background:#555}
+    textarea{width:100%;box-sizing:border-box;min-height:55vh;direction:ltr;text-align:left;white-space:pre;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+    .muted{color:#666;font-size:13px;line-height:1.8}
+    .ok{color:#087f23}.warn{color:#9b5b00}.err{color:#b00020}
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h2>تشخیص فقط‌خواندنی پروژه</h2>
+    <p class="muted">این صفحه هیچ داده‌ای را تغییر نمی‌دهد. فقط localStorage و Firestore قابل‌خواندن توسط حساب فعلی را بررسی می‌کند و روابط قرارداد → تسک/زیرتسک → تمپلیت را گزارش می‌دهد.</p>
+    <label>نام راهنمای پروژه</label>
+    <input id="projectName" value="تستی" autocomplete="off" />
+    <button id="runBtn">اجرای تشخیص</button>
+    <button id="copyBtn" class="secondary">کپی گزارش</button>
+    <div id="status" class="muted"></div>
+  </div>
+  <div class="card"><textarea id="output" readonly placeholder="گزارش اینجا نمایش داده می‌شود"></textarea></div>
+</main>
+<script type="module" src="./runtime-project-recovery.js"></script>
+</body>
+</html>
