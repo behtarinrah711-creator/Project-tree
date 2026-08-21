@@ -92,6 +92,13 @@
     if(!searchModePushed){try{history.pushState({karhaSearchTemplateSearch:true},'',location.href);searchModePushed=true;}catch(e){}}
     setTimeout(()=>{try{inp?.focus();}catch(e){}},30);
   }
+  function suppressParentBack(){
+    // Prefer explicit hook (legacy sets this to suppressWorkspaceBackOnce).
+    // Fallback: set the same flag directly so parent form/list popstate handlers
+    // never treat search-template history pops as "close the contract form".
+    try{ hooks().suppressBack?.(); }catch(e){}
+    try{ if(typeof window!=='undefined') window.__karhaSuppressWorkspaceBackOnce=true; }catch(e){}
+  }
   function close(fromPop){
     const page=document.getElementById('searchTemplatePage');
     if(page){page.classList.add('hidden');page.setAttribute('aria-hidden','true');}
@@ -102,7 +109,7 @@
     const steps=!fromPop?((historyPushed?1:0)+(searchModePushed?1:0)):0;
     historyPushed=false;searchModePushed=false;
     if(steps>0){
-      hooks().suppressBack?.();
+      suppressParentBack();
       try{if(steps===1)history.back();else history.go(-steps);}catch(e){}
     }
   }
@@ -110,7 +117,7 @@
     if(!isOpen())return false;
     if(isSearchMode()){
       exitSearch();
-      if(searchModePushed){searchModePushed=false;hooks().suppressBack?.();try{history.back();}catch(e){}}
+      if(searchModePushed){searchModePushed=false;suppressParentBack();try{history.back();}catch(e){}}
       return true;
     }
     close(false);return true;
@@ -150,8 +157,19 @@
   window.KarhaSearchTemplate={open,close,back,isOpen,isSearchMode,enterSearch,exitSearch,render};
   window.addEventListener('popstate',()=>{
     if(!isOpen())return;
-    if(isSearchMode()||searchModePushed){exitSearch();searchModePushed=false;return;}
-    hooks().suppressBack?.();historyPushed=false;searchModePushed=false;close(true);
+    if(isSearchMode()||searchModePushed){
+      exitSearch();
+      searchModePushed=false;
+      // Consumed only the search-focus history layer; parent form must stay.
+      suppressParentBack();
+      return;
+    }
+    // Closing the template itself via browser/hardware back: swallow so the
+    // workspace listener does not also requestClose the contract form.
+    suppressParentBack();
+    historyPushed=false;
+    searchModePushed=false;
+    close(true);
   });
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else setTimeout(init,0);
 })();
