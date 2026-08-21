@@ -121,7 +121,30 @@ export function openProjectItemPicker(projectId,state,onChange,onAddActivity){
     onSelect:item=>{
       if(!selectProjectItem(projectId,state,item))return;
       onChange?.(state);
-      openActivityPicker(projectId,state,onChange,onAddActivity);
+
+      // Selecting an item closes the current search template by consuming its
+      // owned history entry. Opening the activity picker synchronously here
+      // lets that pending popstate close the newly opened picker instead.
+      // Wait for the current picker history pop to finish, then open the child
+      // activity picker. The timeout is only a fallback for non-history hosts.
+      const openActivity=()=>openActivityPicker(projectId,state,onChange,onAddActivity);
+      if(typeof window==='undefined' || typeof window.addEventListener!=='function'){
+        openActivity();
+        return;
+      }
+      let opened=false;
+      const afterPop=()=>{
+        if(opened)return;
+        opened=true;
+        clearTimeout(fallback);
+        openActivity();
+      };
+      window.addEventListener('popstate',afterPop,{once:true});
+      const fallback=setTimeout(()=>{
+        if(opened)return;
+        try{window.removeEventListener('popstate',afterPop);}catch{}
+        afterPop();
+      },150);
     }
   });
 }
