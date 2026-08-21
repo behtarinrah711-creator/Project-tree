@@ -54,10 +54,22 @@ async function openRealContractForm(page, errors) {
   await expect(page.locator('#contractFormBody .form-template')).toBeVisible();
 }
 
-async function selectSearchOption(page, field, option) {
+async function waitForSearchHistoryToSettle(page) {
+  await page.waitForFunction(() => {
+    const state = window.history.state || {};
+    return !state.karhaSearchTemplate && !state.karhaSearchTemplateSearch;
+  });
+  await expect(page.locator('#contractFormPage')).toBeVisible();
+}
+
+async function selectSearchOption(page, field, option, { settle = true } = {}) {
   await row(page, field).click();
   await expect(page.locator('#searchTemplatePage')).toBeVisible();
   await page.locator('.stpl-row').filter({ hasText: option }).first().click();
+  if (settle) {
+    await expect(page.locator('#searchTemplatePage')).toBeHidden();
+    await waitForSearchHistoryToSettle(page);
+  }
 }
 
 async function enterNumpad(page, field, digits) {
@@ -95,10 +107,12 @@ test('real New Contract preserves its state and owns child Back navigation', asy
   await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(place).toHaveValue('کارگاه مرکزی');
 
-  await selectSearchOption(page, 'آیتم پروژه', 'عملیات سازه');
+  await selectSearchOption(page, 'آیتم پروژه', 'عملیات سازه', { settle: false });
   // Project-item selection intentionally continues to the activity picker.
   await expect(page.locator('#searchTemplatePage')).toBeVisible();
   await page.locator('.stpl-row').filter({ hasText: 'اجرای سازه' }).click();
+  await expect(page.locator('#searchTemplatePage')).toBeHidden();
+  await waitForSearchHistoryToSettle(page);
   await expect(row(page, 'آیتم پروژه')).toContainText('عملیات سازه');
   await selectSearchOption(page, 'کارفرما', 'کارفرمای آزمایشی');
   await expect(row(page, 'کارفرما')).toContainText('کارفرمای آزمایشی');
