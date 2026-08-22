@@ -1,4 +1,6 @@
 import { projectItemRepository } from '../../data/projectItemRepository.js';
+import { projectRepository } from '../../data/projectRepository.js';
+import { canDeleteTask } from '../../domain/deleteGuard.js';
 
 const makeItem=(id,text)=>({id,text,done:false,starred:false,cost:null,activities:[],subtasks:[],completedAt:null});
 
@@ -54,6 +56,8 @@ export class TaskRuntimeModule{
     return subtaskId ? this.updateSubtask(projectId,itemId,subtaskId,apply) : this.update(projectId,itemId,apply);
   }
   softDelete(projectId,itemId,subtaskId=null){
+    const check=canDeleteTask(projectRepository.getProjectsList(), itemId, subtaskId);
+    if(!check.ok) return null;
     return this.changed(projectId,subtaskId ? this.repository.softDeleteSubtask(projectId,itemId,subtaskId) : this.repository.softDelete(projectId,itemId));
   }
   restore(projectId,itemId,subtaskId=null){ return this.changed(projectId,this.repository.restore(projectId,itemId,subtaskId)); }

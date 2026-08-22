@@ -1,5 +1,5 @@
 import { projectContext } from '../../core/projectContext.js';
-import { activityRepository } from '../../data/activityRepository.js';
+import { activityApi } from '../../domain/activityApi.js';
 
 const runtime=new Proxy({}, {get(_target,key){return window.KarhaLegacy?.activityFormRuntime?.[key];}});
 
@@ -61,18 +61,15 @@ function saveActivity(input,activity){
     if(!activity) input.focus();
     return false;
   }
-  const duplicate=activityRepository.list(state.projectId).some(item=>
-    (!activity || String(item.id)!==String(activity.id))
-      && (!activity || !item.trashed)
-      && String(item.name||'').trim()===name
-  );
-  if(duplicate){runtime.showToast?.('این فعالیت قبلاً ثبت شده است');return false;}
-
-  const record=activity
-    ? {...activity,name}
-    : {id:runtime.uid?.(),name,createdAt:Date.now()};
-  if(!record.id || !activityRepository.save(state.projectId,record)) return false;
-  runtime.persistActivities?.(state.projectId);
+  const result=activityApi.save(state.projectId,{
+    ...(activity||{}),
+    id:activity?.id,
+    name,
+  });
+  if(!result.ok){
+    runtime.showToast?.(result.message || 'ذخیره فعالیت انجام نشد');
+    return false;
+  }
   state.dirty=false;
   closeActivityForm(true);
   runtime.renderActivities?.(state.projectId);
@@ -88,7 +85,7 @@ export function openActivityEditForm(activity){
   if(!activity?.id) return false;
   const projectId=beginForm(activity.id);
   if(!projectId) return false;
-  const stored=activityRepository.get(projectId,activity.id) || activity;
+  const stored=activityApi.lookup(projectId,activity.id) || activity;
   return renderForm(stored);
 }
 

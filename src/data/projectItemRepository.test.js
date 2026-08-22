@@ -17,7 +17,7 @@ export function assertProjectItemRepositoryContract(){
   const repository=new ProjectItemRepository(new ProjectRepository(createMemoryStorage({
     'gtasks-clone-v2':JSON.stringify({projects:[{id:'p1',tasks:[]}]})
   })));
-  for(const method of ['list','get','save','update','softDelete','updateSubtask','addSubtask','softDeleteSubtask','restore','remove','reorder']){
+  for(const method of ['list','listPage','get','save','update','softDelete','updateSubtask','addSubtask','softDeleteSubtask','restore','remove','reorder']){
     if(typeof repository[method] !== 'function'){
       throw new Error(`ProjectItemRepository contract missing: ${method}`);
     }

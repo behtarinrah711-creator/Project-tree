@@ -1,6 +1,7 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
 import { projectItemRepository } from '../../data/projectItemRepository.js';
+import { taskApi } from '../../domain/taskApi.js';
 
 function getProjectId(explicitProjectId=null){
   return explicitProjectId || projectContext.getProjectId?.()
@@ -92,12 +93,8 @@ export const dashboardModule={
       clearBtn.onclick = (e)=>{
         e.stopPropagation();
         legacy("openConfirm",'همه موارد تکمیل‌شده این پروژه حذف شوند؟', ()=>{
-          completedTasks.forEach(t=>projectItemRepository.update(p.id,t.id,item=>({...item,trashed:true})));
-          doneSubsUnderOpen.forEach(({t,s})=>projectItemRepository.update(p.id,t.id,item=>({
-            ...item,
-            subtasks:(item.subtasks||[]).map(child=>String(child.id)===String(s.id)?{...child,trashed:true}:child),
-          })));
-          window.KarhaLegacy?.projectItemRuntime?.persistItems(p.id);
+          completedTasks.forEach(t=>taskApi.trash(p.id,t.id));
+          doneSubsUnderOpen.forEach(({t,s})=>taskApi.trash(p.id,t.id,s.id));
           legacy('renderAll');
           legacy("showToast",'تکمیل‌شده‌ها حذف شدند');
         }, 'حذف همه');
