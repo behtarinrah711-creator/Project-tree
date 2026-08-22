@@ -1,6 +1,7 @@
 import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from '../core/session.js';
 import { isProjectVisibleForSession, projectsVisibleForSession } from '../core/projectVisibility.js';
+import { isOffline } from './mergePolicy.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -73,6 +74,7 @@ export const projectApi = {
   },
 
   create({ name } = {}){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     const trimmed = String(name || '').trim();
     if(!trimmed) return deny('invalid', 'نام پروژه را وارد کنید');
     const session = getSession();
@@ -106,6 +108,7 @@ export const projectApi = {
   },
 
   rename(projectId, name){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     const trimmed = String(name || '').trim();
     if(!projectId || !trimmed) return deny('invalid', 'نام پروژه نامعتبر است');
     const project = projectRepository.find(projectId);
@@ -118,6 +121,7 @@ export const projectApi = {
   },
 
   trash(projectId){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId) return deny('invalid', 'پروژه نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);
@@ -134,6 +138,7 @@ export const projectApi = {
   },
 
   archive(projectId, archived = true){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId) return deny('invalid', 'پروژه نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);

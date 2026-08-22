@@ -3,6 +3,7 @@ import { projectRepository } from '../data/projectRepository.js';
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { getSession } from '../core/session.js';
 import { canDeleteTask } from './deleteGuard.js';
+import { isOffline } from './mergePolicy.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -64,6 +65,7 @@ export const taskApi = {
   },
 
   trash(projectId, itemId, subtaskId = null){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !itemId) return deny('invalid', 'آیتم نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);

@@ -2,6 +2,7 @@ import { activityRepository } from '../data/activityRepository.js';
 import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from '../core/session.js';
 import { canDeleteActivity } from './deleteGuard.js';
+import { isOffline } from './mergePolicy.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -71,6 +72,7 @@ export const activityApi = {
   },
 
   save(projectId, draft){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !draft) return deny('invalid', 'فعالیت نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);
@@ -98,6 +100,7 @@ export const activityApi = {
   },
 
   trash(projectId, activityId){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !activityId) return deny('invalid', 'فعالیت نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);
