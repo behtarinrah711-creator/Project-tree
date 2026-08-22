@@ -1,0 +1,157 @@
+ill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+-    <h2>صورت وضعیت قراردادی</h2><span class="inner-section-spacer"></span>
+-  </div>
+-  <div class="page-body" id="contractStatusBody"></div>
+-</div><div class="page-overlay workspace-page hidden" id="contractApprovalPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeContractApprovalPage" type="button" aria-label="بازگشت"><svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+-    <h2>تاییدیه حسابداری قراردادها</h2><span class="inner-section-spacer"></span>
+-  </div>
+-  <div class="page-body" id="contractApprovalBody"></div>
+-</div>
+-
+-
+-
+-<div class="jalali-pop hidden" id="jalaliPop">
+-  <div class="jalali-box" id="jalaliBox"></div>
+-</div>
+-
+-<div class="confirm-overlay hidden" id="confirmOverlay">
+-  <div class="confirm-box">
+-    <p id="confirmText">آیا مطمئن هستید؟</p>
+-    <div class="mini-actions">
+-      <button class="mini-btn ghost" id="confirmCancelBtn">انصراف</button>
+-      <button class="mini-btn danger" id="confirmOkBtn">تایید</button>
+-    </div>
+-  </div>
+-</div>
+ <!-- undo toast (soft delete) -->
+ <div class="undo-toast hidden" id="undoToast">
+   <span id="undoToastText">حذف شد</span>
+diff --git a/src/bootstrap/applicationStartup.js b/src/bootstrap/applicationStartup.js
+index 1a23456..bcd8832 100644
+--- a/src/bootstrap/applicationStartup.js
++++ b/src/bootstrap/applicationStartup.js
+@@ -22,6 +22,10 @@ import { projectApi } from '../domain/projectApi.js';
+ import * as mergePolicy from '../domain/mergePolicy.js';
+ import { registerPersistImpl } from '../sync/persistAdapter.js';
+ import { applyCloudSnapshot, applyCloudProjectList } from '../sync/applyCloudSnapshot.js';
++import { startOwnedCloudListeners, stopOwnedCloudListeners } from '../sync/cloudListeners.js';
++import { registerFormRuntimes, getActivityFormRuntime, getContactFormRuntime } from '../ui/formRuntimes.js';
++import { showToast as uiShowToast } from '../ui/toast.js';
++import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
+ 
+ /** Start the modular API, then the classic legacy runtime, then routing. */
+ export async function startApplication({
+@@ -50,6 +54,13 @@ export async function startApplication({
+     mergePolicy,
+     applyCloudSnapshot,
+     applyCloudProjectList,
++    startOwnedCloudListeners,
++    stopOwnedCloudListeners,
++    registerFormRuntimes,
++    getActivityFormRuntime,
++    getContactFormRuntime,
++    showToast: uiShowToast,
++    shellSurface: Object.freeze({ showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS }),
+   });
+   windowRef.KarhaApp = application;
+ 
+diff --git a/src/core/projectRouteSurface.js b/src/core/projectRouteSurface.js
+index 582d0ac..5465f25 100644
+--- a/src/core/projectRouteSurface.js
++++ b/src/core/projectRouteSurface.js
+@@ -1,34 +1,22 @@
+ const WORKSPACE_PAGE_IDS = [
+-  'projectsPage','profilePage','collabPage','calendarPage','statusListPage','statusFormPage',
+-  'statusExportPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage',
+-  'contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage',
+-  'contractTemplatesPage','statusTestPage','contractStatusPage','contractApprovalPage','activityFormPage',
+-  'shareFormPage',
++  'projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage',
++  'projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage',
++  'contractTemplateFormPage','contractTemplatesPage','activityFormPage',
+ ];
+ 
+ export function showProjectsDashboardSurface({ documentRef = globalThis.document } = {}){
+   if(!documentRef) return false;
+   WORKSPACE_PAGE_IDS.forEach(id => documentRef.getElementById?.(id)?.classList?.add?.('hidden'));
+-
+   documentRef.querySelectorAll?.('.bottom-nav-item')?.forEach?.(item => item.classList?.remove?.('active'));
+   documentRef.getElementById?.('bottomProjectsBtn')?.classList?.add?.('active');
+-
+   const topbar = documentRef.getElementById?.('topbar');
+   topbar?.classList?.remove?.('workspace-context');
+   topbar?.classList?.remove?.('root-workspace-context');
+-
+   const tabbar = documentRef.getElementById?.('tabbar');
+   tabbar?.setAttribute?.('aria-hidden', 'false');
+   return true;
+ }
+ 
+-/**
+- * Router owns project/module navigation after the migrations, while the legacy
+- * shell still owns visibility of Reports/Accounting/Settings page shells.
+- * When navigation lands on Dashboard, make that shell handoff explicit so a
+- * previously visible internal page cannot keep covering the freshly mounted
+- * project/task content.
+- */
+ export function installProjectRouteSurfaceSync({
+   windowRef = globalThis.window,
+   documentRef = windowRef?.document || globalThis.document,
+@@ -36,12 +24,11 @@ export function installProjectRouteSurfaceSync({
+   if(!windowRef?.addEventListener || !documentRef) return false;
+   if(windowRef.__karhaProjectRouteSurfaceSyncInstalled) return false;
+   windowRef.__karhaProjectRouteSurfaceSyncInstalled = true;
+-
+   windowRef.addEventListener('karha:workspace-route-synced', event => {
+-    const projectId = event?.detail?.projectId;
+-    const moduleId = event?.detail?.moduleId || 'dashboard';
+-    if(!projectId || moduleId !== 'dashboard') return;
+-    showProjectsDashboardSurface({ documentRef });
++    const moduleId = event?.detail?.moduleId;
++    if(moduleId === 'dashboard' || moduleId === 'tasks' || !moduleId){
++      showProjectsDashboardSurface({ documentRef });
++    }
+   });
+   return true;
+ }
+diff --git a/src/legacy/legacyApp.js b/src/legacy/legacyApp.js
+index 0b9581e..60bbccb 100644
+--- a/src/legacy/legacyApp.js
++++ b/src/legacy/legacyApp.js
+@@ -1195,7 +1195,7 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
+   const wasAdding = false;
+   const projectsPageVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
+   const profilePageVisible = !document.getElementById('profilePage')?.classList.contains('hidden');
+-  const collabPageVisible = !document.getElementById('collabPage')?.classList.contains('hidden');
++  const collabPageVisible = !document.getElementById()?.classList.contains('hidden');
+ 
+   // دریافت Snapshot از Firestore نباید ناوبری فعلی کاربر را خراب کند.
+   // قبلاً هر Snapshot مستقیماً renderAll() می‌کرد و ممکن بود وسط صورت‌وضعیت،
+@@ -1250,45 +1250,35 @@ async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
+ function startCloudListeners(){
+   stopCloudListeners();
+   let ownedDocs = [], sharedDocs = [];
+-  const myEmailLower = normalizeEmail(currentUser.email);
+-
+-  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
+-    .onSnapshot(snap => { ownedDocs = snap.docs; mergeCloudSnapshots(ownedDocs, sharedDocs); hydrateAllCloudProjects(ownedDocs, sharedDocs); },
+-      err => { console.error('owned listener', err); showToast('خطا در دریافت پروژه‌های خودتان'); });
+-
+-  // sharedWith باید دقیقاً lowercase باشد (همان‌طور که هنگام اشتراک ذخیره می‌شود)
+-  // Phase 5: sharing disabled — do not subscribe to sharedWith.
+-  cloudUnsubShared = null; if(false) cloudUnsubShared = db.collection('projects').where('sharedWith','array-contains', myEmailLower)
+-    .onSnapshot(snap => {
+-      sharedDocs = snap.docs;
+-      mergeCloudSnapshots(ownedDocs, sharedDocs);
+-      hydrateAllCloudProjects(ownedDocs, sharedDocs);
+-      // اگر پروژه‌ای به اشتراک گذاشته شده، یک‌بار اطلاع بده
+-      if(snap.docs.length && !window.__sharedToastShown){
+-        window.__sharedToastShown = true;
+-        showToast(snap.docs.length + ' پروژه اشتراکی دریافت شد');
+-      }
+-    }, err => {
+-      console.error('shared listener', err);
+-      const code = err && err.code ? String(err.code) : '';
+  
