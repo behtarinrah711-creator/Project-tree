@@ -21,11 +21,12 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Apply phase 5 patches with three-way fallback
+      - name: Apply phase 5 patches
         run: |
           for p in .phase5-patch/part0.patch .phase5-patch/part1.patch .phase5-patch/part2.patch .phase5-patch/part3.patch; do
-            git apply --3way "$p"
+            git apply --exclude=src/legacy/legacyApp.js --allow-empty "$p"
           done
+          git apply .phase5-patch/legacy-corrected.patch
           rm -rf .phase5-patch
           rm -f .github/workflows/apply-phase5.yml
 
