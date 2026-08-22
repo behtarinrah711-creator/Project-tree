@@ -1,0 +1,92 @@
+diff --git a/src/domain/activityApi.test.js b/src/domain/activityApi.test.js
+index 22a782a..41dc368 100644
+--- a/src/domain/activityApi.test.js
++++ b/src/domain/activityApi.test.js
+@@ -21,7 +21,7 @@ function seedProjects(){
+ test('activity guard only uses real schema ID references', () => {
+   const refs = findActivityReferences(seedProjects(), 'a1');
+   const kinds = refs.map(r => r.kind).sort();
+-  assert.deepEqual(kinds, ['contact', 'contract', 'contractStatusReport']);
++  assert.deepEqual(kinds, ['contact', 'contract']);
+   assert.equal(canDeleteActivity(seedProjects(), 'a1').ok, false);
+   assert.equal(canDeleteActivity(seedProjects(), 'unused').ok, true);
+ });
+diff --git a/src/domain/contactApi.test.js b/src/domain/contactApi.test.js
+index 88364d3..9c43d4c 100644
+--- a/src/domain/contactApi.test.js
++++ b/src/domain/contactApi.test.js
+@@ -15,7 +15,7 @@ function seed(){
+ 
+ test('contact guard only uses real schema ID references', () => {
+   const kinds = findContactReferences(seed(), 'c1').map(r => r.kind).sort();
+-  assert.deepEqual(kinds, ['contract', 'contractStatusReport']);
++  assert.deepEqual(kinds, ['contract']);
+   assert.equal(canDeleteContact(seed(), 'c1').ok, false);
+   assert.equal(canDeleteContact(seed(), 'c9').ok, true);
+ });
+diff --git a/src/domain/contractApi.test.js b/src/domain/contractApi.test.js
+index c9650bc..9e7a3b1 100644
+--- a/src/domain/contractApi.test.js
++++ b/src/domain/contractApi.test.js
+@@ -3,16 +3,14 @@ import assert from 'node:assert/strict';
+ import { readFile } from 'node:fs/promises';
+ import { canDeleteContract, findContractReferences } from './deleteGuard.js';
+ 
+-test('contract delete is blocked only by live contractStatusReports.contractId', () => {
++test('contract delete is not blocked by retained contractStatusReports (phase 5 inactive)', () => {
+   const projects = [{
+     id:'p1',
+     name:'P',
+     contracts:[{id:'rc1'}],
+     contractStatusReports:[{id:'csr1', contractId:'rc1'}],
+   }];
+-  assert.deepEqual(findContractReferences(projects, 'rc1').map(r => r.kind), ['contractStatusReport']);
+-  assert.equal(canDeleteContract(projects, 'rc1').ok, false);
+-  projects[0].contractStatusReports[0].trashed = true;
++  assert.deepEqual(findContractReferences(projects, 'rc1'), []);
+   assert.equal(canDeleteContract(projects, 'rc1').ok, true);
+ });
+ 
+diff --git a/src/domain/deleteGuard.js b/src/domain/deleteGuard.js
+index 5a18906..0bd7e09 100644
+--- a/src/domain/deleteGuard.js
++++ b/src/domain/deleteGuard.js
+@@ -59,11 +59,7 @@ export function findActivityReferences(projects, activityId){
+       }
+     });
+ 
+-    live(project.contractStatusReports).forEach(report => {
+-      if(String(report.activityId || '') === target){
+-        add(project, 'contractStatusReport', report.id, 'صورت وضعیت قرارداد');
+-      }
+-    });
++    // Phase 5: status reports inactive — do not block delete.
+   });
+ 
+   return refs;
+@@ -101,11 +97,7 @@ export function findContactReferences(projects, contactId){
+       }
+     });
+ 
+-    live(project.contractStatusReports).forEach(report => {
+-      if(String(report.contactId || '') === target){
+-        add(project, 'contractStatusReport', report.id, 'صورت وضعیت قرارداد');
+-      }
+-    });
++    // Phase 5: status reports inactive — do not block delete.
+   });
+ 
+   return refs;
+@@ -130,11 +122,7 @@ export function findContractReferences(projects, contractId){
+ 
+   (Array.isArray(projects) ? projects : []).forEach(project => {
+     if(!project || project.trashed) return;
+-    live(project.contractStatusReports).forEach(report => {
+-      if(String(report.contractId || '') === target){
+-        add(project, 'contractStatusReport', report.id, 'صورت وضعیت قرارداد');
+-      }
+-    });
++    // Phase 5: status reports inactive — do not block delete.
+   });
+ 
+   return refs;
