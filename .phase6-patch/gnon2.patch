@@ -1,0 +1,142 @@
+diff --git a/src/bootstrap/applicationStartup.js b/src/bootstrap/applicationStartup.js
+index 1a23456..bcd8832 100644
+--- a/src/bootstrap/applicationStartup.js
++++ b/src/bootstrap/applicationStartup.js
+@@ -22,6 +22,10 @@ import { projectApi } from '../domain/projectApi.js';
+ import * as mergePolicy from '../domain/mergePolicy.js';
+ import { registerPersistImpl } from '../sync/persistAdapter.js';
+ import { applyCloudSnapshot, applyCloudProjectList } from '../sync/applyCloudSnapshot.js';
++import { startOwnedCloudListeners, stopOwnedCloudListeners } from '../sync/cloudListeners.js';
++import { registerFormRuntimes, getActivityFormRuntime, getContactFormRuntime } from '../ui/formRuntimes.js';
++import { showToast as uiShowToast } from '../ui/toast.js';
++import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
+ 
+ /** Start the modular API, then the classic legacy runtime, then routing. */
+ export async function startApplication({
+@@ -50,6 +54,13 @@ export async function startApplication({
+     mergePolicy,
+     applyCloudSnapshot,
+     applyCloudProjectList,
++    startOwnedCloudListeners,
++    stopOwnedCloudListeners,
++    registerFormRuntimes,
++    getActivityFormRuntime,
++    getContactFormRuntime,
++    showToast: uiShowToast,
++    shellSurface: Object.freeze({ showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS }),
+   });
+   windowRef.KarhaApp = application;
+ 
+diff --git a/src/core/projectRouteSurface.js b/src/core/projectRouteSurface.js
+index 582d0ac..5465f25 100644
+--- a/src/core/projectRouteSurface.js
++++ b/src/core/projectRouteSurface.js
+@@ -1,34 +1,22 @@
+ const WORKSPACE_PAGE_IDS = [
+-  'projectsPage','profilePage','collabPage','calendarPage','statusListPage','statusFormPage',
+-  'statusExportPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage',
+-  'contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage',
+-  'contractTemplatesPage','statusTestPage','contractStatusPage','contractApprovalPage','activityFormPage',
+-  'shareFormPage',
++  'projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage',
++  'projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage',
++  'contractTemplateFormPage','contractTemplatesPage','activityFormPage',
+ ];
+ 
+ export function showProjectsDashboardSurface({ documentRef = globalThis.document } = {}){
+   if(!documentRef) return false;
+   WORKSPACE_PAGE_IDS.forEach(id => documentRef.getElementById?.(id)?.classList?.add?.('hidden'));
+-
+   documentRef.querySelectorAll?.('.bottom-nav-item')?.forEach?.(item => item.classList?.remove?.('active'));
+   documentRef.getElementById?.('bottomProjectsBtn')?.classList?.add?.('active');
+-
+   const topbar = documentRef.getElementById?.('topbar');
+   topbar?.classList?.remove?.('workspace-context');
+   topbar?.classList?.remove?.('root-workspace-context');
+-
+   const tabbar = documentRef.getElementById?.('tabbar');
+   tabbar?.setAttribute?.('aria-hidden', 'false');
+   return true;
+ }
+ 
+-/**
+- * Router owns project/module navigation after the migrations, while the legacy
+- * shell still owns visibility of Reports/Accounting/Settings page shells.
+- * When navigation lands on Dashboard, make that shell handoff explicit so a
+- * previously visible internal page cannot keep covering the freshly mounted
+- * project/task content.
+- */
+ export function installProjectRouteSurfaceSync({
+   windowRef = globalThis.window,
+   documentRef = windowRef?.document || globalThis.document,
+@@ -36,12 +24,11 @@ export function installProjectRouteSurfaceSync({
+   if(!windowRef?.addEventListener || !documentRef) return false;
+   if(windowRef.__karhaProjectRouteSurfaceSyncInstalled) return false;
+   windowRef.__karhaProjectRouteSurfaceSyncInstalled = true;
+-
+   windowRef.addEventListener('karha:workspace-route-synced', event => {
+-    const projectId = event?.detail?.projectId;
+-    const moduleId = event?.detail?.moduleId || 'dashboard';
+-    if(!projectId || moduleId !== 'dashboard') return;
+-    showProjectsDashboardSurface({ documentRef });
++    const moduleId = event?.detail?.moduleId;
++    if(moduleId === 'dashboard' || moduleId === 'tasks' || !moduleId){
++      showProjectsDashboardSurface({ documentRef });
++    }
+   });
+   return true;
+ }
+diff --git a/src/modules/activities/activityFormModule.js b/src/modules/activities/activityFormModule.js
+index 719dfa5..8df2a71 100644
+--- a/src/modules/activities/activityFormModule.js
++++ b/src/modules/activities/activityFormModule.js
+@@ -1,7 +1,7 @@
+ import { projectContext } from '../../core/projectContext.js';
+ import { activityApi } from '../../domain/activityApi.js';
+ 
+-const runtime=new Proxy({}, {get(_target,key){return window.KarhaLegacy?.activityFormRuntime?.[key];}});
++const runtime=new Proxy({}, {get(_target,key){return window.KarhaApp?.getActivityFormRuntime?.()?.[key] ?? window.KarhaLegacy?.activityFormRuntime?.[key];}});
+ 
+ const state={dirty:false,historyPushed:false,projectId:null,activityId:null};
+ 
+diff --git a/src/modules/condemned/index.js b/src/modules/condemned/index.js
+index 1ad9a04..642885d 100644
+--- a/src/modules/condemned/index.js
++++ b/src/modules/condemned/index.js
+@@ -1,30 +1,16 @@
+ /**
+- * Phase 5 — condemned boundary (removed from active registry).
+- * Stored data fields may remain; active path must not read/write them.
++ * Phase 6 — fully removed from product UI (code stubs may remain offline).
+  */
+-
+ export const CONDEMNED_MODULE_IDS = Object.freeze([
+-  'letters',
+-  'minutes',
+-  'purchases',
+-  'statuses',
++  "letters","minutes","purchases","statuses","collab","share",
+ ]);
+-
+ export function isCondemnedModuleId(id){
+-  return CONDEMNED_MODULE_IDS.includes(String(id || ''));
++  return CONDEMNED_MODULE_IDS.includes(String(id||""));
+ }
+-
+ export const CONDEMNED_ROUTE_REDIRECT = Object.freeze([
+-  'letters',
+-  'minutes',
+-  'purchases',
+-  'statuses',
+-  'contract-status',
+-  'contractStatus',
+-  'contract-approval',
+-  'status-test',
++  "letters","minutes","purchases","statuses","collab","share","shareForm",
++  "contract-status","contractStatus","contract-approval","status-test",
+ ]);
+-
+ export function isCondemnedRoute(moduleId){
+-  return CONDEMNED_ROUTE_REDIRECT.includes(String(moduleId || ''));
++  return CONDEMNED_ROUTE_REDIRECT.includes(String(moduleId||""));
+ }
