@@ -1,0 +1,114 @@
+     if(code.indexOf('permission') !== -1 || code === 'permission-denied'){
+-        showToast('سرور اجازهٔ دیدن پروژه‌های اشتراکی را نمی‌دهد — قوانین Firestore را به‌روز کنید');
+-      } else {
+-        showToast('خطا در دریافت پروژه‌های اشتراکی');
+-      }
++  const onSnap = (docs, shared)=>{
++    ownedDocs = docs || [];
++    sharedDocs = shared || [];
++    mergeCloudSnapshots(ownedDocs, sharedDocs);
++    hydrateAllCloudProjects(ownedDocs, sharedDocs);
++  };
++  const onErr = err => { console.error('owned listener', err); showToast('خطا در دریافت پروژه‌های خودتان'); };
++  // Phase 6.4: ownership in src/sync/cloudListeners — behavior unchanged (owned-only).
++  if(window.KarhaApp?.startOwnedCloudListeners){
++    window.KarhaApp.startOwnedCloudListeners({
++      db,
++      uid: currentUser.uid,
++      onOwnedSnapshot: onSnap,
++      onError: onErr,
+     });
+-
+-  // یک‌بار واکشی فوری برای اطمینان
+-  db.collection('projects').where('sharedWith','array-contains', myEmailLower).get()
+-    .then(snap => {
+-      if(snap.docs.length){
+-        sharedDocs = snap.docs;
+-        mergeCloudSnapshots(ownedDocs, sharedDocs);
+-      }
+-    })
+-    .catch(err => console.error('shared get', err));
++    cloudUnsubOwned = null;
++    cloudUnsubShared = null;
++    return;
++  }
++  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
++    .onSnapshot(snap => onSnap(snap.docs, []), onErr);
++  cloudUnsubShared = null;
++  sharedDocs = [];
+ }
++
+ function stopCloudListeners(){
++  if(window.KarhaApp?.stopOwnedCloudListeners){
++    window.KarhaApp.stopOwnedCloudListeners();
++  }
+   if(cloudUnsubOwned) cloudUnsubOwned();
+   if(cloudUnsubShared) cloudUnsubShared();
+   cloudUnsubOwned = null; cloudUnsubShared = null;
+@@ -2151,18 +2141,16 @@ function updateWorkspaceContextBar(){
+   if(actionBtn){
+     // فقط لیست صورت وضعیت‌ها و همکاران پروژه امکان ایجاد مورد جدید دارند.
+     // در فرم ویرایش صورت وضعیت عمداً دکمه + وجود ندارد.
+-    const hasSubpageAction = !hasOwnInnerSectionBar && (workspaceSubpage === 'statusList' || workspaceSubpage === 'collab' || workspaceSubpage === 'contracts');
++    const hasSubpageAction = !hasOwnInnerSectionBar && (workspaceSubpage === 'contracts');
+     actionBtn.hidden = !hasSubpageAction;
+-    actionBtn.title = workspaceSubpage === 'statusList' ? 'صورت وضعیت جدید' : (workspaceSubpage === 'collab' ? 'افزودن همکار' : 'ایجاد قرارداد');
++    actionBtn.title = 'ایجاد قرارداد';
+     actionBtn.setAttribute('aria-label', actionBtn.title);
+     actionBtn.onclick = ()=>{
+       if(workspaceSubpage === 'statusList'){ openStatusForm(null); return; }
+       if(workspaceSubpage === 'contracts'){ openContractForm(null); return; }
+       if(workspaceSubpage === 'collab'){
+-        ensureHomeSelection();
+-        const p = findProject(data.activeTab);
+-        if(p && data.activeTab !== 'starred') openShareForm(p.id);
+-        else showToast('ابتدا یک پروژه را انتخاب کنید');
++        showToast('اشتراک‌گذاری حذف شده است');
++        return;
+       }
+     };
+   }
+@@ -2195,7 +2183,7 @@ function showOnlyWorkspacePage(pageId){
+   // محتوای هوم پروژه‌ها هرگز همزمان با یک صفحه منو نمایش داده نمی‌شود.
+   const content = document.getElementById('content');
+   if(content) content.replaceChildren();
+-  const ids = ['projectsPage','profilePage','collabPage','calendarPage','statusListPage','statusFormPage','statusExportPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','statusTestPage','contractStatusPage','contractApprovalPage','activityFormPage','shareFormPage'];
++  const ids = ['projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','activityFormPage'];
+   // اول همه صفحات را قطعاً پنهان کن؛ سپس فقط صفحه مقصد را نشان بده.
+   // این کار جلوی هرگونه هم‌پوشانی بین صفحات منوی اصلی و هوم پروژه‌ها را می‌گیرد.
+   ids.forEach(id=>{
+@@ -2208,7 +2196,7 @@ function showOnlyWorkspacePage(pageId){
+ 
+ function closeBottomPages(){
+   workspaceSubpage=null;
+-  ['projectsPage','profilePage','collabPage','calendarPage','statusListPage','statusFormPage','statusExportPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','statusTestPage','contractStatusPage','contractApprovalPage','activityFormPage','shareFormPage']
++  ['projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','activityFormPage']
+     .forEach(id=>{
+       const el=document.getElementById(id);
+       if(el) el.classList.add('hidden');
+@@ -2861,7 +2849,7 @@ function openContractStatusPage(){
+   try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){}
+ }
+ function openContractStatusPageLegacyDisabled(){
+-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractStatus'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('contractStatusPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contractStatus'); renderContractStatusPage();
++  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractStatus'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('contractStatus'); renderContractStatusPage();
+ }
+ function closeContractStatusPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
+ function renderContractStatusPage(){
+@@ -2872,7 +2860,7 @@ function openContractApprovalPage(){
+   // Phase 5 removed path
+   try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
+ 
+-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractApproval'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('contractApprovalPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contractApproval'); renderContractApprovalPage();
++  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractApproval'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('contractApproval'); renderContractApprovalPage();
+ }
+ function closeContractApprovalPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
+ function renderContractApprovalPage(){
+@@ -2883,7 +2871,7 @@ function openStatusTestPage(){
+   // Phase 5 removed path
+   try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
+ 
+-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='statusTest'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('statusTestPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('statusTest'); renderStatusTestPage();
++  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='statusTest'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('statusTest'); renderStatusTestPage();
+ }
+ function closeStatusTestPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'
