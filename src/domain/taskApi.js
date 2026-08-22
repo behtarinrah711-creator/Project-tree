@@ -4,6 +4,7 @@ import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { getSession } from '../core/session.js';
 import { canDeleteTask } from './deleteGuard.js';
 import { isOffline } from './mergePolicy.js';
+import { markDirty as adapterMarkDirty, persist as adapterPersist } from '../sync/persistAdapter.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -38,8 +39,8 @@ function publishLive(projectId){
     live.tasks = Array.isArray(stored.tasks) ? stored.tasks : [];
   }
   if(typeof window !== 'undefined'){
-    window.KarhaLegacy?.markDirty?.(projectId);
-    window.KarhaLegacy?.persist?.({ local:false });
+    adapterMarkDirty(projectId);
+    adapterPersist({ local:false });
   }
 }
 

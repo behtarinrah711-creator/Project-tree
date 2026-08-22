@@ -398,7 +398,13 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
   // Project selection is navigation state, not a debounced content edit. Save
   // it synchronously so a quick reload/backgrounding on mobile cannot restore
   // the project that happened to be active before the tap.
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+  try{
+      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    }catch(e){}
   if(updateRoute) setWorkspaceRoute(p.id,moduleId);
   else if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
   if(closeDrawerOnSelect) closeDrawer();
@@ -619,7 +625,13 @@ function startCloudTaskListener(p){
         .finally(()=>pendingCloudWrites.delete(projectId));
     }
     current.schemaVersion = DATA_SCHEMA_VERSION;
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+    try{
+      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    }catch(e){}
     if(String(data.activeTab) === String(projectId) && mainSurface === 'projects') renderAll();
     else if(mainSurface === 'workspace') refreshCurrentFooterPage();
   }, err=>console.warn('task listener', p.id, err));
@@ -726,7 +738,13 @@ async function hydrateProjectTasksFromCloud(p, projectDocData){
       current.tasks = mergedTasks;
       rememberProjectTasks(current);
       current.schemaVersion = DATA_SCHEMA_VERSION;
-      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+      try{
+      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    }catch(e){}
 
       if(needsRepair || Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
         pendingCloudWrites.add(projectId);
@@ -1165,7 +1183,13 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
   const cloudRouteMounted = mainSurface === 'projects' && synchronizedProjectId
     ? window.KarhaApp?.router?.navigate(synchronizedProjectId, 'dashboard', {replace:true}) === true
     : false;
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+  try{
+      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    }catch(e){}
   const wasAdding = false;
   const projectsPageVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
   const profilePageVisible = !document.getElementById('profilePage')?.classList.contains('hidden');
@@ -1206,7 +1230,13 @@ async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
     hydrations.push(hydrateProjectTasksFromCloud(p, doc.data()).then(hydrated=>{
       const current=findProject(doc.id);
       if(hydrated && current && (current.tasks.length !== before || current.schemaVersion !== DATA_SCHEMA_VERSION)){
-        try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+        try{
+      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    }catch(e){}
         if(String(data.activeTab) === String(doc.id) && mainSurface === 'projects') renderAll();
         else if(mainSurface === 'workspace') refreshCurrentFooterPage();
       }
@@ -1292,7 +1322,13 @@ async function migrateGuestDataToCloud(){
     }
     pendingCloudWrites.delete(p.id);
   }
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+  try{
+      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    }catch(e){}
 }
 
 function updateAccountUI(){
@@ -6131,7 +6167,7 @@ window.KarhaLegacy = Object.freeze({
       const stored=window.KarhaApp?.projectRepository?.find(projectId);
       if(project && stored) project.tasks=Array.isArray(stored.tasks)?stored.tasks:[];
       if(project) markDirty(project.id);
-      persist();
+      persist({ local:false });
     }
   }),
   openContractsPage,
@@ -6176,7 +6212,7 @@ window.KarhaLegacy = Object.freeze({
       const stored=window.KarhaApp?.projectRepository?.find(projectId);
       if(project && stored) project.activityTemplates=Array.isArray(stored.activityTemplates)?stored.activityTemplates:[];
       if(project) markDirty(project.id);
-      persist();
+      persist({ local:false });
     }
   }),
   contactFormRuntime: Object.freeze({
@@ -6195,7 +6231,7 @@ window.KarhaLegacy = Object.freeze({
       const stored=window.KarhaApp?.projectRepository?.find(projectId);
       if(project && stored) project.contacts=Array.isArray(stored.contacts)?stored.contacts:[];
       if(project) markDirty(project.id);
-      persist();
+      persist({ local:false });
     }
   })
 });

@@ -9,8 +9,15 @@ export function resolveDrawerProjectState(projects, {
   windowRef = typeof window !== 'undefined' ? window : null,
 } = {}){
   const supplied = Array.isArray(projects) ? projects : [];
+  // Phase 4.3/4.4: prefer caller-supplied (usually repository-first listProjects)
+  // before live legacy bag.
+  const fromWorkspace = windowRef?.KarhaApp?.projectWorkspace?.listProjects?.();
   const live = windowRef?.KarhaLegacy?.getProjectsList?.();
-  const source = supplied.length ? supplied : (Array.isArray(live) ? live : supplied);
+  const source = supplied.length
+    ? supplied
+    : (Array.isArray(fromWorkspace) && fromWorkspace.length
+      ? fromWorkspace
+      : (Array.isArray(live) ? live : supplied));
 
   const contextProjectId = windowRef?.KarhaApp?.projectContext?.getProjectId?.() || null;
   const selectedProjectId = contextProjectId || (activeProjectId && activeProjectId !== 'starred' ? activeProjectId : null);

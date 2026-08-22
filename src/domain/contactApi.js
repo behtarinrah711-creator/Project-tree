@@ -3,6 +3,7 @@ import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from '../core/session.js';
 import { canDeleteContact } from './deleteGuard.js';
 import { isOffline } from './mergePolicy.js';
+import { markDirty as adapterMarkDirty, persist as adapterPersist } from '../sync/persistAdapter.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -41,8 +42,8 @@ function publishLive(projectId){
     live.contacts = Array.isArray(stored.contacts) ? stored.contacts : [];
   }
   if(typeof window !== 'undefined'){
-    window.KarhaLegacy?.markDirty?.(projectId);
-    window.KarhaLegacy?.persist?.({ local:false });
+    adapterMarkDirty(projectId);
+    adapterPersist({ local:false });
   }
 }
 
