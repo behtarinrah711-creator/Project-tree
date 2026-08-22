@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -16,44 +16,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
-          fetch-depth: 0
-
-      - name: Finalize phase 2.1 legacy bridge
-        if: github.event_name == 'pull_request' && github.head_ref == 'migration/phase-2-1-activity-api'
-        shell: python
-        run: |
-          import re
-          from pathlib import Path
-          p = Path('src/legacy/legacyApp.js')
-          s = p.read_text(encoding='utf-8')
-          old = """function persist(){
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(()=>{
-    (data.projects||[]).forEach(rememberProjectTasks);
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-    catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
-    if(cloudMode && currentUser){"""
-          new = """function persist(options){
-  const writeLocal = !options || options.local !== false;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(()=>{
-    if(writeLocal){
-      (data.projects||[]).forEach(rememberProjectTasks);
-      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-      catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
-    }
-    if(cloudMode && currentUser){"""
-          if s.count(old) != 1:
-              raise SystemExit('persist patch anchor mismatch')
-          s = s.replace(old, new, 1)
-          pattern = r"  \} else if\(type === 'activity'\)\{\n\s+const p=findProject\(pid\); const a=p \? findActivityTemplate\(gid,p\) : null;\n\s+if\(a\)\{ a\.trashed=true; a\.deletedAt=Date\.now\(\); a\.deletedType='activity'; markDirty\(pid\); \}\n\s+\}"
-          replacement = "  } else if(type === 'activity'){\n    window.KarhaApp?.activityApi?.trash?.(pid,gid);\n  }"
-          s, count = re.subn(pattern, replacement, s, count=1)
-          if count != 1:
-              raise SystemExit('activity patch anchor mismatch')
-          p.write_text(s, encoding='utf-8')
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -71,19 +33,6 @@ jobs:
 
       - name: Run Playwright E2E
         run: npm run test:e2e
-
-      - name: Commit clean phase 2.1 snapshot
-        if: always() && github.event_name == 'pull_request' && github.head_ref == 'migration/phase-2-1-activity-api'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout origin/main -- .github/workflows/e2e.yml
-          git rm -f .github/workflows/apply-phase21.yml .github/workflows/trigger-phase21.yml .github/workflows/finalize-phase21.yml .phase21-trigger .phase21-trigger2 || true
-          git add src/legacy/legacyApp.js .github/workflows/e2e.yml
-          if ! git diff --cached --quiet; then
-            git commit -m "Finalize activity API legacy bridge"
-            git push origin HEAD:migration/phase-2-1-activity-api
-          fi
 
       - name: Upload Playwright report on failure
         if: failure()
