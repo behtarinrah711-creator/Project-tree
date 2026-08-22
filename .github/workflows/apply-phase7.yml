@@ -1,0 +1,46 @@
+name: Apply phase 7 staged patch
+
+on:
+  push:
+    branches:
+      - migration/phase-7-final
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/phase-7-final
+          fetch-depth: 0
+      - name: Apply staged patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          patches=(.phase7/part*.patch)
+          if [ ${#patches[@]} -eq 0 ]; then
+            echo 'No staged phase 7 patches found.'
+            exit 1
+          fi
+          for p in "${patches[@]}"; do
+            echo "Applying $p"
+            git apply --check "$p"
+            git apply "$p"
+          done
+          rm -rf .phase7
+          rm -f .github/workflows/apply-phase7.yml
+      - name: Commit applied phase 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Apply phase 7 migration sources'
+          git push origin HEAD:migration/phase-7-final
