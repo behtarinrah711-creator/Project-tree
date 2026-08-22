@@ -3,16 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { canDeleteContract, findContractReferences } from './deleteGuard.js';
 
-test('contract delete is blocked only by live contractStatusReports.contractId', () => {
+test('contract delete is not blocked by retained contractStatusReports (phase 5 inactive)', () => {
   const projects = [{
     id:'p1',
     name:'P',
     contracts:[{id:'rc1'}],
     contractStatusReports:[{id:'csr1', contractId:'rc1'}],
   }];
-  assert.deepEqual(findContractReferences(projects, 'rc1').map(r => r.kind), ['contractStatusReport']);
-  assert.equal(canDeleteContract(projects, 'rc1').ok, false);
-  projects[0].contractStatusReports[0].trashed = true;
+  assert.deepEqual(findContractReferences(projects, 'rc1'), []);
   assert.equal(canDeleteContract(projects, 'rc1').ok, true);
 });
 

@@ -21,7 +21,7 @@ function seedProjects(){
 test('activity guard only uses real schema ID references', () => {
   const refs = findActivityReferences(seedProjects(), 'a1');
   const kinds = refs.map(r => r.kind).sort();
-  assert.deepEqual(kinds, ['contact', 'contract', 'contractStatusReport']);
+  assert.deepEqual(kinds, ['contact', 'contract']);
   assert.equal(canDeleteActivity(seedProjects(), 'a1').ok, false);
   assert.equal(canDeleteActivity(seedProjects(), 'unused').ok, true);
 });

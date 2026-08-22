@@ -1,12 +1,16 @@
 /**
- * Guest visibility: cloud-owned projects stay hidden until the owning
- * session is known. Shared-project policy is unchanged in this phase.
+ * Guest: hide ownerUid projects until login.
+ * Authenticated: only projects owned by this uid (Phase 5 — no sharedWith visibility).
  */
 export function isProjectVisibleForSession(project, session){
   if(!project) return false;
   if(!session || session.ready === false) return true;
-  if(session.uid) return true;
-  return !project.ownerUid;
+  if(!session.uid){
+    return !project.ownerUid;
+  }
+  // Logged in: owner only. Shared-collaborator path removed in Phase 5.
+  if(!project.ownerUid) return true; // local/guest-origin still owned after migrate
+  return String(project.ownerUid) === String(session.uid);
 }
 
 export function projectsVisibleForSession(projects, session){

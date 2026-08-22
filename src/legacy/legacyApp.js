@@ -418,8 +418,9 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
  *  Owned projects reappear only after the matching Google account signs in. */
 function projectsVisibleForAuth(list){
   const all = Array.isArray(list) ? list : [];
-  if(currentUser) return all;
-  return all.filter(p => p && !p.ownerUid);
+  if(!currentUser) return all.filter(p => p && !p.ownerUid);
+  // Phase 5: cloud visibility is owner-only (no sharedWith collaborator view).
+  return all.filter(p => p && (!p.ownerUid || p.ownerUid === currentUser.uid));
 }
 
 function renderDrawerProjectList(){
@@ -1255,7 +1256,8 @@ function startCloudListeners(){
       err => { console.error('owned listener', err); showToast('خطا در دریافت پروژه‌های خودتان'); });
 
   // sharedWith باید دقیقاً lowercase باشد (همان‌طور که هنگام اشتراک ذخیره می‌شود)
-  cloudUnsubShared = db.collection('projects').where('sharedWith','array-contains', myEmailLower)
+  // Phase 5: sharing disabled — do not subscribe to sharedWith.
+  cloudUnsubShared = null; if(false) cloudUnsubShared = db.collection('projects').where('sharedWith','array-contains', myEmailLower)
     .onSnapshot(snap => {
       sharedDocs = snap.docs;
       mergeCloudSnapshots(ownedDocs, sharedDocs);
@@ -2854,6 +2856,10 @@ window.addEventListener('popstate', function(ev){
 });
 
 function openContractStatusPage(){
+  // Phase 5: status path removed — stay on project dashboard.
+  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){}
+}
+function openContractStatusPageLegacyDisabled(){
   closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractStatus'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('contractStatusPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contractStatus'); renderContractStatusPage();
 }
 function closeContractStatusPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
@@ -2862,6 +2868,9 @@ function renderContractStatusPage(){
 }
 
 function openContractApprovalPage(){
+  // Phase 5 removed path
+  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
+
   closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractApproval'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('contractApprovalPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contractApproval'); renderContractApprovalPage();
 }
 function closeContractApprovalPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
@@ -2870,6 +2879,9 @@ function renderContractApprovalPage(){
 }
 
 function openStatusTestPage(){
+  // Phase 5 removed path
+  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
+
   closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='statusTest'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('statusTestPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('statusTest'); renderStatusTestPage();
 }
 function closeStatusTestPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }

@@ -59,11 +59,7 @@ export function findActivityReferences(projects, activityId){
       }
     });
 
-    live(project.contractStatusReports).forEach(report => {
-      if(String(report.activityId || '') === target){
-        add(project, 'contractStatusReport', report.id, 'صورت وضعیت قرارداد');
-      }
-    });
+    // Phase 5: status reports inactive — do not block delete.
   });
 
   return refs;
@@ -101,11 +97,7 @@ export function findContactReferences(projects, contactId){
       }
     });
 
-    live(project.contractStatusReports).forEach(report => {
-      if(String(report.contactId || '') === target){
-        add(project, 'contractStatusReport', report.id, 'صورت وضعیت قرارداد');
-      }
-    });
+    // Phase 5: status reports inactive — do not block delete.
   });
 
   return refs;
@@ -130,11 +122,7 @@ export function findContractReferences(projects, contractId){
 
   (Array.isArray(projects) ? projects : []).forEach(project => {
     if(!project || project.trashed) return;
-    live(project.contractStatusReports).forEach(report => {
-      if(String(report.contractId || '') === target){
-        add(project, 'contractStatusReport', report.id, 'صورت وضعیت قرارداد');
-      }
-    });
+    // Phase 5: status reports inactive — do not block delete.
   });
 
   return refs;
