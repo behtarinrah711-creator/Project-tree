@@ -1,0 +1,57 @@
+name: Apply phase 2 patch once
+
+on:
+  push:
+    branches:
+      - migration/phase-2-domain-api
+    paths:
+      - .github/workflows/apply-phase2-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/phase-2-domain-api
+          fetch-depth: 0
+
+      - name: Download phase 2 patch
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 \
+            'https://drive.usercontent.google.com/download?id=1TbZbF2q_X2CEBsOq68_W1nqI8kWr5lah&export=download&confirm=t' \
+            -o /tmp/migration-phase-2-final.patch
+          test -s /tmp/migration-phase-2-final.patch
+          echo "patch-bytes=$(wc -c < /tmp/migration-phase-2-final.patch)"
+
+      - name: Verify and apply patch
+        run: |
+          set -euo pipefail
+          git apply --check /tmp/migration-phase-2-final.patch
+          git apply /tmp/migration-phase-2-final.patch
+
+      - name: Run unit tests
+        run: |
+          set -euo pipefail
+          node --test $(find src scripts -type f -name '*.test.js' -o -name '*.test.mjs')
+
+      - name: Validate diff
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+
+      - name: Remove one-time workflow and commit
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-phase2-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Migration phase 2: domain API and sole write path'
+          git push origin HEAD:migration/phase-2-domain-api
