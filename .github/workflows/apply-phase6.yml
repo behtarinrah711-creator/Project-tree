@@ -1,0 +1,41 @@
+name: Apply phase 6 migration
+
+on:
+  push:
+    branches:
+      - migration/phase-6-surgical-legacy
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout phase 6 branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/phase-6-surgical-legacy
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Reconstruct and apply phase 6 patch
+        run: |
+          cat .phase6-patch/c00 .phase6-patch/c01 .phase6-patch/c02 .phase6-patch/c03 .phase6-patch/c04 .phase6-patch/c05 .phase6-patch/c06 .phase6-patch/c07 > /tmp/phase6.patch
+          git apply --3way /tmp/phase6.patch
+          rm -rf .phase6-patch
+          rm -f .github/workflows/apply-phase6.yml
+
+      - name: Run unit tests
+        run: node --test src/**/*.test.js scripts/*.test.mjs
+
+      - name: Commit phase 6
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'No phase 6 changes found'; exit 1; }
+          git commit -m 'Migration phase 6: surgical legacy extraction'
+          git push origin HEAD:migration/phase-6-surgical-legacy
