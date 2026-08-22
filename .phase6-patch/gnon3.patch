@@ -1,0 +1,157 @@
+diff --git a/src/modules/people/contactFormModule.js b/src/modules/people/contactFormModule.js
+index 692c3d3..34c3f7f 100644
+--- a/src/modules/people/contactFormModule.js
++++ b/src/modules/people/contactFormModule.js
+@@ -3,7 +3,7 @@ import { contactApi } from '../../domain/contactApi.js';
+ import { localStorageAdapter } from '../../data/storageAdapter.js';
+ 
+ const CONTACT_DRAFT_KEY='gtasks-contact-draft-v1';
+-const runtime=new Proxy({}, { get(_target,key){ return window.KarhaLegacy?.contactFormRuntime?.[key]; } });
++const runtime=new Proxy({}, { get(_target,key){ return window.KarhaApp?.getContactFormRuntime?.()?.[key] ?? window.KarhaLegacy?.contactFormRuntime?.[key]; } });
+ function getProjectId(){ return projectContext.getProjectId?.() || projectContext.getActiveProjectId?.() || runtime.getCurrentProject?.()?.id || null; }
+ function getActivities(projectId){ return runtime.getActivities?.(projectId) || []; }
+ function findActivity(id){ return getActivities(getProjectId()).find(a=>String(a.id)===String(id)) || null; }
+diff --git a/src/sync/cloudListeners.js b/src/sync/cloudListeners.js
+new file mode 100644
+index 0000000..ffd1d10
+--- /dev/null
++++ b/src/sync/cloudListeners.js
+@@ -0,0 +1,39 @@
++/**
++ * Phase 6.4 — Owned-only cloud listener ownership.
++ * Behavior: identical to prior legacy path — ownerUid == uid only, no sharedWith.
++ * mergePolicy / anti-empty remain in merge + applyCloudSnapshot callers.
++ * Auth is not owned here.
++ */
++
++let unsubOwned = null;
++let unsubShared = null; // always kept null (sharing removed)
++
++/**
++ * @param {object} ctx
++ * @param {FirebaseFirestore} ctx.db
++ * @param {string} ctx.uid
++ * @param {(ownedDocs: any[], sharedDocs: any[]) => void} ctx.onOwnedSnapshot
++ * @param {(err: any) => void} [ctx.onError]
++ */
++export function startOwnedCloudListeners(ctx){
++  stopOwnedCloudListeners();
++  if(!ctx?.db || !ctx.uid) return;
++  const sharedDocs = [];
++  unsubOwned = ctx.db.collection('projects').where('ownerUid', '==', ctx.uid)
++    .onSnapshot(
++      snap => { ctx.onOwnedSnapshot?.(snap.docs, sharedDocs); },
++      err => { ctx.onError?.(err); }
++    );
++  unsubShared = null;
++}
++
++export function stopOwnedCloudListeners(){
++  try{ unsubOwned?.(); }catch(_){}
++  try{ unsubShared?.(); }catch(_){}
++  unsubOwned = null;
++  unsubShared = null;
++}
++
++export function isSharedCloudDisabled(){
++  return true;
++}
+diff --git a/src/sync/cloudOwned.js b/src/sync/cloudOwned.js
+new file mode 100644
+index 0000000..968cae4
+--- /dev/null
++++ b/src/sync/cloudOwned.js
+@@ -0,0 +1,22 @@
++/**
++ * Phase 6.4 — ownership marker for cloud owned-only sync.
++ * Behavior (mergePolicy, anti-empty, owner-only visibility) remains implemented
++ * in legacy until a pure move without behavior change is verified.
++ * Domain/UI must not call Firestore sharedWith paths.
++ *
++ * Active policy (must stay identical):
++ * - Listen: projects where ownerUid == current uid only
++ * - Merge collections via KarhaApp.mergePolicy
++ * - applyCloudSnapshot to repository after merges
++ */
++
++export const CLOUD_SYNC_POLICY = Object.freeze({
++  mode: 'owned-only',
++  sharedWith: 'disabled',
++  mergePolicy: 'KarhaApp.mergePolicy',
++  applyPath: 'KarhaApp.applyCloudSnapshot',
++});
++
++export function assertOwnedOnlyCloudPolicy(){
++  return CLOUD_SYNC_POLICY.mode === 'owned-only' && CLOUD_SYNC_POLICY.sharedWith === 'disabled';
++}
+diff --git a/src/ui/formRuntimes.js b/src/ui/formRuntimes.js
+new file mode 100644
+index 0000000..e939d7d
+--- /dev/null
++++ b/src/ui/formRuntimes.js
+@@ -0,0 +1,65 @@
++/**
++ * Phase 6.6 — Activity/Contact form runtimes owned outside legacy monolith.
++ * Legacy registers dependencies once; modules prefer KarhaApp.formRuntimes.
++ * Does not touch contract form / history.
++ */
++
++let activityFormRuntime = null;
++let contactFormRuntime = null;
++
++export function registerFormRuntimes(deps = {}){
++  const d = deps;
++  activityFormRuntime = Object.freeze({
++    uid: d.uid,
++    getCurrentProjectId: d.getCurrentProjectId,
++    showToast: d.showToast,
++    enterActivityForm: d.enterActivityForm,
++    leaveActivityForm: d.leaveActivityForm,
++    pushWorkspaceHistory: d.pushWorkspaceHistory,
++    renderActivities(projectId){
++      window.KarhaApp?.modules?.get('activities')?.render(projectId);
++    },
++    persistActivities(projectId){
++      const project = d.findProject?.(projectId);
++      const stored = window.KarhaApp?.projectRepository?.find(projectId);
++      if(project && stored) project.activityTemplates = Array.isArray(stored.activityTemplates) ? stored.activityTemplates : [];
++      if(project) d.markDirty?.(project.id);
++      d.persist?.({ local:false });
++    },
++  });
++
++  contactFormRuntime = Object.freeze({
++    uid: d.uid,
++    getCurrentProject: d.getCurrentProject,
++    getActivities(projectId){
++      const project = d.findProject?.(projectId);
++      return project ? (d.getActivityTemplates?.(project) || []) : [];
++    },
++    openNumpadGeneric: d.openNumpadGeneric,
++    setInternalFormMode: d.setInternalFormMode,
++    showIncompleteFormExitChoice: d.showIncompleteFormExitChoice,
++    showToast: d.showToast,
++    markDirty: d.markDirty,
++    renderContacts(projectId){
++      window.KarhaApp?.modules?.get('people')?.render(projectId);
++    },
++    closeContactsToSettings: d.closeContactsToSettings,
++    persistContacts(projectId){
++      const project = d.findProject?.(projectId);
++      const stored = window.KarhaApp?.projectRepository?.find(projectId);
++      if(project && stored) project.contacts = Array.isArray(stored.contacts) ? stored.contacts : [];
++      if(project) d.markDirty?.(project.id);
++      d.persist?.({ local:false });
++    },
++  });
++
++  return { activityFormRuntime, contactFormRuntime };
++}
++
++export function getActivityFormRuntime(){
++  return activityFormRuntime || window.KarhaLegacy?.activityFormRuntime || null;
++}
++
++export function getContactFormRuntime(){
++  return contactFormRuntime || window.KarhaLegacy?.contactFormRuntime || null;
++}
