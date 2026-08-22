@@ -1,0 +1,47 @@
+diff --git a/src/ui/shellSurface.js b/src/ui/shellSurface.js
+new file mode 100644
+index 0000000..b2998fa
+--- /dev/null
++++ b/src/ui/shellSurface.js
+@@ -0,0 +1,27 @@
++/**
++ * Phase 6.5 — workspace page visibility helpers.
++ * Does not own contract form history or form exit policy.
++ */
++
++const DEFAULT_PAGE_IDS = [
++  'projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage',
++  'projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage',
++  'contractTemplateFormPage','contractTemplatesPage','activityFormPage',
++];
++
++export function hideAllWorkspacePages(documentRef = document, pageIds = DEFAULT_PAGE_IDS){
++  const content = documentRef.getElementById('content');
++  if(content) content.replaceChildren();
++  pageIds.forEach(id => {
++    const el = documentRef.getElementById(id);
++    if(el) el.classList.add('hidden');
++  });
++}
++
++export function showWorkspacePage(pageId, documentRef = document, pageIds = DEFAULT_PAGE_IDS){
++  hideAllWorkspacePages(documentRef, pageIds);
++  const el = documentRef.getElementById(pageId);
++  if(el) el.classList.remove('hidden');
++}
++
++export { DEFAULT_PAGE_IDS as SHELL_WORKSPACE_PAGE_IDS };
+diff --git a/src/ui/toast.js b/src/ui/toast.js
+new file mode 100644
+index 0000000..7abe5d8
+--- /dev/null
++++ b/src/ui/toast.js
+@@ -0,0 +1,8 @@
++/** Phase 6.5 — toast primitive (safe, no contract-form coupling). */
++export function showToast(msg, { documentRef = document, durationMs = 1600 } = {}){
++  const t = documentRef?.getElementById?.('toast');
++  if(!t) return;
++  t.textContent = String(msg ?? '');
++  t.classList.add('show');
++  setTimeout(() => t.classList.remove('show'), durationMs);
++}
