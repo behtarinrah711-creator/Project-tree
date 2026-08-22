@@ -1,0 +1,299 @@
+diff --git a/docs/phase-6-final-report.md b/docs/phase-6-final-report.md
+new file mode 100644
+index 0000000..f4ed75b
+--- /dev/null
++++ b/docs/phase-6-final-report.md
+@@ -0,0 +1,33 @@
++# فاز ۶ — گزارش نهایی (تکمیل بدهی ۶.۴–۶.۶)
++
++## قفل‌ها
++1. Cloud: owned-only؛ بدون تغییر mergePolicy/anti-empty؛ Auth جابه‌جا نشد
++2. Shell: بدون دست‌زدن به history/form قرارداد
++3. KarhaLegacy export: فقط با caller واقعی
++
++## ۶.۴ Cloud/Sync ownership
++- `src/sync/cloudListeners.js` — `startOwnedCloudListeners` / `stopOwnedCloudListeners`
++- legacy `startCloudListeners` به KarhaApp.startOwnedCloudListeners تفویض می‌کند
++- sharedWith همچنان disabled
++
++## ۶.۵ Shell/UI
++- `src/ui/toast.js`
++- `src/ui/shellSurface.js` (hide/show workspace pages)
++- `projectRouteSurface` بدون صفحات محکوم
++- فرم قرارداد دست‌نخورده
++
++## ۶.۶ Form runtimes
++- `src/ui/formRuntimes.js` — owner ثبت runtime
++- `activityFormModule` / `contactFormModule` اول از `KarhaApp.get*FormRuntime`
++- KarhaLegacy thin: همان object ثبت‌شده
++
++## تست
++55 مرتبط سبز
++
++## legacyApp قبل/بعد این تکمیل
++- قبل از فاز ۶: ~291144
++- بعد از تکمیل بدهی‌ها: ببین wc
++
++## باقی عمدی
++- بدنهٔ hydrate/mergeCloudSnapshots هنوز در legacy (رفتار ثابت؛ listener ownership منتقل شد)
++- Auth UI در legacy
+diff --git a/docs/phase-6-surgical-inventory.md b/docs/phase-6-surgical-inventory.md
+new file mode 100644
+index 0000000..5286684
+--- /dev/null
++++ b/docs/phase-6-surgical-inventory.md
+@@ -0,0 +1,22 @@
++# فاز ۶.۱ — Inventory جراحی
++
++## DELETE (محکوم — کامل)
++
++| مورد | محل |
++|------|------|
++| Share UI | shareFormPage, openShareForm, submitShareForm, collabPage, renderCollabPage, removeShare |
++| Status UI | contractStatusPage, contractApprovalPage, statusTestPage, statuses module |
++| Letters/Minutes/Purchases | modules + HTML pages + open* |
++| shared listener / fork collab | legacy cloud merge branches for collaborator |
++
++## EXTRACT (ماندگار — ownership، بدون تغییر رفتار)
++
++| مورد | مقصد |
++|------|------|
++| persist/markDirty | src/sync/persistAdapter (موجود) |
++| applyCloudSnapshot | src/sync (موجود) |
++| cloud owned listener body | src/sync/cloudOwned.js (wrap، رفتار ثابت) |
++
++## KEEP در legacy (موقت)
++
++Auth UI، bootstrap، contract form history، thin KarhaLegacy facade
+diff --git a/index.html b/index.html
+index 38d2030..ec39e2a 100644
+--- a/index.html
++++ b/index.html
+@@ -177,7 +177,7 @@
+ <!-- share/collaborate dialog -->
+ <div class="mini-overlay hidden" id="shareOverlay">
+   <div class="mini-dialog">
+-    <div class="mini-title" id="shareDialogTitle">اشتراک‌گذاری پروژه</div>
++    <div class="mini-title" id="shareDialogTitle" hidden></div>
+     <div class="mini-sub" id="shareDialogSub">آدرس جیمیل فردی که می‌خواهید به این پروژه دسترسی بدهید را وارد کنید.</div>
+     <input type="email" class="mini-input" id="shareEmailInput" placeholder="name@gmail.com" dir="ltr" style="text-align:right;">
+     <div class="mini-actions">
+@@ -315,14 +315,6 @@
+   </button>
+ </div>
+ 
+-<div class="page-overlay workspace-page hidden" id="statusTestPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeStatusTestPage" type="button" aria-label="بازگشت"><svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+-    <h2>صورت وضعیت تستی</h2><span class="inner-section-spacer"></span>
+-  </div>
+-  <div class="page-body status-test-body" id="statusTestBody"></div>
+-</div>
+-
+ <div class="page-overlay workspace-page hidden" id="activityFormPage">
+   <div class="inner-section-bar">
+     <button class="inner-section-back" id="closeActivityFormPage" type="button" aria-label="بازگشت"><svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+@@ -331,15 +323,6 @@
+   <div class="page-body internal-form-body" id="activityFormBody"></div>
+   <div class="internal-form-actions" id="activityFormActions"></div>
+ </div>
+-<div class="page-overlay workspace-page hidden" id="shareFormPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeShareFormPage" type="button" aria-label="بازگشت"><svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+-    <h2>افزودن همکار</h2><span class="inner-section-spacer"></span>
+-  </div>
+-  <div class="page-body internal-form-body" id="shareFormBody"></div>
+-  <div class="internal-form-actions" id="shareFormActions"></div>
+-</div>
+-
+ <div class="page-overlay workspace-page hidden" id="projectActivitiesPage">
+   <div class="inner-section-bar">
+     <button class="inner-section-back" id="closeProjectActivitiesPage" type="button" aria-label="بازگشت">
+@@ -431,30 +414,6 @@
+   <div class="page-body" id="exportPageBody"></div>
+ </div>
+ 
+-<div class="page-overlay workspace-page hidden" id="collabPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeCollabPage" type="button" aria-label="بازگشت">
+-      <svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+-    </button>
+-    <h2>همکاران پروژه</h2>
+-    <button class="inner-section-action" id="collabAddBtn" type="button" title="افزودن همکار" aria-label="افزودن همکار">
+-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+-    </button>
+-  </div>
+-  <div class="page-body" id="collabPageBody"></div>
+-</div>
+-
+-<div class="page-overlay workspace-page hidden" id="statusFormPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeStatusFormPage" type="button" aria-label="بازگشت">
+-      <svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+-    </button>
+-    <h2 id="statusFormTitle">صورت وضعیت</h2>
+-    <span class="inner-section-spacer"></span>
+-  </div>
+-  <div class="page-body st-form" id="statusFormBody"></div>
+-  <div class="status-save-footer" id="statusFormActions"></div>
+-</div>
+ <div class="page-overlay hidden" id="statusExportPage">
+   <div class="page-head">
+     <button class="icon-btn" id="closeStatusExportPage" type="button"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+@@ -464,47 +423,6 @@
+   <div class="export-toolbar" id="statusExportToolbar"></div>
+   <div class="page-body" id="statusExportBody"></div>
+ </div>
+-<div class="page-overlay workspace-page hidden" id="statusListPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeStatusListPage" type="button" aria-label="بازگشت">
+-      <svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+-    </button>
+-    <h2>صورت وضعیت</h2>
+-    <button class="inner-section-action" id="statusListAddBtn" type="button" title="صورت وضعیت جدید" aria-label="صورت وضعیت جدید">
+-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+-    </button>
+-  </div>
+-  <div class="page-body" id="statusListBody"></div>
+-</div>
+-<div class="page-overlay workspace-page hidden" id="contractStatusPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeContractStatusPage" type="button" aria-label="بازگشت"><svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+-    <h2>صورت وضعیت قراردادی</h2><span class="inner-section-spacer"></span>
+-  </div>
+-  <div class="page-body" id="contractStatusBody"></div>
+-</div><div class="page-overlay workspace-page hidden" id="contractApprovalPage">
+-  <div class="inner-section-bar">
+-    <button class="inner-section-back" id="closeContractApprovalPage" type="button" aria-label="بازگشت"><svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+-    <h2>تاییدیه حسابداری قراردادها</h2><span class="inner-section-spacer"></span>
+-  </div>
+-  <div class="page-body" id="contractApprovalBody"></div>
+-</div>
+-
+-
+-
+-<div class="jalali-pop hidden" id="jalaliPop">
+-  <div class="jalali-box" id="jalaliBox"></div>
+-</div>
+-
+-<div class="confirm-overlay hidden" id="confirmOverlay">
+-  <div class="confirm-box">
+-    <p id="confirmText">آیا مطمئن هستید؟</p>
+-    <div class="mini-actions">
+-      <button class="mini-btn ghost" id="confirmCancelBtn">انصراف</button>
+-      <button class="mini-btn danger" id="confirmOkBtn">تایید</button>
+-    </div>
+-  </div>
+-</div>
+ <!-- undo toast (soft delete) -->
+ <div class="undo-toast hidden" id="undoToast">
+   <span id="undoToastText">حذف شد</span>
+diff --git a/src/bootstrap/applicationStartup.js b/src/bootstrap/applicationStartup.js
+index 1a23456..bcd8832 100644
+--- a/src/bootstrap/applicationStartup.js
++++ b/src/bootstrap/applicationStartup.js
+@@ -22,6 +22,10 @@ import { projectApi } from '../domain/projectApi.js';
+ import * as mergePolicy from '../domain/mergePolicy.js';
+ import { registerPersistImpl } from '../sync/persistAdapter.js';
+ import { applyCloudSnapshot, applyCloudProjectList } from '../sync/applyCloudSnapshot.js';
++import { startOwnedCloudListeners, stopOwnedCloudListeners } from '../sync/cloudListeners.js';
++import { registerFormRuntimes, getActivityFormRuntime, getContactFormRuntime } from '../ui/formRuntimes.js';
++import { showToast as uiShowToast } from '../ui/toast.js';
++import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
+ 
+ /** Start the modular API, then the classic legacy runtime, then routing. */
+ export async function startApplication({
+@@ -50,6 +54,13 @@ export async function startApplication({
+     mergePolicy,
+     applyCloudSnapshot,
+     applyCloudProjectList,
++    startOwnedCloudListeners,
++    stopOwnedCloudListeners,
++    registerFormRuntimes,
++    getActivityFormRuntime,
++    getContactFormRuntime,
++    showToast: uiShowToast,
++    shellSurface: Object.freeze({ showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS }),
+   });
+   windowRef.KarhaApp = application;
+ 
+diff --git a/src/core/projectRouteSurface.js b/src/core/projectRouteSurface.js
+index 582d0ac..5465f25 100644
+--- a/src/core/projectRouteSurface.js
++++ b/src/core/projectRouteSurface.js
+@@ -1,34 +1,22 @@
+ const WORKSPACE_PAGE_IDS = [
+-  'projectsPage','profilePage','collabPage','calendarPage','statusListPage','statusFormPage',
+-  'statusExportPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage',
+-  'contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage',
+-  'contractTemplatesPage','statusTestPage','contractStatusPage','contractApprovalPage','activityFormPage',
+-  'shareFormPage',
++  'projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage',
++  'projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage',
++  'contractTemplateFormPage','contractTemplatesPage','activityFormPage',
+ ];
+ 
+ export function showProjectsDashboardSurface({ documentRef = globalThis.document } = {}){
+   if(!documentRef) return false;
+   WORKSPACE_PAGE_IDS.forEach(id => documentRef.getElementById?.(id)?.classList?.add?.('hidden'));
+-
+   documentRef.querySelectorAll?.('.bottom-nav-item')?.forEach?.(item => item.classList?.remove?.('active'));
+   documentRef.getElementById?.('bottomProjectsBtn')?.classList?.add?.('active');
+-
+   const topbar = documentRef.getElementById?.('topbar');
+   topbar?.classList?.remove?.('workspace-context');
+   topbar?.classList?.remove?.('root-workspace-context');
+-
+   const tabbar = documentRef.getElementById?.('tabbar');
+   tabbar?.setAttribute?.('aria-hidden', 'false');
+   return true;
+ }
+ 
+-/**
+- * Router owns project/module navigation after the migrations, while the legacy
+- * shell still owns visibility of Reports/Accounting/Settings page shells.
+- * When navigation lands on Dashboard, make that shell handoff explicit so a
+- * previously visible internal page cannot keep covering the freshly mounted
+- * project/task content.
+- */
+ export function installProjectRouteSurfaceSync({
+   windowRef = globalThis.window,
+   documentRef = windowRef?.document || globalThis.document,
+@@ -36,12 +24,11 @@ export function installProjectRouteSurfaceSync({
+   if(!windowRef?.addEventListener || !documentRef) return false;
+   if(windowRef.__karhaProjectRouteSurfaceSyncInstalled) return false;
+   windowRef.__karhaProjectRouteSurfaceSyncInstalled = true;
+-
+   windowRef.addEventListener('karha:workspace-route-synced', event => {
+-    const projectId = event?.detail?.projectId;
+-    const moduleId = event?.detail?.moduleId || 'dashboard';
+-    if(!projectId || moduleId !== 'dashboard') return;
+-    showProjectsDashboardSurface({ documentRef });
++    const moduleId = event?.detail?.moduleId;
++    if(moduleId === 'dashboard' || moduleId === 'tasks' || !moduleId){
++      showProjectsDashboardSurface({ documentRef });
++    }
+   });
+   return true;
+ }
+diff --git a/src/legacy/legacyApp.js b/src/legacy/legacyApp.js
+index 0b9581e..60bbccb 100644
+--- a/src/legacy/legacyApp.js
++++ b/src/legacy/legacyApp.js
+@@ -1195,7 +1195,7 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
+   const wasAdding = false;
+   const projectsPageVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
+   const profilePageVisible = !document.getElementById('profilePage')?.classList.contains('hidden');
+-  const collabPageVisible = !document.getElementById('collabPage')?.classList.contains('hidden');
++  const collabPageVisible = !document.getElementById()?.classList.contains('hidden');
+ 
+   // دریافت Snapshot از Firestore نباید ناوبری فعلی کاربر را خراب کند.
+   // قبلاً هر Snapshot مستقیماً renderAll() می‌کرد و ممکن بود وسط صورت‌وضعیت،
+@@ -1250,45 +1250,35 @@ async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
+ function startCloudListeners(){
+   stopCloudListeners();
+   let ownedDocs = [], sharedDocs = [];
+-  const myEmailLower = normalizeEmail(currentUser.email);
+-
+-  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
+-    .onSnapshot(snap => { ownedDocs = snap.docs; mergeCloudSnap
