@@ -4,17 +4,18 @@ on:
   push:
     branches:
       - migration/phase-7-final
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: migration/phase-7-final
           fetch-depth: 0
       - name: Apply staged patches
         shell: bash
