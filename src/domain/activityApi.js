@@ -1,4 +1,5 @@
 import { activityRepository } from '../data/activityRepository.js';
+import { activityCloudAdapter } from '../data/activityCloudAdapter.js';
 import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from '../core/session.js';
 import { canDeleteActivity } from './deleteGuard.js';
@@ -39,13 +40,15 @@ function publishLive(projectId){
   if(live && stored){
     live.activityTemplates = Array.isArray(stored.activityTemplates) ? stored.activityTemplates : [];
   }
-  // Cloud adapter remains the existing legacy persist path. It is not a second
-  // domain writer: the repository already persisted the activity collection.
-  if(typeof window !== 'undefined'){
-    window.KarhaLegacy?.markDirty?.(projectId);
-    // Activity is already in gtasks-clone-v2 via the repository. persist must
-    // not rewrite localStorage; it only flushes the cloud adapter.
-    window.KarhaLegacy?.persist?.({ local:false });
+  // Local persistence already happened exactly once in ActivityRepository.
+  // The remote adapter updates only the current embedded activity collection;
+  // legacy persist is not called, so it cannot rewrite localStorage.
+  if(stored){
+    void activityCloudAdapter.syncProjectActivities(stored).then(result => {
+      if(!result.ok && typeof window !== 'undefined'){
+        window.KarhaLegacy?.showToast?.('همگام‌سازی فعالیت با خطا مواجه شد');
+      }
+    });
   }
 }
 
@@ -60,14 +63,11 @@ export const activityApi = {
   },
 
   listPage(projectId, { cursor = 0, limit = DEFAULT_LIMIT, includeTrashed = false } = {}){
-    const start = Math.max(0, Number(cursor) || 0);
-    const size = clampLimit(limit);
-    const all = activityRepository.list(projectId)
-      .filter(activity => includeTrashed || !activity.trashed);
-    return {
-      items: all.slice(start, start + size),
-      cursor: start + size < all.length ? start + size : null,
-    };
+    return activityRepository.listPage(projectId, {
+      cursor,
+      limit: clampLimit(limit),
+      includeTrashed,
+    });
   },
 
   save(projectId, draft){
