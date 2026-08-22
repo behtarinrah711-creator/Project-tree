@@ -178,12 +178,15 @@ let dirtyProjectIds = new Set();
 function markDirty(pid){ if(pid) dirtyProjectIds.add(pid); }
 let pendingCloudWrites = new Set();
 
-function persist(){
+function persist(options){
+  const writeLocal = !options || options.local !== false;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
-    (data.projects||[]).forEach(rememberProjectTasks);
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-    catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
+    if(writeLocal){
+      (data.projects||[]).forEach(rememberProjectTasks);
+      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+      catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
+    }
     if(cloudMode && currentUser){
       dirtyProjectIds.forEach(pid => {
         const p = findProject(pid);
@@ -334,10 +337,11 @@ function addSubToTask(pid, tid, text, parentId=null){
 }
 function addProject(name){
   if(!name || !name.trim()) return;
-  const p = makeProject(name.trim());
+  const created=window.KarhaApp?.projectApi?.create?.({name:name.trim()});
+  if(!created?.ok) return;
+  const p=findProject(created.project.id) || created.project;
   if(cloudMode && currentUser){
-    const ref = db.collection('projects').doc();
-    p.id = ref.id;
+    const ref = db.collection('projects').doc(p.id);
     p.ownerUid = currentUser.uid;
     p.ownerEmail = normalizeEmail(currentUser.email);
     p.sharedWith = [];
@@ -353,7 +357,7 @@ function addProject(name){
         persist();
       });
   }
-  data.projects.push(p);
+  if(!findProject(p.id) && Array.isArray(data.projects)) data.projects.push(p);
   setActiveProject(p.id,{updateRoute:true,render:true,moduleId:'dashboard'});
 }
 
@@ -1479,25 +1483,28 @@ function finalizePendingDelete(){
   const { type, pid, tid, sid, gid, timeoutId } = pendingDelete;
   clearTimeout(timeoutId);
   if(type === 'project'){
+    window.KarhaApp?.projectApi?.trash?.(pid);
     const p = findProject(pid);
-    if(p){ p.trashed = true; p.deletedAt=Date.now(); p.deletedType='project'; cloudSyncProjectStatus(p); }
+    if(p) cloudSyncProjectStatus(p);
     if(data.activeTab === pid){
       const nextVisible = data.projects.find(pr => pr.id !== pid && !pr.trashed && !pr.archived);
       data.activeTab = nextVisible ? nextVisible.id : 'starred';
     }
   } else if(type === 'task'){
-    window.KarhaApp?.taskRuntime?.softDelete(pid,tid);
+    window.KarhaApp?.taskApi?.trash?.(pid,tid)
+      || window.KarhaApp?.taskRuntime?.softDelete(pid,tid);
   } else if(type === 'sub'){
-    window.KarhaApp?.taskRuntime?.softDelete(pid,tid,sid);
+    window.KarhaApp?.taskApi?.trash?.(pid,tid,sid)
+      || window.KarhaApp?.taskRuntime?.softDelete(pid,tid,sid);
   } else if(type === 'contact'){
-    const p=findProject(pid); const c=p ? findContact(gid,p) : null;
-    if(c){ c.trashed=true; c.deletedAt=Date.now(); c.deletedType='contact'; markDirty(pid); }
+    window.KarhaApp?.contactApi?.trash?.(pid,gid);
   } else if(type === 'activity'){
-    const p=findProject(pid); const a=p ? findActivityTemplate(gid,p) : null;
-    if(a){ a.trashed=true; a.deletedAt=Date.now(); a.deletedType='activity'; markDirty(pid); }
+    window.KarhaApp?.activityApi?.trash?.(pid,gid);
   }
   pendingDelete = null;
-  persist(); renderAll();
+  // Domain APIs already persisted cloud-only; do not rewrite localStorage here.
+  persist({ local:false });
+  renderAll();
   if(!document.getElementById('projectsPage').classList.contains('hidden')){ renderManagementPage(); }
   if(typeof renderContactsPage==='function') renderContactsPage();
   if(typeof renderProjectActivitiesPage==='function') renderProjectActivitiesPage();
@@ -3615,13 +3622,18 @@ function renderManagementPage(){
 
     if(mode==='active'){
       const editBtn=document.createElement('button'); editBtn.className='mgmt-icon-btn blue'; editBtn.title='ویرایش نام'; editBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L5 13H3v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
-      editBtn.onclick=()=>openMiniPrompt('ویرایش نام پروژه',p.name,val=>{if(val&&val.trim()){p.name=val.trim();cloudRenameProject(p);markDirty(p.id);persist();renderManagementPage();renderAll();}}); actions.appendChild(editBtn);
+      editBtn.onclick=()=>openMiniPrompt('ویرایش نام پروژه',p.name,val=>{
+        if(!val||!val.trim()) return;
+        if(!window.KarhaApp?.projectApi?.rename?.(p.id,val.trim())?.ok) return;
+        cloudRenameProject(findProject(p.id)||p);
+        renderManagementPage(); renderAll();
+      }); actions.appendChild(editBtn);
 
       const archBtn=document.createElement('button'); archBtn.className='mgmt-icon-btn'; archBtn.title='آرشیو'; archBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 6h14v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6zM2 4h16v2H2V4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
       archBtn.onclick=()=>{
-        p.archived=true;
+        window.KarhaApp?.projectApi?.archive?.(p.id,true);
         if(data.activeTab===p.id)data.activeTab='starred';
-        cloudSyncProjectStatus(p); persist();
+        cloudSyncProjectStatus(findProject(p.id)||p);
         // مهم: در همان تب فعلی بمان؛ فقط محتوا و شمارنده‌ها تازه شوند.
         renderManagementPage(); renderAll(); showToast('پروژه آرشیو شد');
       }; actions.appendChild(archBtn);
@@ -3637,7 +3649,11 @@ function renderManagementPage(){
 
     }else if(mode==='archived'){
       const restore=document.createElement('button'); restore.className='restore-btn'; restore.textContent='بازگردانی';
-      restore.onclick=()=>{p.archived=false;cloudSyncProjectStatus(p);persist();renderManagementPage();renderAll();showToast('پروژه بازگردانده شد');};
+      restore.onclick=()=>{
+        window.KarhaApp?.projectApi?.archive?.(p.id,false);
+        cloudSyncProjectStatus(findProject(p.id)||p);
+        renderManagementPage(); renderAll(); showToast('پروژه بازگردانده شد');
+      };
       actions.appendChild(restore);
 
       const delBtn=document.createElement('button'); delBtn.className='perm-del-btn'; delBtn.textContent='حذف';
@@ -6003,8 +6019,8 @@ window.KarhaApp?.taskRuntime?.configure({
     const project=findProject(projectId);
     const stored=window.KarhaApp?.projectRepository?.find(projectId);
     if(project && stored) project.tasks=Array.isArray(stored.tasks)?stored.tasks:[];
-    if(project){ rememberProjectTasks(project); markDirty(projectId); }
-    persist();
+    if(project) markDirty(projectId);
+    persist({ local:false });
   }
 });
 const routedProjectId = getProjectIdFromRoute();

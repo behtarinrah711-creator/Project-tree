@@ -1,4 +1,4 @@
-import { contractRepository } from '../../data/contractRepository.js';
+import { contractApi } from '../../domain/contractApi.js';
 import * as realContractDomain from './realContractDomain.js';
 
 function today(){
@@ -57,6 +57,7 @@ export function saveRealContract(projectId, draft, helpers={}){
   s.updatedAt=Date.now();
   s.trashed=false;
 
-  if(!contractRepository.save(project.id,s)) return {ok:false};
-  return {ok:true,contract:s};
+  const saved=contractApi.save(project.id,s);
+  if(!saved.ok) return {ok:false, message:saved.message};
+  return {ok:true,contract:saved.contract};
 }

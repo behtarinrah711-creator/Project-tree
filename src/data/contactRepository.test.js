@@ -15,7 +15,7 @@ function createMemoryStorage(initialEntries = {}){
 
 export function assertContactRepositoryContract(){
   const repository=new ContactRepository(new ProjectRepository(createMemoryStorage()));
-  for(const method of ['list','get','save','update','softDelete']){
+  for(const method of ['list','listPage','get','save','update','softDelete']){
     if(typeof repository[method] !== 'function'){
       throw new Error(`ContactRepository contract missing: ${method}`);
     }

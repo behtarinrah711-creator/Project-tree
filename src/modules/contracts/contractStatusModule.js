@@ -1,6 +1,6 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
-import { contractRepository } from '../../data/contractRepository.js';
+import { contractApi } from '../../domain/contractApi.js';
 import { getProjectContracts } from './realContractDomain.js';
 
 function project(projectId=null){
@@ -111,11 +111,11 @@ export const contractStatusModule={
         approvalStatus:'pending-accounting',createdAt:Date.now()});
       const progressEntry={id:'pt_'+Date.now(),percent:n,amount:cum,stageAmount,
         date:String(state.date).trim(),note:String(state.note||'').trim(),createdAt:Date.now(),source:'contract-status'};
-      contractRepository.update(p.id,selected.id,contract=>({
-        ...contract,
-        progressTimeline:[...(contract.progressTimeline||[]),progressEntry],
+      contractApi.save(p.id,{
+        ...selected,
+        progressTimeline:[...(selected.progressTimeline||[]),progressEntry],
         progressPercent:n,
-      }));
+      });
       projectRepository.saveProjectsList(projectRepository.getProjectsList());
       this.toast('صورت وضعیت ثبت و برای تاییدیه حسابداری ارسال شد');
       state.percent='';state.note='';this.render(body,p.id);

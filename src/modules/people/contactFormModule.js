@@ -1,5 +1,5 @@
 import { projectContext } from '../../core/projectContext.js';
-import { contactRepository } from '../../data/contactRepository.js';
+import { contactApi } from '../../domain/contactApi.js';
 import { localStorageAdapter } from '../../data/storageAdapter.js';
 
 const CONTACT_DRAFT_KEY='gtasks-contact-draft-v1';
@@ -16,7 +16,7 @@ function clearContactDraft(id){ const draft=readContactDraft(); if(!draft||!id||
 export function openContactForm(contact=null,{activityId=null}={}){
   const projectId=getProjectId();
   if(!projectId) return false;
-  const storedContact=contact?.id ? contactRepository.get(projectId, contact.id) : null;
+  const storedContact=contact?.id ? contactApi.get(projectId, contact.id) : null;
   contact=storedContact || contact;
   const isEdit=!!contact;
   const c=contact||{
@@ -24,7 +24,10 @@ export function openContactForm(contact=null,{activityId=null}={}){
     iranianDocumentImages:[], firstName:'', lastName:'', fatherName:'', nationalId:'', address:'', postalCode:'',
     phones:[], type:'', activities:[], bankAccounts:[], pending:true
   };
-  if(!contact){ const existingDraft=contactRepository.list(projectId).find(x=>x.pending===true); if(existingDraft) Object.assign(c,existingDraft); }
+  if(!contact){
+    const existingDraft=contactApi.listPage(projectId,{ limit:200 }).items.find(x=>x.pending===true);
+    if(existingDraft) Object.assign(c,existingDraft);
+  }
   if(!contact && activityId) c.activities=[String(activityId)];
   if(!Array.isArray(c.phones)) c.phones=c.phone?[c.phone]:[];
   if(!Array.isArray(c.bankAccounts)){
@@ -79,9 +82,8 @@ export function openContactForm(contact=null,{activityId=null}={}){
       };
       draft.name=[draft.firstName,draft.lastName].filter(Boolean).join(' ');
       draft.cards=bankEntries.map(x=>x.card).filter(Boolean); draft.ibans=bankEntries.map(x=>x.iban).filter(Boolean); draft.accounts=bankEntries.map(x=>x.account).filter(Boolean);
-      if(!contactRepository.save(projectId, draft)) return false;
+      if(!contactApi.save(projectId, draft).ok) return false;
       writeContactDraft(draft);
-      runtime.persistContacts(projectId);
       return true;
     }catch(e){ return false; }
   };
@@ -355,6 +357,6 @@ export function openContactForm(contact=null,{activityId=null}={}){
     const bankVals=bankEntries.map(entry=>{const getE=k=>entry.querySelector(`[data-key="${k}"]`)?.value.trim()||'';return {ownerName:getE('ownerName'),bankName:getE('bankName'),card:toEnglishDigits(getE('card')),iban:toEnglishDigits(getE('iban')),account:toEnglishDigits(getE('account'))};}).filter(b=>b.ownerName||b.bankName||b.card||b.iban||b.account);
     c.pending=false;c.draftUpdatedAt=null;c.nationalityType=nat;c.nationality=get('nationality');c.foreignId=toEnglishDigits(get('foreignId'));c.foreignIdImages=nat==='غیر ایرانی'?c.foreignIdImages:[];c.iranianDocumentImages=nat==='ایرانی'?c.iranianDocumentImages:[];c.foreignIdImage=c.foreignIdImages[0]||'';
     c.firstName=firstName;c.lastName=lastName;c.fatherName=get('fatherName');c.name=[firstName,lastName].filter(Boolean).join(' ');c.nationalId=nat==='ایرانی'?toEnglishDigits(nationalId):'';c.address=get('address');c.postalCode=toEnglishDigits(get('postalCode'));c.phones=phoneVals;c.phone=phoneVals[0]||'';c.type=typeVal;c.activities=selectedActivityId?[selectedActivityId]:[];c.bankAccounts=bankVals;c.cards=bankVals.map(x=>x.card).filter(Boolean);c.ibans=bankVals.map(x=>x.iban).filter(Boolean);c.accounts=bankVals.map(x=>x.account).filter(Boolean);
-    if(!contactRepository.save(projectId, c)) return; clearContactDraft(c.id); contactSavedSuccessfully=true; runtime.persistContacts(projectId); backToList();
+    if(!contactApi.save(projectId, c).ok) return; clearContactDraft(c.id); contactSavedSuccessfully=true; backToList();
   };
 }

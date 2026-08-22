@@ -1,6 +1,8 @@
 import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
-import { contractRepository } from '../../data/contractRepository.js';
+import { contractApi } from '../../domain/contractApi.js';
+import { contactApi } from '../../domain/contactApi.js';
+import { activityApi } from '../../domain/activityApi.js';
 
 function resolveProjectId(explicit=null){
   return explicit || projectContext.getProjectId?.()
@@ -12,11 +14,11 @@ function project(id){
 function list(p,key){
   return Array.isArray(p?.[key]) ? p[key].filter(x=>!x.trashed) : [];
 }
-function findActivity(p,id){
-  return (p?.activityTemplates||[]).find(a=>String(a.id)===String(id)) || null;
+function findActivity(projectId,id){
+  return activityApi.lookup(projectId,id);
 }
-function findContact(p,id){
-  return (p?.contacts||[]).find(c=>String(c.id)===String(id)) || null;
+function findContact(projectId,id){
+  return contactApi.lookup(projectId,id);
 }
 function money(v){
   if(v===null||v===undefined||v==='') return 'بدون مبلغ';
@@ -39,15 +41,8 @@ function legacy(name,...args){
   }
   return false;
 }
-function softDelete(projectId,key,id){
-  const projects=projectRepository.getProjectsList();
-  const p=projects.find(x=>String(x.id??x.projectId)===String(projectId));
-  if(!p)return false;
-  const item=(p[key]||[]).find(x=>String(x.id)===String(id));
-  if(!item)return false;
-  item.trashed=true; item.deletedAt=Date.now();
-  projectRepository.saveProjectsList(projects);
-  return true;
+function softDeleteTemplate(projectId,id){
+  return contractApi.trashTemplate(projectId,id).ok;
 }
 
 export const contractsModule={
@@ -73,7 +68,8 @@ export const contractsModule={
     listWrap.className='contract-list';
     const head=document.createElement('div');
     head.className='contract-list-head';
-    const contracts=contractRepository.list(id).filter(c=>!c.trashed);
+    const firstPage=contractApi.listPage(id,{ cursor:0, limit:50 });
+    const contracts=firstPage.items;
     head.innerHTML=`<span class="title">قراردادهای واقعی پیمانکاران</span><span class="mgmt-count">${new Intl.NumberFormat('fa-IR').format(contracts.length)}</span>`;
     body.append(head);
 
@@ -89,8 +85,8 @@ export const contractsModule={
     }
 
     contracts.forEach(c=>{
-      const a=findActivity(p,c.activityId);
-      const contact=findContact(p,c.contractorId||c.contactId);
+      const a=findActivity(id,c.activityId);
+      const contact=findContact(id,c.contractorId||c.contactId);
       const title=c.title || ('قرارداد '+(a?.name||''));
       const person=contact ? ([contact.firstName,contact.lastName].filter(Boolean).join(' ')||contact.name) : 'بدون مخاطب';
       const meta=[person,a?.name||'بدون فعالیت',money(c.amount)].join(' · ');
@@ -110,12 +106,63 @@ export const contractsModule={
       del.onclick=e=>{
         e.stopPropagation();
         if(!confirm('آیا از حذف این قرارداد اطمینان دارید؟'))return;
-        if(contractRepository.softDelete(id,c.id))this.render(id);
+        const result=contractApi.trash(id,c.id);
+        if(!result.ok){
+          if(result.code==='in_use') window.KarhaLegacy?.showRecordDeleteBlocked?.('contract', result.refs);
+          else window.KarhaLegacy?.showToast?.(result.message || 'حذف قرارداد انجام نشد');
+          return;
+        }
+        this.render(id);
       };
       actions.append(edit,del); row.append(main,actions);
       main.onclick=()=>legacy('openContractForm',c.id);
       listWrap.appendChild(row);
     });
+
+    if(firstPage.cursor != null){
+      const more=document.createElement('button');
+      more.type='button';
+      more.className='contract-action';
+      more.textContent='بارگذاری بیشتر';
+      let cursor=firstPage.cursor;
+      more.addEventListener('click',()=>{
+        const page=contractApi.listPage(id,{ cursor, limit:50 });
+        page.items.forEach(c=>{
+          const a=findActivity(id,c.activityId);
+          const contact=findContact(id,c.contractorId||c.contactId);
+          const title=c.title || ('قرارداد '+(a?.name||''));
+          const person=contact ? ([contact.firstName,contact.lastName].filter(Boolean).join(' ')||contact.name) : 'بدون مخاطب';
+          const meta=[person,a?.name||'بدون فعالیت',money(c.amount)].join(' · ');
+          const row=document.createElement('div'); row.className='contract-row';
+          row.dataset.searchText=(title+' '+meta).toLocaleLowerCase('fa');
+          const main=document.createElement('div'); main.className='contract-main';
+          const t=document.createElement('div'); t.className='contract-title'; t.textContent=title;
+          const m=document.createElement('div'); m.className='contract-meta'; m.textContent=meta;
+          main.append(t,m);
+          const actions=document.createElement('div'); actions.className='contract-actions';
+          const edit=document.createElement('button'); edit.className='contract-action'; edit.textContent='✎';
+          edit.onclick=e=>{e.stopPropagation();legacy('openContractForm',c.id);};
+          const del=document.createElement('button'); del.className='contract-action danger'; del.textContent='×';
+          del.onclick=e=>{
+            e.stopPropagation();
+            if(!confirm('آیا از حذف این قرارداد اطمینان دارید؟'))return;
+            const result=contractApi.trash(id,c.id);
+            if(!result.ok){
+              if(result.code==='in_use') window.KarhaLegacy?.showRecordDeleteBlocked?.('contract', result.refs);
+              else window.KarhaLegacy?.showToast?.(result.message || 'حذف قرارداد انجام نشد');
+              return;
+            }
+            this.render(id);
+          };
+          actions.append(edit,del); row.append(main,actions);
+          main.onclick=()=>legacy('openContractForm',c.id);
+          listWrap.appendChild(row);
+        });
+        cursor=page.cursor;
+        if(cursor==null) more.remove();
+      });
+      body.appendChild(more);
+    }
   },
 
   renderTemplates(explicitProjectId=null){
@@ -145,7 +192,7 @@ export const contractsModule={
     body.append(search.wrap,listWrap);
 
     templates.forEach(t=>{
-      const a=findActivity(p,t.activityId);
+      const a=findActivity(id,t.activityId);
       const title=a?`قرارداد ${a.name}`:(t.title||'قرارداد');
       const meta=(a?.name||'بدون فعالیت')+' · '+new Intl.NumberFormat('fa-IR').format(Array.isArray(t.items)?t.items.length:0)+' ماده اصلی';
       const row=document.createElement('div'); row.className='contract-template-row';
@@ -159,7 +206,7 @@ export const contractsModule={
       del.onclick=e=>{
         e.preventDefault();e.stopPropagation();
         if(!confirm('آیا از حذف این قالب قرارداد اطمینان دارید؟'))return;
-        if(softDelete(id,'contractTemplates',t.id))this.renderTemplates(id);
+        if(softDeleteTemplate(id,t.id))this.renderTemplates(id);
       };
       actions.appendChild(del); row.append(main,actions);
       row.onclick=()=>legacy('openContractTemplateForm',t.id);
