@@ -1,0 +1,44 @@
+name: Apply phase 5 migration
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'migration/phase-5-condemned-removal'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout phase 5 branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/phase-5-condemned-removal
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate and apply phase 5 patches
+        run: |
+          for p in .phase5-patch/part0.patch .phase5-patch/part1.patch .phase5-patch/part2.patch .phase5-patch/part3.patch; do
+            git apply --check "$p"
+            git apply "$p"
+          done
+          rm -rf .phase5-patch
+          rm -f .github/workflows/apply-phase5.yml
+
+      - name: Run unit tests
+        run: node --test src/**/*.test.js scripts/*.test.mjs
+
+      - name: Commit phase 5
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'No phase 5 changes found'; exit 1; }
+          git commit -m 'Migration phase 5: remove condemned active paths'
+          git push origin HEAD:migration/phase-5-condemned-removal
