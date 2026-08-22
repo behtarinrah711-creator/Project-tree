@@ -14,6 +14,7 @@ import { installBackGestureGuard } from '../core/backGestureGuard.js';
 import { installContractFormExitBridge } from '../modules/contracts/contractFormExitBridge.js';
 import { installLogoutSessionGuard } from './logoutSessionGuard.js';
 import { getSession, installSessionObserver } from '../core/session.js';
+import { activityApi } from '../domain/activityApi.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -34,6 +35,7 @@ export async function startApplication({
     reconcileDrawerProjectList,
     projectWorkspace: Object.freeze({ listProjects, getProject, getActiveProject, selectProject }),
     getSession,
+    activityApi,
   });
   windowRef.KarhaApp = application;
 
