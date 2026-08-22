@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - main
-    types: [opened]
+    types: [opened, synchronize]
 
 permissions:
   contents: write
@@ -21,11 +21,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate and apply phase 5 patches
+      - name: Apply phase 5 patches with three-way fallback
         run: |
           for p in .phase5-patch/part0.patch .phase5-patch/part1.patch .phase5-patch/part2.patch .phase5-patch/part3.patch; do
-            git apply --check "$p"
-            git apply "$p"
+            git apply --3way "$p"
           done
           rm -rf .phase5-patch
           rm -f .github/workflows/apply-phase5.yml
