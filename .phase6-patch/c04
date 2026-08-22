@@ -1,0 +1,119 @@
+);body.innerHTML='';const note=document.createElement('div');note.className='internal-form-note';note.textContent='آدرس جیمیل فردی که می‌خواهید به این پروژه دسترسی بدهید را وارد کنید.';body.appendChild(note);const f=document.createElement('div');f.className='internal-form-field';const l=document.createElement('label');l.textContent='آدرس جیمیل';const input=document.createElement('input');input.type='email';input.dir='ltr';input.className='internal-form-input';input.placeholder='name@gmail.com';try{input.value=JSON.parse(localStorage.getItem(SHARE_DRAFT_KEY)||'null')?.email||''}catch(e){}input.oninput=()=>shareFormDirty=true;f.append(l,input);body.appendChild(f);const actions=document.getElementById('shareFormActions');actions.innerHTML='';const save=document.createElement('button');save.className='if-save';save.textContent='ذخیره';save.onclick=()=>submitShareForm(input);const draft=document.createElement('button');draft.className='if-draft';draft.textContent='پیش‌نویس';draft.onclick=()=>{try{localStorage.setItem(SHARE_DRAFT_KEY,JSON.stringify({email:input.value}))}catch(e){}shareFormDirty=false;showToast('پیش‌نویس ذخیره شد');closeShareForm();};const cancel=document.createElement('button');cancel.className='if-cancel';cancel.textContent='انصراف';cancel.onclick=()=>closeShareForm();actions.append(save,draft,cancel);}
+-function submitShareForm(input){const email=normalizeEmail(input.value);if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showToast('یک آدرس جیمیل معتبر وارد کنید');input.focus();return;}const p=findProject(shareTargetProjectId);if(!p||!p.ownerUid){showToast('این پروژه هنوز روی سرور نیست');return;}if(p.ownerUid===currentUser.uid&&currentUser.email)p.ownerEmail=normalizeEmail(currentUser.email);db.collection('projects').doc(p.id).update({sharedWith:firebase.firestore.FieldValue.arrayUnion(email),ownerEmail:p.ownerEmail||normalizeEmail(currentUser.email)}).then(()=>{showToast('دسترسی برای '+email+' اضافه شد');if(!p.sharedWith)p.sharedWith=[];p.sharedWith=p.sharedWith.map(e=>normalizeEmail(e)).filter(Boolean);if(!p.sharedWith.includes(email))p.sharedWith.push(email);try{localStorage.removeItem(SHARE_DRAFT_KEY)}catch(e){}shareFormDirty=false;closeShareForm();renderCollabPage();}).catch(()=>showToast('خطا در افزودن دسترسی'));}
+-function closeShareForm(fromPopState=false){if(shareFormHistoryPushed){shareFormHistoryPushed=false;if(!fromPopState){try{history.back()}catch(e){}}}setInternalFormMode(false);document.getElementById('shareFormPage').classList.add('hidden');workspaceSubpage='collab';showOnlyWorkspacePage('collabPage');renderCollabPage();updateWorkspaceContextBar();shareFormDirty=false;}
+-function requestCloseShareForm(input,fromPopState=false){
+-  const value=String(input?.value||'').trim();
+-  const hasInput=!!value;
+-  const requiredComplete=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
+-  if(hasInput && !requiredComplete){
+-    showIncompleteFormExitChoice({
+-      onYes:()=>{try{localStorage.setItem(SHARE_DRAFT_KEY,JSON.stringify({email:input.value}))}catch(e){} shareFormDirty=false; closeShareForm(fromPopState);},
+-      onNo:()=>closeShareForm(fromPopState)
+-    });
+-    return;
+-  }
+-  closeShareForm(fromPopState);
+-}
++function openShareForm(pid){ try{ showToast('اشتراک‌گذاری در این نسخه حذف شده است'); }catch(e){} }
++function submitShareForm(){ return; }
++function closeShareForm(){ return; }
++function requestCloseShareForm(){ return; }
+ 
+-function openShareDialog(pid){openShareForm(pid);}
++function openShareDialog(){ return; }
+ function closeShareDialog(){document.getElementById('shareOverlay').classList.add('hidden');}
+ document.getElementById('shareConfirmBtn').onclick = ()=>{
+   const email = normalizeEmail(document.getElementById('shareEmailInput').value);
+@@ -4744,7 +4602,7 @@ document.getElementById('shareConfirmBtn').onclick = ()=>{
+     // فقط نسخهٔ lowercase در حافظه نگه داشته شود
+     p.sharedWith = p.sharedWith.map(e => normalizeEmail(e)).filter(Boolean);
+     if(!p.sharedWith.includes(email)) p.sharedWith.push(email);
+-    if(!document.getElementById('collabPage').classList.contains('hidden')) renderCollabPage();
++    if(!document.getElementById().classList.contains('hidden')) renderCollabPage();
+   }).catch(()=> showToast('خطا در افزودن دسترسی'));
+ };
+ 
+@@ -5196,7 +5054,7 @@ async function openStatusForm(id){
+   document.getElementById('statusFormTitle').textContent = id ? 'ویرایش صورت وضعیت' : 'صورت وضعیت جدید';
+   setBottomNavActive('Accounting');
+   renderTabs();
+-  showOnlyWorkspacePage('statusFormPage');
++  showOnlyWorkspacePage();
+   updateWorkspaceContextBar();
+ 
+   if(!statusFormHistoryPushed){
+@@ -5206,7 +5064,7 @@ async function openStatusForm(id){
+   // فرم فوراً رندر می‌شود؛ شماره نامه در صورت نیاز بعداً تکمیل می‌شود.
+   renderStatusForm();
+   requestAnimationFrame(()=>{
+-    const page = document.getElementById('statusFormPage');
++    const page = document.getElementById();
+     const pb = page && page.querySelector('.page-body');
+     if(pb) pb.scrollTop = 0;
+     if(page) page.scrollTop = 0;
+@@ -5230,7 +5088,7 @@ async function openStatusForm(id){
+ }
+ function closeStatusForm(fromPopState=false){
+   setInternalFormMode(false);
+-  document.getElementById('statusFormPage').classList.add('hidden');
++  document.getElementById().classList.add('hidden');
+   statusFormHistoryPushed = false;
+   const statusActions = document.getElementById('statusFormActions');
+   if(statusActions) statusActions.innerHTML = '';
+@@ -5242,7 +5100,7 @@ function closeStatusForm(fromPopState=false){
+     workspaceSubpage = 'statusList';
+     setBottomNavActive('Accounting');
+     renderTabs();
+-    showOnlyWorkspacePage('statusListPage');
++    showOnlyWorkspacePage();
+     updateWorkspaceContextBar();
+     renderStatusList();
+   } else {
+@@ -5258,7 +5116,7 @@ function closeStatusForm(fromPopState=false){
+ function finishStatusSaveAndReturnToList(){
+   // مسیر اختصاصی ذخیره: ابتدا فرم را از DOM خارج می‌کنیم تا هیچ بخشی از آن
+   // دوباره توسط refresh/render فوتر نمایش داده نشود، سپس لیست را می‌سازیم.
+-  const formPage = document.getElementById('statusFormPage');
++  const formPage = document.getElementById();
+   if(formPage) formPage.classList.add('hidden');
+   const actions = document.getElementById('statusFormActions');
+   if(actions) actions.innerHTML = '';
+@@ -5271,7 +5129,7 @@ function finishStatusSaveAndReturnToList(){
+ 
+   setBottomNavActive('Accounting');
+   renderTabs();
+-  showOnlyWorkspacePage('statusListPage');
++  showOnlyWorkspacePage();
+   updateWorkspaceContextBar();
+   renderStatusList();
+ }
+@@ -5621,7 +5479,7 @@ function openStatusList(){
+   workspaceSubpage='statusList';
+   setBottomNavActive('Accounting');
+   renderTabs();
+-  showOnlyWorkspacePage('statusListPage');
++  showOnlyWorkspacePage();
+   updateWorkspaceContextBar();
+   pushWorkspaceHistory('statusList');
+   renderStatusList();
+@@ -5708,11 +5566,11 @@ function openStatusExport(id){
+   statusExportId = id;
+   statusFormState = normalizeStatusForm(JSON.parse(JSON.stringify(item)));
+   document.getElementById('statusExportTitle').textContent = 'خروجی: ' + (item.personName || 'صورت وضعیت');
+-  document.getElementById('statusExportPage').classList.remove('hidden');
++  document.getElementById().classList.remove('hidden');
+   renderStatusExportPage();
+ }
+ function closeStatusExport(){
+-  document.getElementById('statusExportPage').classList.add('hidden');
++  document.getElementById().classList.add('hidden');
+   statusExportId = null;
+ }
+ function renderStatusExportPage(){
+@@ -6007,7 +5865,7 @@ window.addEventListener('popstate', ()=>{
+   if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
+ 
+   // Back از فرم صورت وضعیت: فرم بسته می‌شود و دقیقاً به لیست صورت وضعیت‌ها برمی‌گردیم.
+-  if(document.getElementById('statusFormPage') && !document.getElementById('statusFormPage').classList.contains('hidden')){
++  if(document.getElementById() && !document.getElementById().classList.contains('hidden')){
+     requestCloseStatu
