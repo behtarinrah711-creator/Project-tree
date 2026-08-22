@@ -511,34 +511,60 @@ function docToProject(doc, localExisting){
   const localContractTemplates = localExisting && Array.isArray(localExisting.contractTemplates) ? localExisting.contractTemplates : [];
   const localContracts = localExisting && Array.isArray(localExisting.contracts) ? localExisting.contracts : [];
   const localContractStatusReports = localExisting && Array.isArray(localExisting.contractStatusReports) ? localExisting.contractStatusReports : [];
+  const policy = window.KarhaApp?.mergePolicy;
+  const projectDirty = !!(dirtyProjectIds.has(doc.id) || pendingCloudWrites.has(doc.id));
+  const mergeCol = (localArr, cloudArr, fieldPresent) => {
+    if(!policy?.mergeCollection){
+      if(!fieldPresent) return localArr;
+      if(Array.isArray(cloudArr) && cloudArr.length === 0 && localArr.length > 0) return localArr;
+      return fieldPresent ? cloudArr : localArr;
+    }
+    // Missing cloud field → treat as no authoritative empty array
+    if(!fieldPresent) return localArr;
+    return policy.mergeCollection(localArr, cloudArr, { dirty: projectDirty }).items;
+  };
   const hasCloudContacts = Object.prototype.hasOwnProperty.call(d,'contacts');
   const hasCloudActivities = Object.prototype.hasOwnProperty.call(d,'activityTemplates');
-  const cloudContacts = Array.isArray(d.contacts) ? d.contacts : [];
-  const cloudActivities = Array.isArray(d.activityTemplates) ? d.activityTemplates : [];
   const hasCloudContractTemplates = Object.prototype.hasOwnProperty.call(d,'contractTemplates');
   const hasCloudContracts = Object.prototype.hasOwnProperty.call(d,'contracts');
-  const cloudContractTemplates = Array.isArray(d.contractTemplates) ? d.contractTemplates : [];
-  const cloudContracts = Array.isArray(d.contracts) ? d.contracts : [];
-  const contacts = hasCloudContacts ? cloudContacts : localContacts;
-  const activityTemplates = hasCloudActivities ? cloudActivities : localActivities;
-  const contractTemplates = hasCloudContractTemplates ? cloudContractTemplates : localContractTemplates;
-  const contracts = hasCloudContracts ? cloudContracts : localContracts;
+  const contacts = mergeCol(localContacts, Array.isArray(d.contacts) ? d.contacts : [], hasCloudContacts);
+  const activityTemplates = mergeCol(localActivities, Array.isArray(d.activityTemplates) ? d.activityTemplates : [], hasCloudActivities);
+  const contractTemplates = mergeCol(localContractTemplates, Array.isArray(d.contractTemplates) ? d.contractTemplates : [], hasCloudContractTemplates);
+  const contracts = mergeCol(localContracts, Array.isArray(d.contracts) ? d.contracts : [], hasCloudContracts);
+  const meta = policy?.mergeProjectMetadata
+    ? policy.mergeProjectMetadata(localExisting, {
+        name: d.name,
+        completedOpen: d.completedOpen,
+        trashed: d.trashed,
+        archived: d.archived,
+        ownerUid: d.ownerUid,
+        ownerEmail: normalizeEmail(d.ownerEmail || ''),
+        sharedWith: (d.sharedWith || []).map(e => normalizeEmail(e)).filter(Boolean),
+      }, { projectDirty })
+    : {
+        name: projectDirty ? (localExisting?.name ?? d.name) : d.name,
+        completedOpen: projectDirty ? !!(localExisting?.completedOpen) : !!d.completedOpen,
+        trashed: projectDirty ? !!(localExisting?.trashed) : !!d.trashed,
+        archived: projectDirty ? !!(localExisting?.archived) : !!d.archived,
+        ownerUid: d.ownerUid,
+        ownerEmail: normalizeEmail(d.ownerEmail || ''),
+        sharedWith: (d.sharedWith || []).map(e => normalizeEmail(e)).filter(Boolean),
+      };
   return {
     id: doc.id,
-    name: d.name,
+    name: meta.name,
     type: 'project',
-    // Every workspace-owned record lives under its project.
     tasks: cachedTasks,
     contacts,
     activityTemplates,
     contractTemplates,
     contracts,
-    completedOpen: !!d.completedOpen,
-    ownerUid: d.ownerUid,
-    ownerEmail: normalizeEmail(d.ownerEmail || ''),
-    sharedWith: (d.sharedWith || []).map(e => normalizeEmail(e)).filter(Boolean),
-    trashed: !!d.trashed,
-    archived: !!d.archived,
+    completedOpen: !!meta.completedOpen,
+    ownerUid: meta.ownerUid,
+    ownerEmail: meta.ownerEmail || normalizeEmail(d.ownerEmail || ''),
+    sharedWith: meta.sharedWith || [],
+    trashed: !!meta.trashed,
+    archived: !!meta.archived,
     schemaVersion: Number(d.schemaVersion || 1),
     expanded: true
   };
@@ -929,6 +955,22 @@ function cloudSyncProjectFull(p){
   // This keeps project metadata small and gives reports/purchases/estimates
   // stable, independently addressable records for future expansion.
   normalizeProjectScopedData(p);
+  const store = window.KarhaApp?.projectRepository?.find?.(p.id) || p;
+  const policy = window.KarhaApp?.mergePolicy;
+  const pickCol = (key) => {
+    const fromStore = Array.isArray(store[key]) ? store[key] : [];
+    const fromLive = Array.isArray(p[key]) ? p[key] : [];
+    // Prefer non-empty store; never upload empty over full store
+    if(policy?.shouldUploadCollection && !policy.shouldUploadCollection(fromStore, fromLive)){
+      return fromStore;
+    }
+    if(fromLive.length === 0 && fromStore.length > 0) return fromStore;
+    return fromLive.length ? fromLive : fromStore;
+  };
+  const contactsPayload = pickCol('contacts');
+  const activitiesPayload = pickCol('activityTemplates');
+  const templatesPayload = pickCol('contractTemplates');
+  const contractsPayload = pickCol('contracts');
   db.collection('projects').doc(p.id).set({
     name: p.name,
     type: 'project',
@@ -938,10 +980,10 @@ function cloudSyncProjectFull(p){
     sharedWith: sharedNorm,
     trashed: !!p.trashed,
     archived: !!p.archived,
-    contacts: p.contacts || [],
-    activityTemplates: p.activityTemplates || [],
-    contractTemplates: p.contractTemplates || [],
-    contracts: p.contracts || [],
+    contacts: contactsPayload,
+    activityTemplates: activitiesPayload,
+    contractTemplates: templatesPayload,
+    contracts: contractsPayload,
     schemaVersion: DATA_SCHEMA_VERSION
   }, { merge:true })
     .then(async ()=>{

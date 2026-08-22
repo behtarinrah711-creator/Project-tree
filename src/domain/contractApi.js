@@ -2,6 +2,7 @@ import { contractRepository } from '../data/contractRepository.js';
 import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from '../core/session.js';
 import { canDeleteContract } from './deleteGuard.js';
+import { isOffline } from './mergePolicy.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -69,6 +70,7 @@ export const contractApi = {
   },
 
   save(projectId, draft){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !draft) return deny('invalid', 'قرارداد نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);
@@ -86,6 +88,7 @@ export const contractApi = {
   },
 
   trash(projectId, contractId){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !contractId) return deny('invalid', 'قرارداد نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);
@@ -119,6 +122,7 @@ export const contractApi = {
   },
 
   saveTemplate(projectId, draft, activityName = ''){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !draft) return deny('invalid', 'قالب قرارداد نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);
@@ -152,6 +156,7 @@ export const contractApi = {
   },
 
   trashTemplate(projectId, templateId){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !templateId) return deny('invalid', 'قالب قرارداد نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);

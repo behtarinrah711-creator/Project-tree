@@ -157,7 +157,7 @@ function renderProjectView(content, p){
     chev.className = 'chev'+(p.completedOpen?'':' collapsed');
     chev.innerHTML = svgChevron();
     header.appendChild(chev);
-    header.onclick = ()=>{ p.completedOpen = !p.completedOpen; markDirty(p.id); persist(); renderAll(); };
+    header.onclick = ()=>{ p.completedOpen = !p.completedOpen; markDirty(p.id); persist({ local:false }); renderAll(); };
     content.appendChild(header);
 
     const list = document.createElement('div');
@@ -258,7 +258,7 @@ function renderInlineAddRow(p){
       const summaryVal = document.querySelector('.cost-summary .cost-sum-val');
       if(summaryVal) summaryVal.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(projectCostSum(p));
     }
-    persist();
+    persist({ local:false });
     if(keepFocus){
       addItemActive = true;
       ignoreBlur = true;
@@ -464,7 +464,7 @@ function renderStarredView(content){
               removeFromStarredOrder(g.pid,g.tid);
             }
           });
-          persist();
+          persist({ local:false });
           refreshStarredPartial();
           showToast('از ستاره‌دارها حذف شدند');
         }, 'حذف همه');
@@ -587,7 +587,7 @@ function onStarredDragEnd(){
   if(hoverPos==='after') toIdx += 1;
   order.splice(toIdx,0,key);
   getData().starredOrder = order;
-  persist();
+  persist({ local:false });
   refreshStarredPartial();
 }
 

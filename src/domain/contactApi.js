@@ -2,6 +2,7 @@ import { contactRepository } from '../data/contactRepository.js';
 import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from '../core/session.js';
 import { canDeleteContact } from './deleteGuard.js';
+import { isOffline } from './mergePolicy.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -67,6 +68,7 @@ export const contactApi = {
   },
 
   save(projectId, draft){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !draft) return deny('invalid', 'مخاطب نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);
@@ -84,6 +86,7 @@ export const contactApi = {
   },
 
   trash(projectId, contactId){
+    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
     if(!projectId || !contactId) return deny('invalid', 'مخاطب نامعتبر است');
     const project = projectRepository.find(projectId);
     const access = canWriteProject(project);

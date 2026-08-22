@@ -19,6 +19,7 @@ import { contactApi } from '../domain/contactApi.js';
 import { contractApi } from '../domain/contractApi.js';
 import { taskApi } from '../domain/taskApi.js';
 import { projectApi } from '../domain/projectApi.js';
+import * as mergePolicy from '../domain/mergePolicy.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -44,6 +45,7 @@ export async function startApplication({
     contractApi,
     taskApi,
     projectApi,
+    mergePolicy,
   });
   windowRef.KarhaApp = application;
 
