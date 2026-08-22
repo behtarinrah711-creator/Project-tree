@@ -1,0 +1,193 @@
+); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
+ function renderStatusTestPage(){
+@@ -3254,10 +3242,10 @@ function refreshCurrentFooterPage(){
+   }
+   if(active.id==='bottomAccountingBtn'){
+     if(workspaceSubpage==='statusList'){
+-      showOnlyWorkspacePage('statusListPage');
++      showOnlyWorkspacePage();
+       renderStatusList();
+     } else if(workspaceSubpage==='statusForm' && statusFormState){
+-      showOnlyWorkspacePage('statusFormPage');
++      showOnlyWorkspacePage();
+       renderStatusForm();
+     } else {
+       workspaceSubpage=null;
+@@ -3272,7 +3260,7 @@ function refreshCurrentFooterPage(){
+       showOnlyWorkspacePage('projectTrashPage');
+       renderProjectTrashPage();
+     } else if(workspaceSubpage==='collab'){
+-      showOnlyWorkspacePage('collabPage');
++      showOnlyWorkspacePage();
+       renderCollabPage();
+     } else {
+       workspaceSubpage=null;
+@@ -4526,10 +4514,10 @@ function escapeHtml(str){
+ /* ---------- collaborations page ---------- */
+ /* همکاری‌ها از منوی اصلی خارج شده‌اند و داخل پروژه مدیریت خواهند شد. */
+ document.getElementById('closeCollabPage').onclick = ()=>{
+-  document.getElementById('collabPage').classList.add('hidden');
++  document.getElementById().classList.add('hidden');
+   workspaceSubpage=null;
+   document.getElementById('settingsPage')?.classList.remove('hidden');
+   setBottomNavActive('Settings');
+@@ -4540,7 +4528,7 @@ function openCollabPage(){
+   workspaceSubpage='collab';
+   setBottomNavActive('Settings');
+   renderTabs();
+-  showOnlyWorkspacePage('collabPage');
++  showOnlyWorkspacePage();
+   updateWorkspaceContextBar();
+   pushWorkspaceHistory('collab');
+   renderCollabPage();
+@@ -4548,7 +4536,7 @@ function openCollabPage(){
+ 
+ function closeCollabPage(){
+   const page =
+-    document.getElementById('collabPage') ||
++    document.getElementById() ||
+     document.getElementById('collaboratorsPage') ||
+     document.getElementById('cooperationPage');
+ 
+@@ -4570,112 +4558,7 @@ function closeCollabPage(){
+   }
+ }
+ 
+-function renderCollabPage(){
+-  const body = document.getElementById('collabPageBody');
+-  body.innerHTML = '';
+-  ensureHomeSelection();
+-  const p = findProject(data.activeTab);
+-  if(!p || data.activeTab==='starred'){
+-    body.innerHTML = '<div class="mgmt-empty">برای مشاهده همکاری‌ها، ابتدا یک پروژه را انتخاب کنید.</div>';
+-    return;
+-  }
+-  if(!currentUser){
+-    body.innerHTML = '<div class="mgmt-empty">برای مشاهده همکاری‌ها با گوگل وارد شوید.</div>';
+-    return;
+-  }
+-
+-  const myEmail = normalizeEmail(currentUser.email);
+-  if(p.ownerUid === currentUser.uid && !p.ownerEmail){
+-    p.ownerEmail = myEmail;
+-    markDirty(p.id);
+-    persist();
+-  }
+-
+-  const refreshRow = document.createElement('div');
+-  refreshRow.className = 'inner-action-card inner-action-card--primary';
+-  const refreshBtn = document.createElement('button');
+-  refreshBtn.type = 'button';
+-  refreshBtn.className = 'restore-btn';
+-  refreshBtn.textContent = 'همگام سازی همکاران';
+-  refreshBtn.onclick = ()=>{
+-    window.__sharedToastShown = false;
+-    startCloudListeners();
+-    showToast('در حال دریافت…');
+-    setTimeout(()=> renderCollabPage(), 800);
+-  };
+-  refreshRow.appendChild(refreshBtn);
+-  body.appendChild(refreshRow);
+-
+-  const block = document.createElement('div');
+-  block.className = 'collab-block';
+-
+-  const isOwner = p.ownerUid === currentUser.uid;
+-
+-  // فقط نقش ادمین/همکار نمایش داده شود؛ نام پروژه در این صفحه تکرار نمی‌شود
+-  // چون پروژهٔ فعال از اسکرول افقی بالای صفحه مشخص است.
+-  const meta = document.createElement('div');
+-  meta.className = 'collab-meta';
+-
+-  if(isOwner){
+-    const prof = loadProfile();
+-    const adminName = String(prof.name || '').trim() || myEmail || 'صاحب پروژه';
+-    meta.innerHTML = 'ادمین: <span>'+escapeHtml(adminName)+'</span>';
+-    block.appendChild(meta);
+-
+-    const members = Array.isArray(p.sharedWith) ? p.sharedWith : [];
+-    if(!members.length){
+-      const empty = document.createElement('div');
+-      empty.className = 'collab-meta';
+-      empty.textContent = 'هنوز همکاری برای این پروژه ثبت نشده است.';
+-      block.appendChild(empty);
+-    } else {
+-      const memberList=document.createElement('div'); memberList.className='collab-member-list';
+-      const search=createWorkspaceSearch('جستجوی همکار…',q=>{Array.from(memberList.children).forEach(row=>row.hidden=!workspaceTextMatch(row.dataset.searchText,q));});
+-      block.appendChild(search.wrap);
+-      block.appendChild(memberList);
+-      members.forEach(email=>{
+-        const row = document.createElement('div');
+-        row.className = 'collab-email-row'; row.dataset.searchText=String(email||'').toLocaleLowerCase('fa');
+-        const left = document.createElement('div');
+-        left.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;';
+-        const span = document.createElement('span');
+-        span.textContent = email;
+-        const tag = document.createElement('span');
+-        tag.className = 'collab-person-tag';
+-        tag.textContent = 'همکار';
+-        left.appendChild(span);
+-        left.appendChild(tag);
+-
+-        const btn = document.createElement('button');
+-        btn.className = 'perm-del-btn';
+-        btn.textContent = 'حذف دسترسی';
+-        btn.onclick = ()=> removeShare(p, email, ()=> renderCollabPage());
+-
+-        row.appendChild(left);
+-        row.appendChild(btn);
+-        memberList.appendChild(row);
+-      });
+-    }
+-  } else {
+-    // برای عضو پروژه، اطلاعات مالک پروژه را نگه می‌داریم.
+-    // اگر نام مالک در دادهٔ مشترک موجود نباشد، ایمیل مالک نمایش داده می‌شود.
+-    const adminLabel = p.ownerEmail ? p.ownerEmail : 'صاحب پروژه';
+-    meta.innerHTML = 'ادمین: <span dir="ltr" style="unicode-bidi:isolate;">'+escapeHtml(adminLabel)+'</span>';
+-    block.appendChild(meta);
+-
+-    const others = Array.isArray(p.sharedWith)
+-      ? p.sharedWith.filter(e=>normalizeEmail(e)!==myEmail)
+-      : [];
+-    if(others.length){
+-      const note = document.createElement('div');
+-      note.className = 'collab-meta';
+-      note.textContent = 'سایر همکاران: ' + others.join('، ');
+-      block.appendChild(note);
+-    }
+-  }
+-
+-  body.appendChild(block);
+-}
++function renderCollabPage(){ const b=document.getElementById('collabPageBody'); if(b) b.innerHTML=''; }
+ 
+ document.getElementById('collabAddBtn').onclick = ()=>{
+   ensureHomeSelection();
+@@ -4684,45 +4567,20 @@ document.getElementById('collabAddBtn').onclick = ()=>{
+     showToast('ابتدا یک پروژه را انتخاب کنید');
+     return;
+   }
+-  openShareForm(p.id);
++  /* phase6 share removed */;
+ };
+ 
+-function removeShare(p, email, after){
+-  const em = normalizeEmail(email);
+-  // حذف همهٔ حالت‌های حروف بزرگ/کوچک احتمالی در آرایهٔ سرور
+-  const variants = Array.from(new Set([em, String(email||'').trim()].filter(Boolean)));
+-  const updates = variants.map(v => firebase.firestore.FieldValue.arrayRemove(v));
+-  // arrayRemove multiple via successive or one update with multiple removes
+-  db.collection('projects').doc(p.id).update({
+-    sharedWith: firebase.firestore.FieldValue.arrayRemove(...variants)
+-  }).then(()=>{
+-    p.sharedWith = (p.sharedWith || []).map(e => normalizeEmail(e)).filter(e => e && e !== em);
+-    showToast('دسترسی ' + em + ' حذف شد — پروژه برای هر دو طرف می‌ماند، فقط همگام‌سازی قطع شد');
+-    if(after) after();
+-  }).catch(()=> showToast('خطا در حذف دسترسی'));
+-}
++function removeShare(){ return; }
+ 
+ /* ---------- share / collaborate dialog ---------- */
+ let shareTargetProjectId = null;
+ let shareFormDirty=false;let shareFormHistoryPushed=false;const SHARE_DRAFT_KEY='karha_share_form_draft_v1';
+-function openShareForm(pid){shareTargetProjectId=pid;shareFormDirty=false;setInternalFormMode(true);workspaceSubpage='shareForm';showOnlyWorkspacePage('shareFormPage');setBottomNavActive('Settings');renderTabs();updateWorkspaceContextBar();pushWorkspaceHistory('shareForm');shareFormHistoryPushed=true;const body=document.getElementById('shareFormBody'
