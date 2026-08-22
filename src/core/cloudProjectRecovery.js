@@ -219,7 +219,8 @@ export function startCloudProjectRecovery({windowRef=window,projectContext,route
 
     listen('owned',db.collection('projects').where('ownerUid','==',user.uid));
     if(email) listen('ownerEmail',db.collection('projects').where('ownerEmail','==',email));
-    if(email) listen('shared',db.collection('projects').where('sharedWith','array-contains',email));
+    // Phase 5: no sharedWith recovery listener
+    // if(email) listen('shared',...);
   };
 
   // Firebase immediately emits the current auth state to this listener, so do

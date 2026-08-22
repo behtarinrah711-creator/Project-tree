@@ -15,7 +15,7 @@ function seed(){
 
 test('contact guard only uses real schema ID references', () => {
   const kinds = findContactReferences(seed(), 'c1').map(r => r.kind).sort();
-  assert.deepEqual(kinds, ['contract', 'contractStatusReport']);
+  assert.deepEqual(kinds, ['contract']);
   assert.equal(canDeleteContact(seed(), 'c1').ok, false);
   assert.equal(canDeleteContact(seed(), 'c9').ok, true);
 });

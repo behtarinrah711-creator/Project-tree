@@ -2,6 +2,7 @@ import { projectContext } from './projectContext.js';
 import { moduleRegistry } from './moduleRegistry.js';
 import { getSession } from './session.js';
 import { isProjectVisibleForSession } from './projectVisibility.js';
+import { isCondemnedRoute } from '../modules/condemned/index.js';
 
 export function parseRoute(){
   const hash = window.location.hash.replace(/^#\/?/, '');
@@ -77,15 +78,26 @@ export class AppRouter{
     const allowed = !rawProject || isProjectVisibleForSession(rawProject, session);
     const projectId = allowed ? route.projectId : null;
     projectContext.setProjectId(projectId);
-    const module = moduleRegistry.get(route.moduleId) || moduleRegistry.get('dashboard');
-    window.KarhaRoute = { ...route, projectId, module };
+    // Phase 5: condemned deep links → dashboard of the same project (not global home).
+    let moduleId = route.moduleId;
+    if(isCondemnedRoute(moduleId)){
+      moduleId = 'dashboard';
+      if(projectId){
+        const safe = `#/projects/${encodeURIComponent(projectId)}/dashboard`;
+        if(window.location.hash !== safe){
+          window.history.replaceState({ projectId, moduleId: 'dashboard' }, '', safe);
+        }
+      }
+    }
+    const module = moduleRegistry.get(moduleId) || moduleRegistry.get('dashboard');
+    window.KarhaRoute = { ...route, projectId, moduleId, module };
     if(module && projectId){
-      this.currentMounted = module.mount({ projectId, route: { ...route, projectId }, registry: moduleRegistry });
+      this.currentMounted = module.mount({ projectId, route: { ...route, projectId, moduleId }, registry: moduleRegistry });
     } else {
       this.currentMounted = null;
     }
     window.dispatchEvent(new CustomEvent('karha:workspace-route-synced', {
-      detail: { projectId, moduleId: route.moduleId }
+      detail: { projectId, moduleId }
     }));
   }
 }
