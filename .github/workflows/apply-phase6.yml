@@ -4,13 +4,17 @@ on:
   push:
     branches:
       - migration/phase-6-surgical-legacy
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize]
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'migration/phase-6-surgical-legacy' || github.ref_name == 'migration/phase-6-surgical-legacy'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout phase 6 branch
