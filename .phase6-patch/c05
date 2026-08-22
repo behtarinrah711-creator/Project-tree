@@ -1,0 +1,108 @@
+sForm();
+     return;
+   }
+@@ -6023,7 +5881,7 @@ window.addEventListener('popstate', ()=>{
+   if(document.getElementById('contractsPage') && !document.getElementById('contractsPage').classList.contains('hidden')){ closeContractsPage(); return; }
+ 
+   // Back از لیست صورت وضعیت‌ها -> حسابداری پروژه.
+-  if(document.getElementById('statusListPage') && !document.getElementById('statusListPage').classList.contains('hidden')){
++  if(document.getElementById() && !document.getElementById().classList.contains('hidden')){
+     workspaceHistoryDepth=Math.max(0,workspaceHistoryDepth-1);
+     closeStatusList();
+     return;
+@@ -6037,15 +5895,15 @@ window.addEventListener('popstate', ()=>{
+   }
+ 
+   // Back از زیرصفحه «همکاران» -> تنظیمات همان پروژه.
+-  if(document.getElementById('collabPage') && !document.getElementById('collabPage').classList.contains('hidden')){
++  if(document.getElementById() && !document.getElementById().classList.contains('hidden')){
+     closeCollabPage();
+     return;
+   }
+ 
+   if(document.getElementById('contractTemplatesPage') && !document.getElementById('contractTemplatesPage').classList.contains('hidden')){ closeContractTemplatesPage(); return; }
+-  if(document.getElementById('statusTestPage') && !document.getElementById('statusTestPage').classList.contains('hidden')){ closeStatusTestPage(); return; }
+-  if(document.getElementById('contractStatusPage') && !document.getElementById('contractStatusPage').classList.contains('hidden')){ closeContractStatusPage(); return; }
+-  if(document.getElementById('contractApprovalPage') && !document.getElementById('contractApprovalPage').classList.contains('hidden')){ closeContractApprovalPage(); return; }
++  if(document.getElementById() && !document.getElementById().classList.contains('hidden')){ closeStatusTestPage(); return; }
++  if(document.getElementById() && !document.getElementById().classList.contains('hidden')){ closeContractStatusPage(); return; }
++  if(document.getElementById() && !document.getElementById().classList.contains('hidden')){ closeContractApprovalPage(); return; }
+ 
+   // Back از فرم/لیست مخاطبین: هر سطح فقط یک پله به عقب برمی‌گردد.
+   // فرم مخاطب -> لیست مخاطبین -> تنظیمات پروژه.
+@@ -6063,10 +5921,10 @@ window.addEventListener('popstate', ()=>{
+   }
+ 
+   if(document.getElementById('activityFormPage') && !document.getElementById('activityFormPage').classList.contains('hidden')){ requestCloseActivityForm(true); return; }
+-  if(document.getElementById('shareFormPage') && !document.getElementById('shareFormPage').classList.contains('hidden')){ requestCloseShareForm(document.getElementById('shareFormBody')?.querySelector('input'),true); return; }
++  if(document.getElementById() && !document.getElementById().classList.contains('hidden')){ requestCloseShareForm(document.getElementById('shareFormBody')?.querySelector('input'),true); return; }
+   // Back از زیرصفحه «فعالیت‌ها» -> تنظیمات همان پروژه.
+   if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
+-  if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){requestCloseContractForm(true);return;}if(document.getElementById('contractTemplatesPage') && !document.getElementById('contractTemplatesPage').classList.contains('hidden')){closeContractTemplatesPage();return;}if(document.getElementById('contractsPage') && !document.getElementById('contractsPage').classList.contains('hidden')){closeContractsPage();return;}if(document.getElementById('statusTestPage') && !document.getElementById('statusTestPage').classList.contains('hidden')){closeStatusTestPage();return;}
++  if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){requestCloseContractForm(true);return;}if(document.getElementById('contractTemplatesPage') && !document.getElementById('contractTemplatesPage').classList.contains('hidden')){closeContractTemplatesPage();return;}if(document.getElementById('contractsPage') && !document.getElementById('contractsPage').classList.contains('hidden')){closeContractsPage();return;}if(document.getElementById() && !document.getElementById().classList.contains('hidden')){closeStatusTestPage();return;}
+   if(document.getElementById('projectActivitiesPage') && !document.getElementById('projectActivitiesPage').classList.contains('hidden')){
+     workspaceSubpage=null;
+     showOnlyWorkspacePage('settingsPage');
+@@ -6137,8 +5995,27 @@ if(routedProjectId && routedModuleId==='contracts'){
+ 
+ // Modular architecture bridge: keeps the remaining legacy runtime project-scoped
+ // while individual modules are migrated out of this file.
++
+ function installLegacyCompatibilityBoundary(){
++var __formRTs = window.KarhaApp?.registerFormRuntimes?.({
++  uid: uid,
++  getCurrentProjectId: getCurrentProjectScopeId,
++  showToast: showToast,
++  enterActivityForm: function(){ setInternalFormMode(true); workspaceSubpage='activityForm'; showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); },
++  leaveActivityForm: function(){ setInternalFormMode(false); document.getElementById('activityFormPage')?.classList.add('hidden'); workspaceSubpage='activities'; showOnlyWorkspacePage('projectActivitiesPage'); renderProjectActivitiesPage(); updateWorkspaceContextBar(); },
++  pushWorkspaceHistory: pushWorkspaceHistory,
++  findProject: findProject,
++  markDirty: markDirty,
++  persist: persist,
++  getCurrentProject: getCurrentProject,
++  getActivityTemplates: getActivityTemplates,
++  openNumpadGeneric: openNumpadGeneric,
++  setInternalFormMode: setInternalFormMode,
++  showIncompleteFormExitChoice: showIncompleteFormExitChoice,
++  closeContactsToSettings: function(){ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); },
++}) || {};
+ window.KarhaLegacy = Object.freeze({
++
+   getViewMode(){ return data?.viewMode || 'simple'; },
+   renderAll,
+   elFromHtml(html){
+@@ -6212,40 +6089,8 @@ window.KarhaLegacy = Object.freeze({
+   openActivityForm,
+   openActivityEditForm,
+   requestCloseActivityForm,
+-  activityFormRuntime: Object.freeze({
+-    uid,
+-    getCurrentProjectId:getCurrentProjectScopeId,
+-    showToast,
+-    enterActivityForm(){ setInternalFormMode(true); workspaceSubpage='activityForm'; showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); },
+-    leaveActivityForm(){ setInternalFormMode(false); document.getElementById('activityFormPage')?.classList.add('hidden'); workspaceSubpage='activities'; showOnlyWorkspacePage('projectActivitiesPage'); renderProjectActivitiesPage(); updateWorkspaceContextBar(); },
+-    pushWorkspaceHistory,
+-    renderActivities(projectId){ window.KarhaApp?.modules?.get('activities')?.render(projectId); },
+-    persistActivities(projectId){
+-      const project=findProject(projectId);
+-      const stored=window.KarhaApp?.projectRepository?.find(projectId);
+-      if(project && stored) project.activityTemplates=Array.isArray(stored.activityTemplates)?stored.activityTemplates:[];
+-      if(project) markDirty(project.id);
+-      persist({ local:false });
+-    }
+-  }),
+-  contactFormRuntime: Object.freeze({
+-    uid,
+-    getCurrentProject,
+-    getActivities(projectId){ const project=findProject(projectId); return project ? getActivityTemplates(project) : []; },
+-    openNumpadGeneric,
+-    setInternalFormMode,
+-    showIncompleteFormExitChoice,
+-    showToast,
+-    markDirty,
+-    renderContacts(projectId){ window.KarhaApp?.modules?.get('people')?.render(projectId); },
+-    closeContactsToSettings(){ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); },
+-    persistContacts(projectId){
+-      const project=findProject(projectId);
+-      const stored=window.KarhaApp?.projectRepository?.find(projectId);
+-      if(project && stored) project.contacts=Array.isArray(stored.contacts)?stored.co
