@@ -59,7 +59,8 @@ export function installProjectRecoveryRetention({ windowRef = window } = {}){
 
     repairing = true;
     try{
-      windowRef.KarhaLegacy?.persist?.();
+      windowRef.KarhaApp?.applyCloudProjectList?.(windowRef.KarhaLegacy?.getProjectsList?.() || []);
+      windowRef.KarhaLegacy?.persist?.({ local:false });
       if(resyncRoute) windowRef.KarhaApp?.router?.sync?.();
       if(refreshDrawer){
         windowRef.dispatchEvent?.(new windowRef.CustomEvent('karha:drawer-open', {

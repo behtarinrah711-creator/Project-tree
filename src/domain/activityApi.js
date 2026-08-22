@@ -3,6 +3,7 @@ import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from '../core/session.js';
 import { canDeleteActivity } from './deleteGuard.js';
 import { isOffline } from './mergePolicy.js';
+import { markDirty as adapterMarkDirty, persist as adapterPersist } from '../sync/persistAdapter.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -43,10 +44,10 @@ function publishLive(projectId){
   // Cloud adapter remains the existing legacy persist path. It is not a second
   // domain writer: the repository already persisted the activity collection.
   if(typeof window !== 'undefined'){
-    window.KarhaLegacy?.markDirty?.(projectId);
+    adapterMarkDirty(projectId);
     // Activity is already in gtasks-clone-v2 via the repository. persist must
     // not rewrite localStorage; it only flushes the cloud adapter.
-    window.KarhaLegacy?.persist?.({ local:false });
+    adapterPersist({ local:false });
   }
 }
 

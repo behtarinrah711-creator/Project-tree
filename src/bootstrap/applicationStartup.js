@@ -20,6 +20,8 @@ import { contractApi } from '../domain/contractApi.js';
 import { taskApi } from '../domain/taskApi.js';
 import { projectApi } from '../domain/projectApi.js';
 import * as mergePolicy from '../domain/mergePolicy.js';
+import { registerPersistImpl } from '../sync/persistAdapter.js';
+import { applyCloudSnapshot, applyCloudProjectList } from '../sync/applyCloudSnapshot.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -46,10 +48,18 @@ export async function startApplication({
     taskApi,
     projectApi,
     mergePolicy,
+    applyCloudSnapshot,
+    applyCloudProjectList,
   });
   windowRef.KarhaApp = application;
 
   await loadLegacy();
+  // Phase 4.2: Domain APIs call persistAdapter; legacy remains the implementation
+  // until cloud/persist are fully extracted. Auth stays in legacy.
+  registerPersistImpl({
+    markDirty(projectId){ windowRef.KarhaLegacy?.markDirty?.(projectId); },
+    persist(options){ windowRef.KarhaLegacy?.persist?.(options); },
+  });
   // Observe uid only. Does not own login, logout, or cloud migrate.
   installSessionObserver({windowRef});
   // Child overlays (search template / numpad / Jalali picker) own their Back

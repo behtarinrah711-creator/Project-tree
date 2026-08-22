@@ -54,6 +54,6 @@ test('activity repository listPage is cursor-based', () => {
 
 test('activityApi persist after write is cloud-only', async () => {
   const source = await readFile(new URL('./activityApi.js', import.meta.url), 'utf8');
-  assert.match(source, /persist\?\.\(\{\s*local\s*:\s*false\s*\}\)/);
-  assert.doesNotMatch(source, /persist\?\.\(\)/);
+  assert.match(source, /adapterPersist\(\{\s*local\s*:\s*false\s*\}\)/);
+  assert.doesNotMatch(source, /KarhaLegacy\?\.persist/);
 });
