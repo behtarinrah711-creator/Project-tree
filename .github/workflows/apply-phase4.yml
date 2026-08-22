@@ -1,0 +1,44 @@
+name: Apply phase 4 migration
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'migration/phase-4-legacy-extraction'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout phase 4 branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/phase-4-legacy-extraction
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebuild and validate phase 4 patch
+        run: |
+          cat .phase4-patch/part0.b64 .phase4-patch/part1.b64 .phase4-patch/part2.b64 .phase4-patch/part3.b64 | base64 -d > /tmp/migration-phase-4-final.patch
+          test -s /tmp/migration-phase-4-final.patch
+          echo '94a31c73d483ebb59d01fed7faaadef2d78e73fdfc880dbb273a4a1a755bee14  /tmp/migration-phase-4-final.patch' | sha256sum -c -
+          git apply --check /tmp/migration-phase-4-final.patch
+
+      - name: Apply phase 4 patch
+        run: |
+          git apply /tmp/migration-phase-4-final.patch
+          rm -rf .phase4-patch
+          rm -f .github/workflows/apply-phase4.yml
+
+      - name: Commit phase 4
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && { echo 'No phase 4 changes found'; exit 1; }
+          git commit -m 'Migration phase 4: legacy ownership extraction'
+          git push origin HEAD:migration/phase-4-legacy-extraction
