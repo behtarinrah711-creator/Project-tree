@@ -197,7 +197,9 @@ function persist(options){
   }, 120);
 }
 function showToast(msg){
+  if(window.KarhaUI?.showToast) return window.KarhaUI.showToast(msg);
   const t = document.getElementById('toast');
+  if(!t) return;
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 1600);
 }
@@ -237,8 +239,8 @@ function findParentItem(pid, tid, childId){
   walkItems(root.subtasks,(item,parent)=>{ if(item.id===childId) result=parent; });
   return result;
 }
-function toPersianDigits(str){ return String(str).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]); }
-function toEnglishDigits(str){ return String(str).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)); }
+function toPersianDigits(str){ return window.KarhaUI?.toPersianDigits ? window.KarhaUI.toPersianDigits(str) : String(str).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]); }
+function toEnglishDigits(str){ return window.KarhaUI?.toEnglishDigits ? window.KarhaUI.toEnglishDigits(str) : String(str).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)); }
 function formatCost(n){
   if(n===null || n===undefined || n==='' || isNaN(Number(n))) return toPersianDigits('0');
   const s = String(Math.round(Number(n)));
@@ -466,7 +468,7 @@ function deleteProject(pid){
 /* ---------- cloud sync (Firebase) ---------- */
 let cloudMode = false;
 let currentUser = null;
-let cloudUnsubOwned = null, cloudUnsubShared = null;
+let cloudUnsubOwned = null;
 let migratedGuestData = false;
 
 function cloudDeleteProject(p){
@@ -885,14 +887,7 @@ function cloudSyncProjectFull(p){
   }
 }
 
-/** پروژه‌هایی که قبلاً fork شده‌اند تا دوباره ساخته نشوند */
-const forkedShareIds = new Set();
-
-/**
- * حذف دسترسی = قطع همگام‌سازی، نه حذف پروژه.
- * ادمین: پروژه‌اش سر جایش می‌ماند.
- * همکار: وقتی دیگر در sharedWith نیست، یک نسخهٔ مستقل برای خودش ساخته می‌شود.
- */
+/* Phase 8.7: sharing fork path removed; merge is owned-only via src/sync/mergeCloudSnapshots. sharedWith data fields retained. */
 function mergeCloudSnapshots(ownedDocs, sharedDocs){
   const mergeFn = window.KarhaApp?.mergeOwnedCloudSnapshots;
   const docFn = docToProject;
@@ -976,12 +971,10 @@ function startCloudListeners(){
       onError: onErr,
     });
     cloudUnsubOwned = null;
-    cloudUnsubShared = null;
     return;
   }
   cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
     .onSnapshot(snap => onSnap(snap.docs, []), onErr);
-  cloudUnsubShared = null;
   sharedDocs = [];
 }
 
@@ -990,8 +983,7 @@ function stopCloudListeners(){
     window.KarhaApp.stopOwnedCloudListeners();
   }
   if(cloudUnsubOwned) cloudUnsubOwned();
-  if(cloudUnsubShared) cloudUnsubShared();
-  cloudUnsubOwned = null; cloudUnsubShared = null;
+  cloudUnsubOwned = null;
   Object.keys(cloudTaskUnsubs).forEach(stopCloudTaskListener);
 }
 
@@ -1438,7 +1430,10 @@ function setInternalFormMode(active){
 }
 
 /* Global exit guard for incomplete forms. Only two choices are shown. */
-function showIncompleteFormExitChoice({onYes,onNo,onStay}={}){
+function showIncompleteFormExitChoice(opts={}){
+  if(window.KarhaUI?.showIncompleteFormExitChoice) return window.KarhaUI.showIncompleteFormExitChoice(opts);
+  // classic helper() may resolve window[name] first
+  const {onYes,onNo,onStay}=opts;
   const existing=document.querySelector('.global-incomplete-exit-choice');
   if(existing) return;
   const ov=document.createElement('div');
@@ -1450,6 +1445,8 @@ function showIncompleteFormExitChoice({onYes,onNo,onStay}={}){
   ov.querySelector('[data-exit="no"]').onclick=()=>{close();if(onNo) onNo();};
   ov.addEventListener('pointerdown',e=>{if(e.target===ov && onStay){close();onStay();}});
 }
+try{ window.showIncompleteFormExitChoice = showIncompleteFormExitChoice; }catch(e){}
+
 
 function formRequiredComplete(root){
   if(!root) return false;
@@ -1561,86 +1558,14 @@ document.getElementById('promptOverlay').onclick = (e)=>{
   if(e.target.id==='promptOverlay') closeMiniPrompt();
 };
 
-/* ---------- custom numpad (cost entry) ---------- */
-let numpadBuffer = '';
-let numpadOnDone = null; // generic callback(valueStr)
-let numpadOpts = { suffix: ' تومان', maxLen: 13, group: true };
-let numpadHistoryPushed = false;
-
-/** نام‌پد عمومی برای صورت وضعیت و فیلدهای عددی */
+/* ---------- custom numpad (Phase 8.2: owned by src/ui/numpad.js via KarhaUI) ---------- */
 function openNumpadGeneric(initial, onDone, opts){
-  numpadOnDone = onDone;
-  numpadOpts = Object.assign({ suffix: ' تومان', prefix: '', maxLen: 16, group: true }, opts || {});
-  const raw = toEnglishDigits(String(initial==null?'':initial)).replace(/[^\d]/g,'');
-  numpadBuffer = raw;
-  updateNumpadDisplay();
-  document.getElementById('numpadOverlay').classList.remove('hidden');
-  if(!numpadHistoryPushed){
-    try{ history.pushState({karhaNumpad:true},'',location.href); numpadHistoryPushed=true; }catch(e){}
-  }
+  if(window.KarhaUI?.openNumpadGeneric) return window.KarhaUI.openNumpadGeneric(initial, onDone, opts);
 }
 function closeNumpad(fromPopState=false){
-  document.getElementById('numpadOverlay').classList.add('hidden');
-  numpadOnDone = null;
-  if(numpadHistoryPushed){
-    numpadHistoryPushed=false;
-    if(!fromPopState){
-      suppressWorkspaceBackOnce=true;
-      try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
-    }
-  }
+  if(window.KarhaUI?.closeNumpad) return window.KarhaUI.closeNumpad(fromPopState);
 }
-function updateNumpadDisplay(){
-  const el = document.getElementById('numpadDisplay');
-  if(numpadBuffer === ''){
-    el.textContent = 'وارد کنید…';
-    el.classList.add('empty');
-    el.style.direction = '';
-  } else {
-    const shown = numpadOpts.group ? groupWithCommas(numpadBuffer) : numpadBuffer;
-    el.textContent = (numpadOpts.prefix || '') + toPersianDigits(shown) + (numpadOpts.suffix || '');
-    el.classList.remove('empty');
-    if(numpadOpts.prefix === '٪'){
-      el.style.direction = 'ltr';
-      el.style.unicodeBidi = 'isolate';
-    } else {
-      el.style.direction = '';
-    }
-  }
-}
-document.querySelectorAll('.numpad-key[data-d]').forEach(btn=>{
-  btn.onclick = ()=>{
-    if(numpadBuffer.length >= (numpadOpts.maxLen||13)) return;
-    numpadBuffer += btn.dataset.d;
-    updateNumpadDisplay();
-  };
-});
-document.getElementById('numpadBackspace').onclick = ()=>{
-  numpadBuffer = numpadBuffer.slice(0, -1);
-  updateNumpadDisplay();
-};
-document.getElementById('numpadDoneBtn').onclick = ()=>{
-  if(numpadOnDone){
-    numpadOnDone(numpadBuffer);
-    closeNumpad();
-    return;
-  }
-  closeNumpad();
-};
-document.getElementById('numpadCancelBtn').onclick = closeNumpad;
-document.getElementById('numpadOverlay').onclick = (e)=>{
-  if(e.target.id==='numpadOverlay') closeNumpad();
-};
-window.addEventListener('popstate',()=>{
-  const overlay=document.getElementById('numpadOverlay');
-  // If the numpad is visible, this back belongs to it — close only the overlay
-  // and suppress parent form/list handlers (do not rely solely on the flag).
-  if(!overlay || overlay.classList.contains('hidden')) return;
-  numpadHistoryPushed=false;
-  suppressWorkspaceBackOnce=true;
-  try{ window.__karhaSuppressWorkspaceBackOnce=true; }catch(e){}
-  closeNumpad(true);
-});
+/* DOM binds + popstate installed by installUiPrimitives */
 
 /* ---------- content ---------- */
 
@@ -1836,7 +1761,6 @@ function updateWorkspaceContextBar(){
     backBtn.onclick = ()=>{
       if(workspaceSubpage === 'statusForm'){ closeStatusForm(); return; }
       if(workspaceSubpage === 'statusList'){ closeStatusList(); return; }
-      if(workspaceSubpage === 'collab'){ closeCollabPage(); return; }
       if(workspaceSubpage === 'contractTemplates'){ closeContractTemplatesPage(); return; }
       if(workspaceSubpage === 'statusTest'){ closeStatusTestPage(); return; }
       if(workspaceSubpage === 'contractTemplateForm'){ requestCloseContractTemplateForm(); return; }
@@ -2183,6 +2107,7 @@ function renderContractsPage(){
 
 // Compatibility shell only: form state, rendering and persistence live in the
 // modular real-contract form module.
+/* Phase 8.6: contract form business logic lives in src/modules/contracts/*; legacy owns page shell visibility only. */
 function openRealContractFormShell(projectId){
   const p=getCurrentProject(); if(!p || String(p.id)!==String(projectId)) return false;
   closeDrawer();
@@ -2213,35 +2138,36 @@ let searchTemplateState = null;
 let searchTemplateHistoryPushed = false;
 /** لایهٔ جدا برای حالت جستجوی داخل تمپلیت (کیبورد/فوکس) */
 let searchTemplateSearchModePushed = false;
-/** وقتی فقط تمپلیت جستجو / نامبرپد / تقویم بسته می‌شود، بک فرم قرارداد / ورک‌اسپیس یک‌بار نادیده گرفته شود */
+/** وقتی فقط تمپلیت جستجو / نامبرپد / تقویم بسته می‌شود، بک فرم قرارداد / ورک‌اسپیس یک‌بار نادیده گرفته شود.
+ *  One-shot: valid only for the current popstate dispatch (cleared end-of-task).
+ *  Must NOT be time-window based — that blocked empty-form Back after Stay/exit. */
 let suppressWorkspaceBackOnce = false;
+function markSuppressWorkspaceBack(){
+  suppressWorkspaceBackOnce = true;
+  try{ window.__karhaSuppressWorkspaceBackOnce = true; }catch(e){}
+}
 function shouldSuppressWorkspaceBack(){
-  // Cross-module flag set by modular Search Template when hooks are missing.
   if(typeof window!=='undefined' && window.__karhaSuppressWorkspaceBackOnce){
     window.__karhaSuppressWorkspaceBackOnce=false;
     suppressWorkspaceBackOnce=true;
   }
-  // تمپلیت جستجو (ماژولار یا legacy) باز است → بک مال همان است
   if(typeof isSearchTemplateOpen==='function' && isSearchTemplateOpen()) return true;
   if(typeof window!=='undefined' && window.KarhaSearchTemplate?.isOpen?.()) return true;
-  // نامبرپد یا تقویم جلالی روی فرم باز است → فقط همان لایه بسته شود
   const numpad=document.getElementById('numpadOverlay');
   if(numpad && !numpad.classList.contains('hidden')) return true;
   const jalali=document.getElementById('jalaliPop');
   if(jalali && !jalali.classList.contains('hidden')) return true;
   if(suppressWorkspaceBackOnce){
-    // All legacy popstate listeners see the same suppression. Clearing this
-    // synchronously let a later listener close the parent form.
-    setTimeout(()=>{ suppressWorkspaceBackOnce=false; },0);
+    // Clear after this turn so a later user Back is never swallowed.
+    suppressWorkspaceBackOnce=false;
+    try{ window.__karhaSuppressWorkspaceBackOnce=false; }catch(e){}
     return true;
   }
   return false;
 }
 
-// Wire modular Search Template → legacy workspace back suppression.
-// Without this, select/back in KarhaSearchTemplate history.back() also closes the contract form.
 window.KarhaSearchTemplateHooks = Object.assign({}, window.KarhaSearchTemplateHooks || {}, {
-  suppressBack(){ suppressWorkspaceBackOnce = true; try{ window.__karhaSuppressWorkspaceBackOnce = true; }catch(e){} }
+  suppressBack(){ markSuppressWorkspaceBack(); }
 });
 
 function stplGetInitials(name){
@@ -2338,7 +2264,7 @@ function closeSearchTemplate(fromPop){
   searchTemplateHistoryPushed=false;
   searchTemplateSearchModePushed=false;
   if(steps>0){
-    suppressWorkspaceBackOnce=true;
+    markSuppressWorkspaceBack();
     try{
       if(steps===1) history.back();
       else history.go(-steps);
@@ -2355,7 +2281,7 @@ function handleSearchTemplateBack(){
     exitSearchTemplateSearchMode();
     if(searchTemplateSearchModePushed){
       searchTemplateSearchModePushed=false;
-      suppressWorkspaceBackOnce=true;
+      markSuppressWorkspaceBack();
       try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
     }
     return true;
@@ -2540,12 +2466,12 @@ window.addEventListener('popstate', function(ev){
   if(isSearchTemplateSearchMode() || searchTemplateSearchModePushed){
     exitSearchTemplateSearchMode();
     searchTemplateSearchModePushed=false;
-    // پله history همین الآن مصرف شده؛ تمپلیت باز می‌ماند؛ فرم دست نخورده
+    // Browser consumed search-mode entry; template stays open. No suppress token.
     return;
   }
 
-  // لایه ۲: خود تمپلیت جستجو
-  suppressWorkspaceBackOnce=true;
+  // لایه ۲: خود تمپلیت — browser consumed template entry. No suppress (workspace
+  // already skipped while template was visible).
   searchTemplateHistoryPushed=false;
   searchTemplateSearchModePushed=false;
   closeSearchTemplate(true);
@@ -2948,17 +2874,9 @@ function refreshCurrentFooterPage(){
     return;
   }
   if(active.id==='bottomAccountingBtn'){
-    if(workspaceSubpage==='statusList'){
-      showOnlyWorkspacePage();
-      renderStatusList();
-    } else if(workspaceSubpage==='statusForm' && statusFormState){
-      showOnlyWorkspacePage();
-      renderStatusForm();
-    } else {
-      workspaceSubpage=null;
-      showOnlyWorkspacePage('accountingPage');
-      renderAccountingWorkspace();
-    }
+    workspaceSubpage=null;
+    showOnlyWorkspacePage('accountingPage');
+    renderAccountingWorkspace();
     updateWorkspaceContextBar();
     return;
   }
@@ -2966,9 +2884,6 @@ function refreshCurrentFooterPage(){
     if(workspaceSubpage==='projectTrash'){
       showOnlyWorkspacePage('projectTrashPage');
       renderProjectTrashPage();
-    } else if(workspaceSubpage==='collab'){
-      showOnlyWorkspacePage();
-      renderCollabPage();
     } else {
       workspaceSubpage=null;
       showOnlyWorkspacePage('settingsPage');
@@ -3066,11 +2981,6 @@ const {renderProjectView,refreshProjectPartial,renderInlineAddRow,renderTaskBloc
 function openDrawer(){
   document.getElementById('drawerOverlay').classList.remove('hidden');
   renderDrawerProjectList();
-  const label = document.getElementById('drawerCollabLabel');
-  if(label){
-    const p = data && data.activeTab !== 'starred' ? findProject(data.activeTab) : null;
-    label.textContent = p ? ('همکاری روی «' + p.name + '»') : 'همکاری روی این پروژه';
-  }
 }
 function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('hidden'); }
 window.addEventListener('karha:drawer-open', openDrawer);
@@ -3087,67 +2997,41 @@ window.addEventListener('karha:workspace-route-synced', event=>{
   updateWorkspaceContextBar();
 });
 
-/* ---------- confirm dialog ---------- */
+/* ---------- confirm dialog (Phase 8.2: owned by src/ui/confirm.js via KarhaUI) ---------- */
 let confirmCallback = null;
 function openConfirm(text, onOk, okLabel){
-  document.getElementById('confirmText').textContent = text;
-  document.getElementById('confirmOkBtn').textContent = okLabel || 'تایید';
+  if(window.KarhaUI?.openConfirm) return window.KarhaUI.openConfirm(text, onOk, okLabel);
+  const textEl=document.getElementById('confirmText');
+  const okBtn=document.getElementById('confirmOkBtn');
+  const overlay=document.getElementById('confirmOverlay');
+  if(textEl) textEl.textContent = text;
+  if(okBtn) okBtn.textContent = okLabel || 'تایید';
   confirmCallback = onOk;
-  document.getElementById('confirmOverlay').classList.remove('hidden');
+  if(overlay) overlay.classList.remove('hidden');
 }
-function closeConfirm(){ document.getElementById('confirmOverlay').classList.add('hidden'); confirmCallback = null; }
-document.getElementById('confirmCancelBtn').onclick = closeConfirm;
-document.getElementById('confirmOverlay').onclick = (e)=>{ if(e.target.id==='confirmOverlay') closeConfirm(); };
-document.getElementById('confirmOkBtn').onclick = ()=>{
-  const cb = confirmCallback;
-  closeConfirm();
-  if(cb) cb();
-};
+function closeConfirm(){
+  if(window.KarhaUI?.closeConfirm) return window.KarhaUI.closeConfirm();
+  const overlay=document.getElementById('confirmOverlay');
+  if(overlay) overlay.classList.add('hidden');
+  confirmCallback = null;
+}
+/* DOM binds installed by installUiPrimitives — no new ownership here */
 
 /* ---------- project management page ---------- */
 
-/* ---------- user profile (name + signature) ---------- */
+/* ---------- user profile (Phase 8.3: store owned by src/modules/profile/profileStore.js) ---------- */
 const PROFILE_KEY = 'karha_user_profile_v1';
 function loadProfile(){
+  if(window.KarhaProfile?.loadProfile) return window.KarhaProfile.loadProfile();
   try{ return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') || {}; }catch(e){ return {}; }
 }
 function saveProfile(p){
+  if(window.KarhaProfile?.saveProfile) return window.KarhaProfile.saveProfile(p);
   try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){ showToast('ذخیره مشخصات ممکن نشد'); }
 }
-/** فشرده‌سازی امضا: PNG شفاف، عرض حداکثر 600، کیفیت مناسب */
 function compressSignatureFile(file){
-  return new Promise((resolve, reject)=>{
-    if(!file || !file.type || !file.type.startsWith('image/')){
-      reject(new Error('فایل تصویر نیست'));
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = ()=>{
-      URL.revokeObjectURL(url);
-      const maxW = 600;
-      let w = img.naturalWidth || img.width;
-      let h = img.naturalHeight || img.height;
-      if(w > maxW){ h = Math.round(h * (maxW / w)); w = maxW; }
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
-      // ابتدا PNG؛ اگر بزرگ بود JPEG سفیدپس‌زمینه با کیفیت 0.85
-      let dataUrl = canvas.toDataURL('image/png');
-      if(dataUrl.length > 180000){
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-      }
-      resolve(dataUrl);
-    };
-    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('خواندن تصویر ناموفق')); };
-    img.src = url;
-  });
+  if(window.KarhaProfile?.compressSignatureFile) return window.KarhaProfile.compressSignatureFile(file);
+  return Promise.reject(new Error('profile store unavailable'));
 }
 
 let profileDraft = null;
@@ -3563,23 +3447,27 @@ function onProjDragEnd(){
   renderAll();
 }
 
-/* ---------- PDF export page ---------- */
+/* ---------- PDF export page (Phase 8.5: notes extracted; page UI still legacy-owned) ---------- */
 let exportPid = null;
 let exportSelected = new Set(); // keys: "t:"+tid or "s:"+tid+":"+sid
 let exportShowCost = false;
 let exportMarkMode = 'square'; // 'square' | 'number' — number فقط آیکون والد را عوض می‌کند
 
+/* Phase 8.5: notes store owned by src/modules/export/exportNotesStore.js; export UI still legacy */
 const EXPORT_NOTES_KEY = 'karha_export_notes_v1';
 function loadExportNotes(){
+  if(window.KarhaExportNotes?.loadExportNotes) return window.KarhaExportNotes.loadExportNotes();
   try{ return JSON.parse(localStorage.getItem(EXPORT_NOTES_KEY) || '{}') || {}; }catch(e){ return {}; }
 }
 function saveExportNote(pid, text){
+  if(window.KarhaExportNotes?.saveExportNote) return window.KarhaExportNotes.saveExportNote(pid, text);
   const all = loadExportNotes();
   if(text && text.trim()) all[pid] = text;
   else delete all[pid];
   try{ localStorage.setItem(EXPORT_NOTES_KEY, JSON.stringify(all)); }catch(e){}
 }
 function getExportNote(pid){
+  if(window.KarhaExportNotes?.getExportNote) return window.KarhaExportNotes.getExportNote(pid);
   return loadExportNotes()[pid] || '';
 }
 
@@ -4218,48 +4106,12 @@ function escapeHtml(str){
 
 
 
-/* ---------- collaborations page ---------- */
-/* همکاری‌ها از منوی اصلی خارج شده‌اند و داخل پروژه مدیریت خواهند شد.
-   collabPage DOM در فاز ۵+ حذف شده؛ binding فقط در صورت وجود element. */
-(()=>{
-  const closeBtn = document.getElementById('closeCollabPage');
-  if(closeBtn){
-    closeBtn.onclick = ()=>{
-      const page = document.getElementById('collabPage');
-      if(page) page.classList.add('hidden');
-      workspaceSubpage=null;
-      document.getElementById('settingsPage')?.classList.remove('hidden');
-      setBottomNavActive('Settings');
-      renderTabs();
-      renderSettingsWorkspace();
-    };
-  }
-})();
-
-function openCollabPage(){
-  ensureHomeSelection();
-  enterWorkspaceSurface();
-  workspaceSubpage='collab';
-  setBottomNavActive('Settings');
-  renderTabs();
-  showOnlyWorkspacePage();
-  updateWorkspaceContextBar();
-  pushWorkspaceHistory('collab');
-  renderCollabPage();
-}
-
+/* ---------- collaborations / share (Phase 8.1 condemned runtime removed) ---------- */
+/* Runtime/UI path for share & collab removed. Firestore fields like sharedWith are NOT wiped. */
+function openCollabPage(){ try{ showToast('همکاری در این نسخه حذف شده است'); }catch(e){} }
 function closeCollabPage(){
-  const page =
-    null ||
-    document.getElementById('collaboratorsPage') ||
-    document.getElementById('cooperationPage');
-
-  if(page) page.classList.add('hidden');
-
   workspaceSubpage = null;
   mainSurface = 'workspace';
-
-  // بازگشت به تنظیمات همان پروژه؛ پروژه انتخاب‌شده حفظ می‌شود.
   const settingsPage = document.getElementById('settingsPage');
   if(settingsPage){
     setBottomNavActive('Settings');
@@ -4271,59 +4123,17 @@ function closeCollabPage(){
     refreshCurrentFooterPage();
   }
 }
-
-function renderCollabPage(){ const b=document.getElementById('collabPageBody'); if(b) b.innerHTML=''; }
-
-(()=>{
-  const addBtn = document.getElementById('collabAddBtn');
-  if(addBtn){
-    addBtn.onclick = ()=>{
-      ensureHomeSelection();
-      const p = findProject(data.activeTab);
-      if(!p || data.activeTab==='starred'){
-        showToast('ابتدا یک پروژه را انتخاب کنید');
-        return;
-      }
-      /* phase6 share removed */;
-    };
-  }
-})();
-
+function renderCollabPage(){ /* no-op: collab DOM removed */ }
 function removeShare(){ return; }
-
-/* ---------- share / collaborate dialog ---------- */
-let shareTargetProjectId = null;
-let shareFormDirty=false;let shareFormHistoryPushed=false;const SHARE_DRAFT_KEY='karha_share_form_draft_v1';
 function openShareForm(pid){ try{ showToast('اشتراک‌گذاری در این نسخه حذف شده است'); }catch(e){} }
 function submitShareForm(){ return; }
 function closeShareForm(){ return; }
 function requestCloseShareForm(){ return; }
-
 function openShareDialog(){ return; }
-function closeShareDialog(){document.getElementById('shareOverlay').classList.add('hidden');}
-document.getElementById('shareConfirmBtn').onclick = ()=>{
-  const email = normalizeEmail(document.getElementById('shareEmailInput').value);
-  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  if(!isValidEmail){ showToast('یک آدرس جیمیل معتبر وارد کنید'); return; }
-  const p = findProject(shareTargetProjectId);
-  closeShareDialog();
-  if(!p || !p.ownerUid){ showToast('این پروژه هنوز روی سرور نیست'); return; }
-  if(p.ownerUid === currentUser.uid && currentUser.email){
-    p.ownerEmail = normalizeEmail(currentUser.email);
-  }
-  const shareUpdate = {
-    sharedWith: firebase.firestore.FieldValue.arrayUnion(email),
-    ownerEmail: p.ownerEmail || normalizeEmail(currentUser.email)
-  };
-  db.collection('projects').doc(p.id).update(shareUpdate).then(()=>{
-    showToast('دسترسی برای ' + email + ' اضافه شد');
-    if(!p.sharedWith) p.sharedWith = [];
-    // فقط نسخهٔ lowercase در حافظه نگه داشته شود
-    p.sharedWith = p.sharedWith.map(e => normalizeEmail(e)).filter(Boolean);
-    if(!p.sharedWith.includes(email)) p.sharedWith.push(email);
-    if(false) renderCollabPage();
-  }).catch(()=> showToast('خطا در افزودن دسترسی'));
-};
+function closeShareDialog(){
+  const ov = document.getElementById('shareOverlay');
+  if(ov) ov.classList.add('hidden');
+}
 
 /* ---------- PWA service worker registration ---------- */
 if('serviceWorker' in navigator){
@@ -4384,172 +4194,15 @@ function saveStatusReports(list){
   try{ localStorage.setItem(STATUS_KEY, JSON.stringify(list)); }catch(e){ showToast('ذخیره ممکن نشد'); }
 }
 
-/* --- Jalali helpers --- */
-function div(a,b){ return Math.floor(a/b); }
-function gregorianToJalali(gy, gm, gd){
-  const g_d_m=[0,31,59,90,120,151,181,212,243,273,304,334];
-  let gy2 = (gm > 2) ? (gy + 1) : gy;
-  let days = 355666 + (365 * gy) + div(gy2+3,4) - div(gy2+99,100) + div(gy2+399,400) + gd + g_d_m[gm-1];
-  let jy = -1595 + (33 * div(days,12053));
-  days %= 12053;
-  jy += 4 * div(days,1461);
-  days %= 1461;
-  if(days > 365){ jy += div(days-1,365); days = (days-1)%365; }
-  const jm = (days < 186) ? 1 + div(days,31) : 7 + div(days-186,30);
-  const jd = 1 + ((days < 186) ? (days % 31) : ((days-186) % 30));
-  return {jy, jm, jd};
-}
-function jalaliToGregorian(jy, jm, jd){
-  let jy2 = jy + 1595;
-  let days = -355668 + (365 * jy2) + div(jy2,33)*8 + div((jy2%33)+3,4) + jd + ((jm < 7) ? (jm-1)*31 : ((jm-7)*30 + 186));
-  let gy = 400 * div(days,146097);
-  days %= 146097;
-  if(days > 36524){ gy += 100 * div(--days, 36524); days %= 36524; if(days >= 365) days++; }
-  gy += 4 * div(days,1461);
-  days %= 1461;
-  if(days > 365){ gy += div(days-1,365); days = (days-1)%365; }
-  let gd = days + 1;
-  const sal_a = [0,31,((gy%4===0 && gy%100!==0)||(gy%400===0))?29:28,31,30,31,30,31,31,30,31,30,31];
-  let gm = 0;
-  for(gm=1; gm<=12 && gd>sal_a[gm]; gm++) gd -= sal_a[gm];
-  return {gy, gm, gd};
-}
-function jalaliMonthLength(jy, jm){
-  if(jm<=6) return 31;
-  if(jm<=11) return 30;
-  // esfand
-  const g = jalaliToGregorian(jy, 12, 30);
-  try {
-    const j = gregorianToJalali(g.gy, g.gm, g.gd);
-    return (j.jy===jy && j.jm===12 && j.jd===30) ? 30 : 29;
-  } catch(e){ return 29; }
-}
-const JALALI_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
-function todayJalaliStr(){
-  const n = new Date();
-  const j = gregorianToJalali(n.getFullYear(), n.getMonth()+1, n.getDate());
-  return j.jy + '/' + String(j.jm).padStart(2,'0') + '/' + String(j.jd).padStart(2,'0');
-}
-function formatJalaliDisplay(str){
-  if(!str) return '';
-  const p = String(str).split(/[\/\-]/);
-  if(p.length<3) return str;
-  const m = parseInt(p[1],10);
-  return toPersianDigits(p[2]) + ' ' + (JALALI_MONTHS[m-1]||'') + ' ' + toPersianDigits(p[0]);
-}
-
-let jalaliPickerHistoryPushed=false;
-function openJalaliPicker(current, onPick, opts={}){
-  jalaliPick.onPick = onPick;
-  jalaliPick.maxDate = opts.maxToday ? todayJalaliStr() : null;
-  let y, m, d;
-  if(current && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(current)){
-    const p = current.split('/');
-    y = +p[0]; m = +p[1]; d = +p[2];
-  } else {
-    const n = new Date();
-    const j = gregorianToJalali(n.getFullYear(), n.getMonth()+1, n.getDate());
-    y=j.jy; m=j.jm; d=j.jd;
-  }
-  jalaliPick.y = y; jalaliPick.m = m; jalaliPick.d = d;
-  document.getElementById('jalaliPop').classList.remove('hidden');
-  renderJalaliPicker();
-  if(!jalaliPickerHistoryPushed){
-    try{ history.pushState({karhaJalaliPicker:true},'',location.href); jalaliPickerHistoryPushed=true; }catch(e){}
-  }
-}
-function closeJalaliPicker(fromPopState=false){
-  document.getElementById('jalaliPop').classList.add('hidden');
-  if(jalaliPickerHistoryPushed){
-    jalaliPickerHistoryPushed=false;
-    if(!fromPopState){
-      suppressWorkspaceBackOnce=true;
-      try{ history.back(); }catch(e){ suppressWorkspaceBackOnce=false; }
-    }
-  }
-}
-document.getElementById('jalaliPop').onclick = (e)=>{ if(e.target.id==='jalaliPop') closeJalaliPicker(); };
-window.addEventListener('popstate',()=>{
-  const pop=document.getElementById('jalaliPop');
-  // Visible picker owns this back step; keep the underlying contract form open.
-  if(!pop || pop.classList.contains('hidden')) return;
-  jalaliPickerHistoryPushed=false;
-  suppressWorkspaceBackOnce=true;
-  try{ window.__karhaSuppressWorkspaceBackOnce=true; }catch(e){}
-  closeJalaliPicker(true);
-});
-
-function renderJalaliPicker(){
-  const box = document.getElementById('jalaliBox');
-  const y = jalaliPick.y, m = jalaliPick.m;
-  const len = jalaliMonthLength(y, m);
-  // weekday of 1st
-  const g1 = jalaliToGregorian(y, m, 1);
-  const dt = new Date(g1.gy, g1.gm-1, g1.gd);
-  // JS: 0=Sun ... convert to Sat=0 for Iran
-  let start = (dt.getDay() + 1) % 7; // Sat=0
-  const today = todayJalaliStr();
-  const selected = y+'/'+String(m).padStart(2,'0')+'/'+String(jalaliPick.d).padStart(2,'0');
-  const maxDate = jalaliPick.maxDate || null;
-  const keyCompare = (a,b)=>String(a).localeCompare(String(b));
-
-  let html = '<div style="text-align:center;margin-bottom:8px;"><button type="button" id="jalaliTodayBtn" style="border:none;background:transparent;color:var(--green);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">بازگشت به امروز</button></div>';
-  html += '<div class="jalali-head">';
-  // RTL: چپ = ماه بعد، راست = ماه قبل
-  html += '<button type="button" id="jalaliNext" title="ماه بعد">‹</button>';
-  html += '<span>'+JALALI_MONTHS[m-1]+' '+toPersianDigits(y)+'</span>';
-  html += '<button type="button" id="jalaliPrev" title="ماه قبل">›</button></div>';
-  html += '<div class="jalali-week"><span>ش</span><span>ی</span><span>د</span><span>س</span><span>چ</span><span>پ</span><span>ج</span></div>';
-  html += '<div class="jalali-days">';
-  for(let i=0;i<start;i++) html += '<button type="button" class="muted"> </button>';
-  for(let day=1; day<=len; day++){
-    const key = y+'/'+String(m).padStart(2,'0')+'/'+String(day).padStart(2,'0');
-    let cls = '';
-    if(key === today) cls += ' today';
-    if(key === selected) cls += ' selected';
-    const disabledFuture = maxDate && keyCompare(key,maxDate)>0;
-    if(disabledFuture) cls += ' muted';
-    html += '<button type="button" class="'+cls.trim()+'" data-d="'+day+'"'+(disabledFuture?' disabled':'')+'>'+toPersianDigits(day)+'</button>';
-  }
-  html += '</div>';
-  box.innerHTML = html;
-  document.getElementById('jalaliPrev').onclick = (e)=>{ e.stopPropagation();
-    // فلش سمت راست: ماه قبل
-    jalaliPick.m--; if(jalaliPick.m<1){ jalaliPick.m=12; jalaliPick.y--; }
-    renderJalaliPicker();
-  };
-  document.getElementById('jalaliNext').onclick = (e)=>{ e.stopPropagation();
-    // فلش سمت چپ: ماه بعد
-    jalaliPick.m++; if(jalaliPick.m>12){ jalaliPick.m=1; jalaliPick.y++; }
-    renderJalaliPicker();
-  };
-  document.getElementById('jalaliTodayBtn').onclick = async (e)=>{
-    e.stopPropagation();
-    const n = new Date();
-    const j = gregorianToJalali(n.getFullYear(), n.getMonth()+1, n.getDate());
-    const val = j.jy+'/'+String(j.jm).padStart(2,'0')+'/'+String(j.jd).padStart(2,'0');
-    // «بازگشت به امروز» هم تاریخ را به امروز برمی‌گرداند و هم تقویم را باز نگه می‌دارد.
-    jalaliPick.y = j.jy;
-    jalaliPick.m = j.jm;
-    jalaliPick.d = j.jd;
-    if(jalaliPick.onPick){
-      try{ await jalaliPick.onPick(val); }catch(err){ console.warn(err); }
-    }
-    renderJalaliPicker();
-  };
-  box.querySelectorAll('.jalali-days button[data-d]').forEach(btn=>{
-    btn.onclick = (e)=>{
-      e.stopPropagation();
-      const day = +btn.getAttribute('data-d');
-      const val = jalaliPick.y+'/'+String(jalaliPick.m).padStart(2,'0')+'/'+String(day).padStart(2,'0');
-      if(jalaliPick.maxDate && val>jalaliPick.maxDate) return;
-      if(jalaliPick.onPick) jalaliPick.onPick(val);
-      closeJalaliPicker();
-    };
-  });
-}
-
-
+/* --- Jalali helpers (Phase 8.2: owned by src/ui/jalali.js via KarhaUI) --- */
+function gregorianToJalali(gy, gm, gd){ return window.KarhaUI?.gregorianToJalali?.(gy,gm,gd); }
+function jalaliToGregorian(jy, jm, jd){ return window.KarhaUI?.jalaliToGregorian?.(jy,jm,jd); }
+function jalaliMonthLength(jy, jm){ return window.KarhaUI?.jalaliMonthLength?.(jy,jm) ?? 29; }
+function todayJalaliStr(){ return window.KarhaUI?.todayJalaliStr ? window.KarhaUI.todayJalaliStr() : ''; }
+function formatJalaliDisplay(str){ return window.KarhaUI?.formatJalaliDisplay ? window.KarhaUI.formatJalaliDisplay(str) : (str||''); }
+function openJalaliPicker(current, onPick, opts){ return window.KarhaUI?.openJalaliPicker?.(current, onPick, opts); }
+function closeJalaliPicker(fromPopState=false){ return window.KarhaUI?.closeJalaliPicker?.(fromPopState); }
+/* picker DOM binds + popstate installed by installUiPrimitives */
 
 /* ---------- شماره نامه خودکار: YYMMDD / اختصار / شمارنده روزانه ---------- */
 const LETTER_COUNTER_KEY = 'karha_letter_counters_v1';
@@ -4750,6 +4403,9 @@ function requestCloseStatusForm(){
 
 
 async function openStatusForm(id){
+  try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){}
+  return false;
+
   closeDrawer();
   // فرم را قبل از هر عملیات شبکه‌ای/غیرهمزمان باز می‌کنیم تا دکمه + هیچ‌وقت معطل نماند.
   statusFormReturnSubpage = 'statusList';
@@ -5193,6 +4849,9 @@ function saveCurrentStatus(silent){
 }
 
 function openStatusList(){
+  try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){}
+  return;
+
   ensureHomeSelection();
   enterWorkspaceSurface();
   workspaceSubpage='statusList';
@@ -5575,29 +5234,45 @@ document.getElementById('closeContactsPage').onclick = ()=>{ document.getElement
 document.getElementById('contactAddBtn').onclick = ()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
 document.getElementById('activityAddBtn').onclick = openActivityForm;
 
-/* ---------- lightweight workspace history ---------- */
+/* ---------- lightweight workspace history (Phase 8.4: push owned by src/core/workspaceHistory.js) ---------- */
 let workspaceHistoryDepth = 0;
 function pushWorkspaceHistory(kind){
+  if(window.KarhaWorkspaceHistory?.push){
+    window.KarhaWorkspaceHistory.push(kind);
+    workspaceHistoryDepth = window.KarhaWorkspaceHistory.getDepth?.() ?? (workspaceHistoryDepth+1);
+    return;
+  }
   try{
     history.pushState({karhaWorkspace:kind}, '', location.href);
     workspaceHistoryDepth++;
   }catch(e){}
 }
 window.addEventListener('popstate', ()=>{
-  // اگر بک فقط برای بستن تمپلیت جستجو بوده، فرم قرارداد را نبند
-  if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
+  // Phase 8.4: popstate router remains here until full nav module owns all page closers.
+  const formPageEl = document.getElementById('contractFormPage');
+  const formOpen = !!(formPageEl && !formPageEl.classList.contains('hidden'));
+  const childOverlayOpen = ()=>{
+    if(typeof isSearchTemplateOpen==='function' && isSearchTemplateOpen()) return true;
+    if(typeof window!=='undefined' && window.KarhaSearchTemplate?.isOpen?.()) return true;
+    const numpad=document.getElementById('numpadOverlay');
+    if(numpad && !numpad.classList.contains('hidden')) return true;
+    const jalali=document.getElementById('jalaliPop');
+    if(jalali && !jalali.classList.contains('hidden')) return true;
+    return false;
+  };
 
-  // صفحات حذف‌شدهٔ فاز ۵+ (status/collab/share) عمداً دیگر در DOM نیستند؛
-  // getElementById بدون id باعث TypeError و قطع کل handler می‌شد.
-
-  // Back از فرم قرارداد واقعی -> لیست قراردادها.
-  if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){
-    // The browser has already consumed the form-owned entry. This callback
-    // returns below, so do not leave an overlay-suppression token behind: it
-    // would swallow the next session's legitimate form Back.
+  // Contract form owns Back when it is visible and no child overlay is open.
+  // One-shot suppress still applies (picker select / numpad done → history.back).
+  if(formOpen){
+    if(childOverlayOpen()) return;
+    if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
     requestCloseContractForm(true);
     return;
   }
+
+  if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
+
+  // صفحات حذف‌شدهٔ فاز ۵+ (status/collab/share) عمداً دیگر در DOM نیستند.
   if(document.getElementById('contractsPage') && !document.getElementById('contractsPage').classList.contains('hidden')){ closeContractsPage(); return; }
 
   // Back از حسابداری -> هوم پروژه.
@@ -5773,7 +5448,7 @@ window.KarhaLegacy = Object.freeze({
   formatJalaliDisplay,
   getContacts,
   openNumpadGeneric,
-  suppressWorkspaceBack(){ suppressWorkspaceBackOnce=true; },
+  suppressWorkspaceBack(){ markSuppressWorkspaceBack(); },
   canDeleteProjectRecord,
   showRecordDeleteBlocked,
   findProjectRecordReferences,

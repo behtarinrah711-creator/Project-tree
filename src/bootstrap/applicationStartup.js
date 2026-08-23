@@ -29,6 +29,10 @@ import { writeTaskRecordsNormalized, attachCloudTaskListener } from '../sync/tas
 import { cloudSyncProjectFull } from '../sync/cloudSyncProject.js';
 import { registerFormRuntimes, getActivityFormRuntime, getContactFormRuntime } from '../ui/formRuntimes.js';
 import { showToast as uiShowToast } from '../ui/toast.js';
+import { installUiPrimitives } from '../ui/installUiPrimitives.js';
+import { installProfileStore } from '../modules/profile/profileStore.js';
+import { installWorkspaceHistory } from '../core/workspaceHistory.js';
+import { installExportNotesStore } from '../modules/export/exportNotesStore.js';
 import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
@@ -74,6 +78,11 @@ export async function startApplication({
   windowRef.KarhaApp = application;
 
   await loadLegacy();
+  // Phase 8.2: UI primitives own toast/confirm/numpad/jalali (no new DOM ownership in legacy).
+  installUiPrimitives({ windowRef, documentRef: windowRef.document });
+  installProfileStore({ windowRef });
+  installWorkspaceHistory({ windowRef });
+  installExportNotesStore({ windowRef });
   // Phase 4.2: Domain APIs call persistAdapter; legacy remains the implementation
   // until cloud/persist are fully extracted. Auth stays in legacy.
   registerPersistImpl({

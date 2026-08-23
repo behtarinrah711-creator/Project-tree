@@ -70,19 +70,19 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   };
 
   form.requestClose = function(fromPopState = false){
-    // Only yield while a child overlay is still open. Time-based suppress is for
-    // the same gesture that closed the child; a later Back belongs to the form.
     const doc = windowRef.document;
     const childOpen = id => {
       const el = doc?.getElementById?.(id);
       return !!(el && !el.classList.contains('hidden'));
     };
+    // Child overlays own this Back; form must not close or prompt.
     if(childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop')) return false;
 
-    const changed = !!exitSession?.isDirty?.();
-    // Normalize legacy dirty state to net form-state change. This also detects
-    // picker/calendar/text mutations that forgot to flip the old dirty flag.
-    originalSetDirty(changed);
+    // session baseline OR form dirty flag — never force-clear dirty to false.
+    const sessionDirty = !!exitSession?.isDirty?.();
+    const flagDirty = !!form.isDirty?.();
+    const changed = sessionDirty || flagDirty;
+    if(changed) originalSetDirty(true);
 
     const result = originalRequestClose(fromPopState);
     if(editing && changed && result === false){
