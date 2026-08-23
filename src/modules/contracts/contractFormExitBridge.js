@@ -80,16 +80,26 @@ export function installContractFormExitBridge({windowRef = window} = {}){
     if(childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop')) return false;
 
     // Net change from baseline OR the form's own dirty flag (input handlers).
-    // Never force-clear dirty to false when exitSession is missing/stale — that
-    // hid global-incomplete-exit-choice after New Contract field edits + Back.
     const sessionDirty = !!exitSession?.isDirty?.();
     const flagDirty = !!form.isDirty?.();
     const changed = sessionDirty || flagDirty;
     if(changed) originalSetDirty(true);
 
     const result = originalRequestClose(fromPopState);
-    if(editing && changed && result === false){
-      patchEditPrompt({windowRef, form});
+    if(changed && result === false){
+      // Ensure dialog exists even if helper resolution failed once.
+      const hasDialog = !!doc?.querySelector?.('.global-incomplete-exit-choice');
+      if(!hasDialog){
+        const show = windowRef.KarhaUI?.showIncompleteFormExitChoice
+          || windowRef.showIncompleteFormExitChoice
+          || windowRef.KarhaLegacy?.showIncompleteFormExitChoice;
+        if(typeof show === 'function'){
+          // Re-enter module requestClose path by re-calling original after dirty forced
+          originalSetDirty(true);
+          originalRequestClose(fromPopState);
+        }
+      }
+      if(editing) patchEditPrompt({windowRef, form});
     }
     return result;
   };
