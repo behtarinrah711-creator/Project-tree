@@ -6,12 +6,17 @@ import { projectModules } from '../modules/index.js';
 import { listProjects, getProject, getActiveProject, selectProject } from '../core/projectWorkspace.js';
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
+import { installAppDataStore } from '../data/appDataStore.js';
 import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
 import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
 import { installProjectRecoveryRetention } from '../core/projectRecoveryRetention.js';
 import { installBackGestureGuard } from '../core/backGestureGuard.js';
+import { installSoftDelete } from '../core/softDelete.js';
+import { installWorkspaceSurface } from '../core/workspaceSurface.js';
 import { installContractFormExitBridge } from '../modules/contracts/contractFormExitBridge.js';
+import { installContractShellView } from '../modules/contracts/contractShellView.js';
+import { installContractItemDrag } from '../modules/contracts/contractItemDrag.js';
 import { installLogoutSessionGuard } from './logoutSessionGuard.js';
 import { getSession, installSessionObserver } from '../core/session.js';
 import { activityApi } from '../domain/activityApi.js';
@@ -27,12 +32,18 @@ import { docToProjectFromCloud } from '../sync/docToProject.js';
 import { mergeOwnedCloudSnapshots } from '../sync/mergeCloudSnapshots.js';
 import { writeTaskRecordsNormalized, attachCloudTaskListener } from '../sync/taskCloud.js';
 import { cloudSyncProjectFull } from '../sync/cloudSyncProject.js';
+import {
+  readProjectStatusQueue, writeProjectStatusQueue, queueProjectStatus, dequeueProjectStatus,
+  writeProjectStatusVerified, flushProjectStatusQueue, scheduleProjectStatusRetry, cloudSyncProjectStatus,
+} from '../sync/projectStatusSync.js';
 import { registerFormRuntimes, getActivityFormRuntime, getContactFormRuntime } from '../ui/formRuntimes.js';
 import { showToast as uiShowToast } from '../ui/toast.js';
 import { installUiPrimitives } from '../ui/installUiPrimitives.js';
 import { installProfileStore } from '../modules/profile/profileStore.js';
+import { installProfileView } from '../modules/profile/profileView.js';
 import { installWorkspaceHistory } from '../core/workspaceHistory.js';
 import { installExportNotesStore } from '../modules/export/exportNotesStore.js';
+import { installExportView } from '../modules/export/exportView.js';
 import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
@@ -69,6 +80,14 @@ export async function startApplication({
     writeTaskRecordsNormalized,
     attachCloudTaskListener,
     cloudSyncProjectFull,
+    readProjectStatusQueue,
+    writeProjectStatusQueue,
+    queueProjectStatus,
+    dequeueProjectStatus,
+    writeProjectStatusVerified,
+    flushProjectStatusQueue,
+    scheduleProjectStatusRetry,
+    cloudSyncProjectStatus,
     registerFormRuntimes,
     getActivityFormRuntime,
     getContactFormRuntime,
@@ -77,12 +96,22 @@ export async function startApplication({
   });
   windowRef.KarhaApp = application;
 
+  // D1: AppDataStore must exist before classic loadData() runs.
+  installAppDataStore({ windowRef, schemaVersion: 8 });
   await loadLegacy();
+  // Attach after install so KarhaApp holds the live store reference.
+  if(windowRef.KarhaApp && windowRef.KarhaAppData){
+    try{
+      Object.defineProperty(windowRef, '__karhaAppDataBound', { value: true });
+    }catch(e){}
+  }
   // Phase 8.2: UI primitives own toast/confirm/numpad/jalali (no new DOM ownership in legacy).
   installUiPrimitives({ windowRef, documentRef: windowRef.document });
   installProfileStore({ windowRef });
+  installProfileView({ windowRef, documentRef: windowRef.document });
   installWorkspaceHistory({ windowRef });
   installExportNotesStore({ windowRef });
+  installExportView({ windowRef, documentRef: windowRef.document });
   // Phase 4.2: Domain APIs call persistAdapter; legacy remains the implementation
   // until cloud/persist are fully extracted. Auth stays in legacy.
   registerPersistImpl({
@@ -94,9 +123,13 @@ export async function startApplication({
   // Child overlays (search template / numpad / Jalali picker) own their Back
   // gesture and must never cascade into closing the parent contract form.
   installBackGestureGuard({windowRef,documentRef:windowRef.document});
+  installSoftDelete({ windowRef, documentRef: windowRef.document });
+  installWorkspaceSurface({ windowRef, documentRef: windowRef.document });
   // Contract forms use a reusable baseline/dirty policy. New records may save
   // drafts; edits never draft and save changes back to the same contract.
   installContractFormExitBridge({windowRef});
+  installContractShellView({ windowRef, documentRef: windowRef.document });
+  installContractItemDrag({ windowRef });
   // Logout is a session boundary. Clear Project-tree's local user cache only
   // when Firebase actually transitions from an authenticated user to guest,
   // then reload so legacy in-memory recovery state cannot resurrect it.
