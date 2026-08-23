@@ -79,10 +79,13 @@ export function installContractFormExitBridge({windowRef = window} = {}){
     };
     if(childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop')) return false;
 
-    const changed = !!exitSession?.isDirty?.();
-    // Normalize legacy dirty state to net form-state change. This also detects
-    // picker/calendar/text mutations that forgot to flip the old dirty flag.
-    originalSetDirty(changed);
+    // Net change from baseline OR the form's own dirty flag (input handlers).
+    // Never force-clear dirty to false when exitSession is missing/stale — that
+    // hid global-incomplete-exit-choice after New Contract field edits + Back.
+    const sessionDirty = !!exitSession?.isDirty?.();
+    const flagDirty = !!form.isDirty?.();
+    const changed = sessionDirty || flagDirty;
+    if(changed) originalSetDirty(true);
 
     const result = originalRequestClose(fromPopState);
     if(editing && changed && result === false){
