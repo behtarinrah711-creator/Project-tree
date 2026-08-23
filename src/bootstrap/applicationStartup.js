@@ -22,6 +22,14 @@ import { projectApi } from '../domain/projectApi.js';
 import * as mergePolicy from '../domain/mergePolicy.js';
 import { registerPersistImpl } from '../sync/persistAdapter.js';
 import { applyCloudSnapshot, applyCloudProjectList } from '../sync/applyCloudSnapshot.js';
+import { startOwnedCloudListeners, stopOwnedCloudListeners } from '../sync/cloudListeners.js';
+import { docToProjectFromCloud } from '../sync/docToProject.js';
+import { mergeOwnedCloudSnapshots } from '../sync/mergeCloudSnapshots.js';
+import { writeTaskRecordsNormalized, attachCloudTaskListener } from '../sync/taskCloud.js';
+import { cloudSyncProjectFull } from '../sync/cloudSyncProject.js';
+import { registerFormRuntimes, getActivityFormRuntime, getContactFormRuntime } from '../ui/formRuntimes.js';
+import { showToast as uiShowToast } from '../ui/toast.js';
+import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -50,6 +58,18 @@ export async function startApplication({
     mergePolicy,
     applyCloudSnapshot,
     applyCloudProjectList,
+    startOwnedCloudListeners,
+    stopOwnedCloudListeners,
+    docToProjectFromCloud,
+    mergeOwnedCloudSnapshots,
+    writeTaskRecordsNormalized,
+    attachCloudTaskListener,
+    cloudSyncProjectFull,
+    registerFormRuntimes,
+    getActivityFormRuntime,
+    getContactFormRuntime,
+    showToast: uiShowToast,
+    shellSurface: Object.freeze({ showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS }),
   });
   windowRef.KarhaApp = application;
 
