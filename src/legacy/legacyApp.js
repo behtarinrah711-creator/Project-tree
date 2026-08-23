@@ -130,7 +130,7 @@ function migrateLegacyGlobalWorkspaceData(){
   const legacyActivities=Array.isArray(data.activityTemplates)?data.activityTemplates:[];
   const hasLegacy=legacyContacts.length || legacyActivities.length;
   if(!hasLegacy) return false;
-  const target = (data.projects||[]).find(p=>p.id===data.activeTab && !p.trashed && !p.archived)
+  const target = (data.projects||[]).find(p=>p.id===getActiveTab() && !p.trashed && !p.archived)
     || (data.projects||[]).find(p=>!p.trashed && !p.archived);
   if(!target) return false;
   normalizeProjectScopedData(target);
@@ -152,25 +152,56 @@ function migrateLegacyGlobalWorkspaceData(){
 }
 
 function loadData(){
+  // D1: canonical in-memory snapshot owned by KarhaAppData (same STORAGE_KEY/shape).
+  // `data` is the store reference — not a second copy.
+  const store = window.KarhaAppData;
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      data = JSON.parse(raw);
-      if(!data.starredOrder) data.starredOrder = [];
-      (data.projects||[]).forEach(p=>{
-        p.type = 'project';
-        p.schemaVersion = DATA_SCHEMA_VERSION;
-        if(p.archived===undefined) p.archived=false;
-        if(p.trashed===undefined) p.trashed=false;
-        normalizeProjectScopedData(p);
-        (p.tasks||[]).forEach(t=>{ if(t.completedAt===undefined) t.completedAt = t.done ? 0 : null; });
-        rememberProjectTasks(p);
-      });
-      migrateLegacyGlobalWorkspaceData();
-      return;
+    if(store && typeof store.loadFromStorage === 'function'){
+      data = store.loadFromStorage();
+    } else {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        data = JSON.parse(raw);
+      } else {
+        data = { schemaVersion:DATA_SCHEMA_VERSION, projects:[], viewMode:'simple', activeTab:null, starredOrder:[] };
+      }
+      if(store && typeof store.replaceSnapshot === 'function'){
+        data = store.replaceSnapshot(data);
+      }
     }
+    if(!data || typeof data !== 'object'){
+      data = { schemaVersion:DATA_SCHEMA_VERSION, projects:[], viewMode:'simple', activeTab:null, starredOrder:[] };
+      if(store?.replaceSnapshot) data = store.replaceSnapshot(data);
+    }
+    if(!data.starredOrder) data.starredOrder = [];
+    if(!Array.isArray(data.projects)) data.projects = [];
+    (data.projects||[]).forEach(p=>{
+      p.type = 'project';
+      p.schemaVersion = DATA_SCHEMA_VERSION;
+      if(p.archived===undefined) p.archived=false;
+      if(p.trashed===undefined) p.trashed=false;
+      normalizeProjectScopedData(p);
+      (p.tasks||[]).forEach(t=>{ if(t.completedAt===undefined) t.completedAt = t.done ? 0 : null; });
+      rememberProjectTasks(p);
+    });
+    migrateLegacyGlobalWorkspaceData();
+    // Global Starred tab removed: never keep activeTab === 'starred'
+    if(getActiveTab() === 'starred') setActiveTab(null);
+    if(store && data === store.getSnapshot?.()){
+      /* already shared reference */
+    } else if(store?.replaceSnapshot){
+      data = store.replaceSnapshot(data);
+    }
+    // If storage was empty, persist default once (same as prior behavior).
+    if(store && !(localStorage.getItem(STORAGE_KEY))){
+      persist();
+    } else if(!store && !localStorage.getItem(STORAGE_KEY)){
+      persist();
+    }
+    return;
   }catch(e){}
-  data = { schemaVersion:DATA_SCHEMA_VERSION, projects:[], viewMode:'simple', activeTab:'starred', starredOrder:[] };
+  data = { schemaVersion:DATA_SCHEMA_VERSION, projects:[], viewMode:'simple', activeTab:null, starredOrder:[] };
+  if(window.KarhaAppData?.replaceSnapshot) data = window.KarhaAppData.replaceSnapshot(data);
   persist();
 }
 
@@ -184,8 +215,17 @@ function persist(options){
   saveTimer = setTimeout(()=>{
     if(writeLocal){
       (data.projects||[]).forEach(rememberProjectTasks);
-      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-      catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
+      // D1: persist canonical store snapshot (data is that reference when KarhaAppData is installed).
+      const snap = (window.KarhaAppData && typeof window.KarhaAppData.getSnapshot === 'function')
+        ? window.KarhaAppData.getSnapshot()
+        : data;
+      try{
+        if(window.KarhaAppData && typeof window.KarhaAppData.persistLocal === 'function' && snap === window.KarhaAppData.getSnapshot()){
+          if(!window.KarhaAppData.persistLocal()) showToast('ذخیره‌سازی با خطا مواجه شد');
+        } else {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+        }
+      }catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
     }
     if(cloudMode && currentUser){
       dirtyProjectIds.forEach(pid => {
@@ -195,6 +235,30 @@ function persist(options){
     }
     dirtyProjectIds.clear();
   }, 120);
+}
+
+/* D2: activeTab / viewMode sole owner is KarhaAppData */
+function getActiveTab(){
+  if(window.KarhaAppData && typeof window.KarhaAppData.getActiveTab === 'function')
+    return window.KarhaAppData.getActiveTab();
+  return data ? data.activeTab : null;
+}
+function setActiveTab(value){
+  if(window.KarhaAppData && typeof window.KarhaAppData.setActiveTab === 'function')
+    return window.KarhaAppData.setActiveTab(value);
+  if(data) data.activeTab = value;
+  return value;
+}
+function getViewMode(){
+  if(window.KarhaAppData && typeof window.KarhaAppData.getViewMode === 'function')
+    return window.KarhaAppData.getViewMode();
+  return (data && data.viewMode) ? data.viewMode : 'simple';
+}
+function setViewMode(value){
+  if(window.KarhaAppData && typeof window.KarhaAppData.setViewMode === 'function')
+    return window.KarhaAppData.setViewMode(value);
+  if(data) data.viewMode = value;
+  return value;
 }
 function showToast(msg){
   if(window.KarhaUI?.showToast) return window.KarhaUI.showToast(msg);
@@ -308,16 +372,15 @@ function toggleTaskDone(pid, tid){
   const t = findTask(pid, tid); if(!t) return;
   window.KarhaApp?.taskRuntime?.toggleCompleted(pid,tid);
   removeFromStarredOrder(pid, tid);
-  if(data.activeTab === 'starred') refreshStarredPartial(); else renderAll();
+  renderAll();
 }
 function toggleSubDone(pid, tid, sid){
   const s = findSub(pid, tid, sid); if(!s) return;
   const changed=window.KarhaApp?.taskRuntime?.toggleCompleted(pid,tid,sid);
   if(changed && !changed.done){ removeFromStarredOrder(pid, tid); } else {
     const p = findProject(pid); if(p) p.completedOpen = true;
-    if(data.activeTab === 'starred') starredCompletedOpen = true;
   }
-  if(data.activeTab === 'starred') refreshStarredPartial(); else renderAll();
+  renderAll();
 }
 function toggleTaskStar(pid, tid){ window.KarhaApp?.taskRuntime?.toggleStarred(pid,tid); renderAll(); }
 function toggleSubStar(pid, tid, sid){ window.KarhaApp?.taskRuntime?.toggleStarred(pid,tid,sid); renderAll(); }
@@ -396,7 +459,7 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
   const p=findProject(projectId);
   if(!p || p.trashed || p.archived) return false;
   if(!currentUser && p.ownerUid) return false;
-  data.activeTab=p.id;
+  setActiveTab(p.id);
   taskUI?.setAddItemActive(false);
   // Project selection is navigation state, not a debounced content edit. Save
   // it synchronously so a quick reload/backgrounding on mobile cannot restore
@@ -436,7 +499,7 @@ function renderDrawerProjectList(){
     const empty=document.createElement('div'); empty.className='drawer-empty-projects'; empty.textContent='هنوز پروژه فعالی وجود ندارد. از «پروژه جدید» شروع کنید.'; list.appendChild(empty); return;
   }
   window.KarhaApp?.reconcileDrawerProjectList?.(list,projects,{
-    activeProjectId:data.activeTab,
+    activeProjectId:getActiveTab(),
     createRow(){
       const row=document.createElement('button'); row.type='button';
       const name=document.createElement('span'); name.className='drawer-project-name'; row.appendChild(name);
@@ -543,7 +606,7 @@ function startCloudTaskListener(p){
       }catch(e){}
     },
     onTaskUiRefresh(projectId){
-      if(String(data.activeTab) === String(projectId) && mainSurface === 'projects') renderAll();
+      if(String(getActiveTab()) === String(projectId) && mainSurface === 'projects') renderAll();
       else if(mainSurface === 'workspace') refreshCurrentFooterPage();
     },
   };
@@ -732,41 +795,18 @@ function cloudSyncTaskDomain(p){
 }
 
 
-// ---------- پایگاه همگام‌سازی وضعیت پروژه ----------
-// آرشیو/حذف/بازگردانی فقط باید یک write کوچک روی سند پروژه باشد.
-// این عملیات نباید به خواندن یا نوشتن دستورکارها وابسته شود.
-// در صورت قطع شبکه، write در صف محلی می‌ماند و بعداً دوباره ارسال می‌شود.
-// در صورت permission-denied، retry بی‌نهایت انجام نمی‌دهیم چون مشکل قانون
-// Firestore است، نه قطع موقت شبکه.
-const PROJECT_STATUS_QUEUE_KEY = 'gtasks-project-status-queue-v1';
-let projectStatusRetryTimer = null;
-
+// ---------- project status sync owned by src/sync/projectStatusSync.js ----------
 function readProjectStatusQueue(){
-  try{
-    const q = JSON.parse(localStorage.getItem(PROJECT_STATUS_QUEUE_KEY) || '{}');
-    return q && typeof q === 'object' ? q : {};
-  }catch(e){ return {}; }
+  return window.KarhaApp?.readProjectStatusQueue?.() || {};
 }
 function writeProjectStatusQueue(q){
-  try{ localStorage.setItem(PROJECT_STATUS_QUEUE_KEY, JSON.stringify(q || {})); }catch(e){}
+  return window.KarhaApp?.writeProjectStatusQueue?.(q);
 }
 function queueProjectStatus(p){
-  if(!p || !p.id) return;
-  const q = readProjectStatusQueue();
-  q[p.id] = {
-    trashed: !!p.trashed,
-    archived: !!p.archived,
-    ownerUid: p.ownerUid || '',
-    queuedAt: Date.now()
-  };
-  writeProjectStatusQueue(q);
+  return window.KarhaApp?.queueProjectStatus?.(p);
 }
 function dequeueProjectStatus(pid){
-  const q = readProjectStatusQueue();
-  if(q[pid]){
-    delete q[pid];
-    writeProjectStatusQueue(q);
-  }
+  return window.KarhaApp?.dequeueProjectStatus?.(pid);
 }
 function isPermissionError(err){
   const code = String(err && err.code || '').toLowerCase();
@@ -783,95 +823,30 @@ function isRetryableCloudError(err){
 }
 
 async function writeProjectStatusVerified(p){
-  if(!cloudMode || !currentUser || !p || !p.ownerUid) return {ok:false, skipped:true};
-  if(p.ownerUid !== currentUser.uid) return {ok:false, skipped:true};
-
-  const ref = db.collection('projects').doc(p.id);
-  const payload = {
-    trashed: !!p.trashed,
-    archived: !!p.archived,
-    schemaVersion: DATA_SCHEMA_VERSION,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-
-  await ref.set(payload, {merge:true});
-
-  // فقط برای اطمینان از اینکه write واقعاً روی همان سند اعمال شده است.
-  // در حالت آفلاین/کش، get ممکن است با داده محلی برگردد؛ بنابراین verification
-  // فقط وجود همان مقادیر منطقی را بررسی می‌کند و در صورت mismatch retry می‌شود.
-  const verify = await ref.get({source:'server'});
-  if(!verify.exists){
-    throw Object.assign(new Error('Project document disappeared after status write'), {code:'verification-failed'});
+  const fn = window.KarhaApp?.writeProjectStatusVerified;
+  if(typeof fn === 'function'){
+    return fn(cloudSyncCtx(), p);
   }
-  const d = verify.data() || {};
-  if(!!d.trashed !== !!p.trashed || !!d.archived !== !!p.archived){
-    throw Object.assign(new Error('Project status verification mismatch'), {code:'verification-failed'});
-  }
-  return {ok:true};
+  return {ok:false, skipped:true};
 }
-
 async function flushProjectStatusQueue(){
-  if(!cloudMode || !currentUser || !navigator.onLine) return;
-  const q = readProjectStatusQueue();
-  const ids = Object.keys(q);
-  if(!ids.length) return;
-
-  for(const pid of ids){
-    const queued = q[pid];
-    const p = findProject(pid);
-    if(!p || !p.ownerUid || p.ownerUid !== currentUser.uid){
-      dequeueProjectStatus(pid);
-      continue;
-    }
-    // اگر وضعیت محلی بعد از queue تغییر کرده، آخرین وضعیت محلی مرجع است.
-    const latest = {
-      ...p,
-      trashed: !!p.trashed,
-      archived: !!p.archived
-    };
-    try{
-      await writeProjectStatusVerified(latest);
-      dequeueProjectStatus(pid);
-    }catch(err){
-      console.warn('queued project status sync failed', pid, err);
-      if(isPermissionError(err)){
-        // permission مشکل زیرساخت دسترسی است؛ آن را بی‌نهایت retry نمی‌کنیم.
-        dequeueProjectStatus(pid);
-      }
-      break;
-    }
-  }
+  const fn = window.KarhaApp?.flushProjectStatusQueue;
+  if(typeof fn === 'function') return fn(cloudSyncCtx());
 }
-
 function scheduleProjectStatusRetry(){
-  clearTimeout(projectStatusRetryTimer);
-  projectStatusRetryTimer = setTimeout(()=>{
-    projectStatusRetryTimer = null;
-    flushProjectStatusQueue();
-  }, 5000);
+  const fn = window.KarhaApp?.scheduleProjectStatusRetry;
+  if(typeof fn === 'function') return fn(cloudSyncCtx());
 }
-
 async function cloudSyncProjectStatus(p){
-  if(!cloudMode || !currentUser || !p || !p.ownerUid) return false;
-  if(p.ownerUid !== currentUser.uid) return false;
-
-  try{
-    const result = await writeProjectStatusVerified(p);
-    if(result.ok){
-      dequeueProjectStatus(p.id);
-      return true;
-    }
-    return false;
-  }catch(err){
-    console.warn('project status sync failed', p.id, err);
-    if(isRetryableCloudError(err)){
-      queueProjectStatus(p);
-      scheduleProjectStatusRetry();
-    }else{
-      dequeueProjectStatus(p.id);
-    }
-    return false;
-  }
+  const fn = window.KarhaApp?.cloudSyncProjectStatus;
+  if(typeof fn === 'function') return fn(cloudSyncCtx(), p);
+  return false;
+}
+function cloudSyncCtx(){
+  return {
+    cloudMode, currentUser, db, DATA_SCHEMA_VERSION, firebase,
+    findProject, isPermissionError, isRetryableCloudError,
+  };
 }
 
 function cloudSyncProjectFull(p){
@@ -892,8 +867,8 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
   const mergeFn = window.KarhaApp?.mergeOwnedCloudSnapshots;
   const docFn = docToProject;
   if(typeof mergeFn === 'function'){
-    const preservedActive = data ? data.activeTab : null;
-    const preservedMode = data ? data.viewMode : 'simple';
+    const preservedActive = data ? getActiveTab() : null;
+    const preservedMode = data ? getViewMode() : 'simple';
     const preservedStarredOrder = data && data.starredOrder ? data.starredOrder.slice() : [];
     const result = mergeFn({
       ownedDocs: ownedDocs || [],
@@ -909,8 +884,8 @@ function mergeCloudSnapshots(ownedDocs, sharedDocs){
     });
     if(!data) return;
     data.projects = result.projects;
-    if(result.activeTab != null) data.activeTab = result.activeTab;
-    if(result.viewMode) data.viewMode = result.viewMode;
+    if(result.activeTab != null) setActiveTab(result.activeTab);
+    if(result.viewMode) setViewMode(result.viewMode);
     if(result.starredOrder) data.starredOrder = result.starredOrder;
     try{
       if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data.projects)){
@@ -944,7 +919,7 @@ async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       }
     }catch(e){}
-        if(String(data.activeTab) === String(doc.id) && mainSurface === 'projects') renderAll();
+        if(String(getActiveTab()) === String(doc.id) && mainSurface === 'projects') renderAll();
         else if(mainSurface === 'workspace') refreshCurrentFooterPage();
       }
     }));
@@ -1063,11 +1038,11 @@ auth.onAuthStateChanged(async (user)=>{
     stopCloudListeners();
     loadData();
     // Guest must not keep a cloud-owned project selected/visible.
-    const active = data && data.activeTab && data.activeTab !== 'starred'
-      ? (data.projects||[]).find(p => String(p.id)===String(data.activeTab))
+    const active = data && getActiveTab() && getActiveTab() !== 'starred' /* legacy guard */
+      ? (data.projects||[]).find(p => String(p.id)===String(getActiveTab()))
       : null;
     if(active && active.ownerUid){
-      data.activeTab = null;
+      setActiveTab(null);
       try{ window.KarhaApp?.projectContext?.setProjectId?.(null); }catch(e){}
     }
     renderDrawerProjectList();
@@ -1197,116 +1172,42 @@ function showRecordDeleteBlocked(type, refs){
   return false;
 }
 
-/* ---------- soft delete / undo (like WhatsApp/Telegram) ---------- */
-let pendingDelete = null;
-
+/* ---------- soft delete / undo (owned by src/core/softDelete.js) ---------- */
 function isPendingDeleted(type, pid, tid, sid){
-  if(!pendingDelete || pendingDelete.pid !== pid) return false;
-  if(pendingDelete.type === 'project') return true;
-  if(pendingDelete.type === 'task') return pendingDelete.tid === tid;
-  if(pendingDelete.type === 'sub') return type === 'sub' && pendingDelete.tid === tid && pendingDelete.sid === sid;
+  if(window.KarhaSoftDelete?.isPendingDeleted) return window.KarhaSoftDelete.isPendingDeleted(type, pid, tid, sid);
   return false;
 }
-
 function softDelete(type, pid, tid, sid, label){
-  if(type === 'task' || type === 'sub'){
-    const checkId = type === 'task' ? tid : sid;
-    const checkType = type === 'task' ? 'task' : 'subtask';
-    const check = canDeleteProjectRecord(checkType, checkId);
-    if(!check.ok){
-      showRecordDeleteBlocked(checkType, check.refs);
-      return false;
-    }
-  }
-  if(pendingDelete) finalizePendingDelete();
-  pendingDelete = { type, pid, tid, sid };
-  renderAll();
-  if(taskUI?.hasCurrentDetail()) renderSheet();
-  if(type === 'project' && !document.getElementById('projectsPage').classList.contains('hidden')) renderManagementPage();
-  showUndoToast(label);
-  pendingDelete.timeoutId = setTimeout(finalizePendingDelete, 4000);
-  return true;
+  if(window.KarhaSoftDelete?.softDelete) return window.KarhaSoftDelete.softDelete(type, pid, tid, sid, label);
+  return false;
 }
-
-// حذف سراسری رکوردهای خارج از ساختار پروژه؛ همان چرخه Undo → حذف‌شده‌ها را دارد.
-function getCurrentProjectScopeId(){
-  const id = data && data.activeTab && data.activeTab!=='starred' ? data.activeTab : null;
-  return id && findProject(id) ? id : null;
-}
-
 function softDeleteProjectRecord(type, id, label){
-  if(type==='contact' || type==='activity'){
-    const check=canDeleteProjectRecord(type,id);
-    if(!check.ok){ showRecordDeleteBlocked(type,check.refs); return false; }
-  }
-  if(pendingDelete) finalizePendingDelete();
-  const scopeProjectId = getCurrentProjectScopeId();
-  const p = scopeProjectId ? findProject(scopeProjectId) : null;
-  if(!p || (type!=='contact' && type!=='activity')) return;
-  pendingDelete = { type, pid:scopeProjectId, tid:null, sid:null, gid:id, scopeProjectId };
-  renderAll();
-  if(type==='contact') renderContactsPage();
-  if(type==='activity') renderProjectActivitiesPage();
-  showUndoToast(label);
-  pendingDelete.timeoutId = setTimeout(finalizePendingDelete, 4000);
+  if(window.KarhaSoftDelete?.softDeleteProjectRecord) return window.KarhaSoftDelete.softDeleteProjectRecord(type, id, label);
+  return false;
 }
-
 function finalizePendingDelete(){
-  if(!pendingDelete) return;
-  const { type, pid, tid, sid, gid, timeoutId } = pendingDelete;
-  clearTimeout(timeoutId);
-  if(type === 'project'){
-    window.KarhaApp?.projectApi?.trash?.(pid);
-    const p = findProject(pid);
-    if(p) cloudSyncProjectStatus(p);
-    if(data.activeTab === pid){
-      const nextVisible = data.projects.find(pr => pr.id !== pid && !pr.trashed && !pr.archived);
-      data.activeTab = nextVisible ? nextVisible.id : 'starred';
-    }
-  } else if(type === 'task'){
-    window.KarhaApp?.taskApi?.trash?.(pid,tid)
-      || window.KarhaApp?.taskRuntime?.softDelete(pid,tid);
-  } else if(type === 'sub'){
-    window.KarhaApp?.taskApi?.trash?.(pid,tid,sid)
-      || window.KarhaApp?.taskRuntime?.softDelete(pid,tid,sid);
-  } else if(type === 'contact'){
-    window.KarhaApp?.contactApi?.trash?.(pid,gid);
-  } else if(type === 'activity'){
-    window.KarhaApp?.activityApi?.trash?.(pid,gid);
-  }
-  pendingDelete = null;
-  // Domain APIs already persisted cloud-only; do not rewrite localStorage here.
-  persist({ local:false });
-  renderAll();
-  if(!document.getElementById('projectsPage').classList.contains('hidden')){ renderManagementPage(); }
-  if(typeof renderContactsPage==='function') renderContactsPage();
-  if(typeof renderProjectActivitiesPage==='function') renderProjectActivitiesPage();
-  if(typeof renderProjectTrashPage==='function') renderProjectTrashPage();
-  hideUndoToast();
+  if(window.KarhaSoftDelete?.finalizePendingDelete) return window.KarhaSoftDelete.finalizePendingDelete();
 }
-
 function undoPendingDelete(){
-  if(!pendingDelete) return;
-  clearTimeout(pendingDelete.timeoutId);
-  pendingDelete = null;
-  renderAll();
-  if(taskUI?.hasCurrentDetail()) renderSheet();
-  hideUndoToast();
+  if(window.KarhaSoftDelete?.undoPendingDelete) return window.KarhaSoftDelete.undoPendingDelete();
 }
-
 function showUndoToast(label){
-  const t = document.getElementById('undoToast');
-  document.getElementById('undoToastText').textContent = label;
-  const bar = document.getElementById('undoToastBar');
-  bar.style.animation = 'none';
-  void bar.offsetWidth;
-  bar.style.animation = 'undoShrink 4s linear forwards';
-  t.classList.remove('hidden');
+  if(window.KarhaSoftDelete?.showUndoToast) return window.KarhaSoftDelete.showUndoToast(label);
 }
 function hideUndoToast(){
-  document.getElementById('undoToast').classList.add('hidden');
+  if(window.KarhaSoftDelete?.hideUndoToast) return window.KarhaSoftDelete.hideUndoToast();
 }
-document.getElementById('undoToastBtn').onclick = undoPendingDelete;
+/** Called from KarhaSoftDelete after project trash — owns getActiveTab(). */
+function onProjectSoftDeletedFinalize(pid){
+  if(getActiveTab() === pid){
+    const nextVisible = (data.projects||[]).find(pr => pr.id !== pid && !pr.trashed && !pr.archived);
+    setActiveTab(nextVisible ? nextVisible.id : null);
+  }
+}
+function getCurrentProjectScopeId(){
+  const id = data && getActiveTab() && getActiveTab()!=='starred' ? getActiveTab() : null;
+  return id && findProject(id) ? id : null;
+}
 
 /* ---------- svg icons ---------- */
 function svgCheck(){ return '<svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1 5l3.5 3.5L12 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
@@ -1579,6 +1480,12 @@ let mainSurface = 'projects';
 
 function enterWorkspaceSurface(){
   mainSurface = 'workspace';
+  if(window.KarhaWorkspaceSurface?.enterWorkspaceSurface){
+    // Module clears content; mainSurface stays legacy-owned for render gates
+    const content = document.getElementById('content');
+    if(content) content.replaceChildren();
+    return;
+  }
   const content = document.getElementById('content');
   if(content) content.replaceChildren();
 }
@@ -1587,21 +1494,25 @@ function enterProjectsSurface(){
   mainSurface = 'projects';
   menuRootMode = null;
   menuRootPage = null;
+  if(window.KarhaWorkspaceSurface?.enterProjectsSurface){
+    renderAll();
+    return;
+  }
   renderAll();
 }
 
 function renderAll(){
   setBottomNavActive('Projects');
   renderTabs();
-  setBottomNavActive(data.activeTab==='starred' ? 'Projects' : (document.querySelector('.bottom-nav-item.active')?.id?.replace(/^bottom/,'').replace(/Btn$/,'') || 'Projects'));
+  setBottomNavActive(document.querySelector('.bottom-nav-item.active')?.id?.replace(/^bottom/,'').replace(/Btn$/,'') || 'Projects');
   renderModeToggle();
   const content = document.getElementById('content');
   content.innerHTML = '';
-  if(data.activeTab === 'starred'){
-    renderStarredView(content);
-    return;
+  if(getActiveTab() === 'starred'){
+    // Global Starred removed: normalize to project home / empty workspace
+    setActiveTab(null);
   }
-  const p = findProject(data.activeTab);
+  const p = findProject(getActiveTab());
   if(!p || p.archived || p.trashed){
     content.innerHTML = '<div class="workspace-no-project">برای ورود به Workspace، از منوی سه‌خطی بالای صفحه یک پروژه را انتخاب کنید. تب «پروژه‌ها» فقط محتوای کاری پروژه فعال را نمایش می‌دهد.</div>';
     return;
@@ -1615,21 +1526,17 @@ function renderAll(){
 }
 
 function refreshStarredPartial(){
-  // keep activeTab as starred; only refresh content (and tab counts via renderTabs)
-  renderTabs();
-  const content = document.getElementById('content');
-  content.innerHTML = '';
-  renderStarredView(content);
+  // Global Starred removed — no-op (workspace star still uses renderAll)
 }
 
 function renderModeToggle(){
   const btn = document.getElementById('modeToggle');
   const label = document.getElementById('modeToggleLabel');
-  if(data.viewMode === 'cost'){ btn.classList.add('active'); label.textContent = 'نمایش ساده'; }
+  if(getViewMode() === 'cost'){ btn.classList.add('active'); label.textContent = 'نمایش ساده'; }
   else { btn.classList.remove('active'); label.textContent = 'نمایش هزینه'; }
 }
 document.getElementById('modeToggle').onclick = ()=>{
-  data.viewMode = data.viewMode === 'cost' ? 'simple' : 'cost';
+  setViewMode(getViewMode() === 'cost' ? 'simple' : 'cost');
   persist(); renderAll();
 };
 
@@ -1723,7 +1630,7 @@ function updateWorkspaceContextBar(){
     topbarMain.textContent = isWorkspace ? sectionTitle : 'کارها';
   }
 
-  const p = data && data.activeTab !== 'starred' ? findProject(data.activeTab) : null;
+  const p = data && getActiveTab() !== 'starred' ? findProject(getActiveTab()) : null;
   if(topbarProject){
     topbarProject.textContent = isWorkspace && p ? ('(پروژه ' + p.name + ')') : '';
   }
@@ -1811,36 +1718,22 @@ function setBottomNavActive(key){
   updateWorkspaceContextBar();
 
   const nav=document.getElementById('bottomNav');
-  if(nav) nav.classList.toggle('starred-disabled', data && data.activeTab==='starred');
+  if(nav) nav.classList.remove('starred-disabled');
 }
 function showOnlyWorkspacePage(pageId){
-  // محتوای هوم پروژه‌ها هرگز همزمان با یک صفحه منو نمایش داده نمی‌شود.
-  const content = document.getElementById('content');
-  if(content) content.replaceChildren();
-  const ids = ['projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','activityFormPage'];
-  // اول همه صفحات را قطعاً پنهان کن؛ سپس فقط صفحه مقصد را نشان بده.
-  // این کار جلوی هرگونه هم‌پوشانی بین صفحات منوی اصلی و هوم پروژه‌ها را می‌گیرد.
-  ids.forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.classList.add('hidden');
-  });
-  const target=document.getElementById(pageId);
-  if(target) target.classList.remove('hidden');
+  if(window.KarhaWorkspaceSurface?.showOnlyWorkspacePage)
+    return window.KarhaWorkspaceSurface.showOnlyWorkspacePage(pageId);
 }
-
 function closeBottomPages(){
   workspaceSubpage=null;
-  ['projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','activityFormPage']
-    .forEach(id=>{
-      const el=document.getElementById(id);
-      if(el) el.classList.add('hidden');
-    });
+  if(window.KarhaWorkspaceSurface?.closeBottomPages)
+    return window.KarhaWorkspaceSurface.closeBottomPages();
 }
 
 function ensureHomeSelection(){
-  const active = findProject(data.activeTab);
-  if(!data.activeTab || data.activeTab === 'starred' || !active || active.trashed || active.archived){
-    data.activeTab = null;
+  const active = findProject(getActiveTab());
+  if(!getActiveTab() || getActiveTab() === 'starred' || !active || active.trashed || active.archived){
+    setActiveTab(null);
   }
 }
 
@@ -1892,7 +1785,7 @@ function renderSettingsWorkspace(){
   const body=document.getElementById('settingsPageBody');
   if(!body) return;
   ensureHomeSelection();
-  const p=findProject(data.activeTab);
+  const p=findProject(getActiveTab());
   body.innerHTML='';
   if(!p){ body.innerHTML='<div class="mgmt-empty">برای نمایش تنظیمات، یک پروژه را انتخاب کنید.</div>'; return; }
   const wrap=document.createElement('div'); wrap.className='workspace-option-list';
@@ -1956,11 +1849,15 @@ let contractTemplateInlineAddState=null;
 let contractDragState=null;
 
 function openContractTemplatesPage(){
+  if(window.KarhaContractShell?.openContractTemplatesPage)
+    return window.KarhaContractShell.openContractTemplatesPage();
   closeBottomPages(); enterWorkspaceSurface(); workspaceSubpage='contractTemplates';
   setBottomNavActive('Settings'); renderTabs(); showOnlyWorkspacePage('contractTemplatesPage'); updateWorkspaceContextBar();
   pushWorkspaceHistory('contractTemplates'); renderContractTemplatesPage();
 }
 function closeContractTemplatesPage(){
+  if(window.KarhaContractShell?.closeContractTemplatesPage)
+    return window.KarhaContractShell.closeContractTemplatesPage();
   workspaceSubpage=null; setBottomNavActive('Settings'); renderTabs(); showOnlyWorkspacePage('settingsPage'); updateWorkspaceContextBar(); renderSettingsWorkspace();
 }
 
@@ -1972,48 +1869,13 @@ function makeContractTemplateDraft(existing=null){
 }
 function contractItemDepthFromPath(path){ return path.length-1; }
 function moveContractItem(items,fromIndex,toIndex){ if(fromIndex===toIndex) return; const [x]=items.splice(fromIndex,1); items.splice(toIndex,0,x); }
-let contractPointerDragState=null;
 function startContractPointerDrag(e, arr, index, wrapperEl, render){
-  if(!arr || !wrapperEl) return;
-  e.preventDefault(); e.stopPropagation();
-  const container=wrapperEl.parentElement;
-  const siblingEls=Array.from(container?.children||[]).filter(el=>el.dataset && el.dataset.contractDragId);
-  contractPointerDragState={arr,index,wrapperEl,siblingEls,hoverEl:null,hoverPos:null,render,moved:false};
-  wrapperEl.classList.add('contract-row-dragging');
-  document.addEventListener('pointermove',onContractPointerDragMove);
-  document.addEventListener('pointerup',onContractPointerDragEnd,{once:true});
-}
-function onContractPointerDragMove(e){
-  if(!contractPointerDragState) return;
-  const st=contractPointerDragState; st.moved=true;
-  const others=st.siblingEls.filter(el=>el!==st.wrapperEl);
-  let target=null,pos=null;
-  for(const el of others){ const r=el.getBoundingClientRect(); if(e.clientY < r.top+r.height/2){target=el;pos='before';break;} }
-  if(!target && others.length){target=others[others.length-1];pos='after';}
-  others.forEach(el=>el.classList.remove('contract-drag-over-top','contract-drag-over-bottom'));
-  if(target) target.classList.add(pos==='before'?'contract-drag-over-top':'contract-drag-over-bottom');
-  st.hoverEl=target; st.hoverPos=pos;
-}
-function onContractPointerDragEnd(){
-  const st=contractPointerDragState; if(!st) return;
-  document.removeEventListener('pointermove',onContractPointerDragMove);
-  st.wrapperEl.classList.remove('contract-row-dragging');
-  st.siblingEls.forEach(el=>el.classList.remove('contract-drag-over-top','contract-drag-over-bottom'));
-  contractPointerDragState=null;
-  if(!st.moved || !st.hoverEl) return;
-  const targetId=st.hoverEl.dataset.contractDragId;
-  const source=st.index; const from=st.arr.findIndex(x=>String(x.id)===String(st.wrapperEl.dataset.contractDragId));
-  if(from<0) return;
-  const [moved]=st.arr.splice(from,1);
-  let to=st.arr.findIndex(x=>String(x.id)===String(targetId));
-  if(to<0){st.arr.splice(from,0,moved);return;}
-  if(st.hoverPos==='after') to++;
-  st.arr.splice(to,0,moved);
-  contractTemplateFormDirty=true;
-  st.render();
+  if(window.KarhaContractItemDrag?.startContractPointerDrag)
+    return window.KarhaContractItemDrag.startContractPointerDrag(e, arr, index, wrapperEl, render);
 }
 function attachContractDrag(handle, arr, index, render){
-  handle.onpointerdown=e=>startContractPointerDrag(e,arr,index,handle.closest('.contract-item-card'),render);
+  if(window.KarhaContractItemDrag?.attachContractDrag)
+    return window.KarhaContractItemDrag.attachContractDrag(handle, arr, index, render);
 }
 
 function makeContractTemplateDraftClean(existing){
@@ -2088,18 +1950,16 @@ function saveContractTemplateClean(silent=false){
   return window.KarhaContractTemplateForm?.save?.(p.id,silent) || false;
 }
 function openContractsPage(projectId=getCurrentProjectScopeId(),{updateRoute=true,pushHistory=true}={}){
-  if(projectId && String(projectId)!==String(getCurrentProjectScopeId())){
-    setActiveProject(projectId,{updateRoute:false,render:false});
-  }
-  const p=getCurrentProject(); if(!p)return false;
-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contracts';
-  if(updateRoute) replaceWorkspaceRoute(p.id,'contracts');
-  setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('contractsPage'); updateWorkspaceContextBar();
-  if(pushHistory) pushWorkspaceHistory('contracts');
-  renderContractsPage();
-  return true;
+  if(window.KarhaContractShell?.openContractsPage)
+    return window.KarhaContractShell.openContractsPage(projectId,{updateRoute,pushHistory});
+  return false;
 }
-function closeContractsPage(){ const p=getCurrentProject(); workspaceSubpage=null; if(p)replaceWorkspaceRoute(p.id,'reports'); setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('reportsPage'); updateWorkspaceContextBar(); renderReportsWorkspace(); }
+
+function closeContractsPage(){
+  if(window.KarhaContractShell?.closeContractsPage)
+    return window.KarhaContractShell.closeContractsPage();
+  const p=getCurrentProject(); workspaceSubpage=null; if(p)replaceWorkspaceRoute(p.id,'reports'); setBottomNavActive('Reports'); renderTabs(); showOnlyWorkspacePage('reportsPage'); updateWorkspaceContextBar(); renderReportsWorkspace();
+}
 function renderContractsPage(){
   const module=window.KarhaApp?.modules?.get('contracts');
   if(module?.render) module.render(getCurrentProject()?.id);
@@ -2109,19 +1969,13 @@ function renderContractsPage(){
 // modular real-contract form module.
 /* Phase 8.6: contract form business logic lives in src/modules/contracts/*; legacy owns page shell visibility only. */
 function openRealContractFormShell(projectId){
-  const p=getCurrentProject(); if(!p || String(p.id)!==String(projectId)) return false;
-  closeDrawer();
-  workspaceSubpage='contractForm'; setInternalFormMode(true);
-  showOnlyWorkspacePage('contractFormPage'); setBottomNavActive('Reports');
-  renderTabs(); updateWorkspaceContextBar();
-  return true;
+  if(window.KarhaContractShell?.openRealContractFormShell)
+    return window.KarhaContractShell.openRealContractFormShell(projectId);
+  return false;
 }
 function closeRealContractFormShell(){
-  setInternalFormMode(false);
-  document.getElementById('contractFormPage')?.classList.add('hidden');
-  workspaceSubpage='contracts';
-  showOnlyWorkspacePage('contractsPage'); setBottomNavActive('Reports');
-  renderTabs(); updateWorkspaceContextBar(); renderContractsPage();
+  if(window.KarhaContractShell?.closeRealContractFormShell)
+    return window.KarhaContractShell.closeRealContractFormShell();
 }
 function openContractForm(id=null){
   const p=getCurrentProject(); if(!p)return false;
@@ -2501,93 +2355,11 @@ function renderContractApprovalPage(){
 }
 
 function openStatusTestPage(){
-  // Phase 5 removed path
-  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
-
-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='statusTest'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('statusTest'); renderStatusTestPage();
+  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){}
 }
 function closeStatusTestPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
-function renderStatusTestPage(){
-  const body=document.getElementById('statusTestBody'); if(!body)return; body.innerHTML='';
-  const project=getCurrentProject();
-  if(!project){body.innerHTML='<div class="contract-empty">ابتدا یک پروژه را انتخاب کنید.</div>';return;}
-  const contacts=getContacts(project).filter(c=>!c.trashed);
-  const contracts=getProjectContracts(project).filter(c=>!c.trashed);
-  const state=window.__statusTestState || {contactId:'',contractId:'',date:todayJalaliStr(),percent:'',note:''};
-  window.__statusTestState=state;
-  if(!state.date) state.date=todayJalaliStr();
+function renderStatusTestPage(){ /* Status test UI removed */ }
 
-  const addField=(label,kind,value,onchange,opts={})=>{
-    const field=document.createElement('div'); field.className='status-test-field';
-    const lab=document.createElement('label'); lab.textContent=label; field.appendChild(lab);
-    let el;
-    if(kind==='select'){
-      el=document.createElement('select'); el.innerHTML=opts.options||''; el.value=value||'';
-    }else if(kind==='textarea'){
-      el=document.createElement('textarea'); el.value=value||''; el.rows=3;
-    }else{
-      el=document.createElement('input'); el.type=kind||'text'; el.value=value||''; if(opts.min!=null)el.min=opts.min;if(opts.max!=null)el.max=opts.max;el.inputMode=opts.inputMode||'';
-    }
-    el.onchange=()=>{onchange(el.value);renderStatusTestPage();};
-    if(kind!=='select' && kind!=='textarea') el.oninput=()=>{onchange(el.value);};
-    if(kind==='textarea') el.oninput=()=>{onchange(el.value);};
-    field.appendChild(el); body.appendChild(field); return el;
-  };
-
-  const contactOptions='<option value="">انتخاب مخاطب…</option>'+contacts.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml([c.firstName,c.lastName].filter(Boolean).join(' ')||c.name||'مخاطب')+'</option>').join('');
-  addField('مخاطب / پیمانکار','select',state.contactId,v=>{state.contactId=v;state.contractId='';state.percent='';state.note='';},{options:contactOptions});
-
-  const myContracts=contracts.filter(c=>String(c.contactId)===String(state.contactId));
-  const contractOptions='<option value="">انتخاب قرارداد…</option>'+myContracts.map(c=>{const a=findActivityTemplate(c.activityId,project);return '<option value="'+escapeHtml(c.id)+'">'+escapeHtml((c.title||('قرارداد '+(a?.name||'')))+' · '+(a?.name||'بدون فعالیت'))+'</option>';}).join('');
-  addField('قرارداد پیمانکار','select',state.contractId,v=>{state.contractId=v;state.percent='';state.note='';},{options:contractOptions});
-
-  if(!state.contactId){ const info=document.createElement('div'); info.className='status-test-info'; info.textContent='ابتدا مخاطب را انتخاب کنید تا قراردادهای همان مخاطب نمایش داده شود.'; body.appendChild(info); return; }
-  if(!myContracts.length){ const info=document.createElement('div'); info.className='status-test-info'; info.textContent='برای این مخاطب هنوز قرارداد فعالی ثبت نشده است.'; body.appendChild(info); return; }
-  const selected=findProjectContract(state.contractId,project);
-  if(!selected){ const info=document.createElement('div'); info.className='status-test-info'; info.textContent='یک قرارداد را انتخاب کنید تا اطلاعات و مراحل صورت وضعیت نمایش داده شود.'; body.appendChild(info); return; }
-
-  const activity=findActivityTemplate(selected.activityId,project);
-  const total=Number(toEnglishDigits(String(selected.amount||'')).replace(/[^\d.]/g,''))||0;
-  const progress=Array.isArray(selected.progressTimeline)?selected.progressTimeline:[];
-  const last=progress.length?Math.max(...progress.map(x=>Number(x.percent)||0)):0;
-  const info=document.createElement('div'); info.className='status-test-info';
-  info.innerHTML='<b>'+escapeHtml(selected.title||'قرارداد')+'</b><br>فعالیت: '+escapeHtml(activity?.name||'—')+'<br>مبلغ کل قرارداد: '+escapeHtml(formatCostDisplay(total))+'<br>پیشرفت فعلی: <b>'+escapeHtml(toPersianDigits(String(last)))+'٪</b>';
-  body.appendChild(info);
-
-  addField('تاریخ صورت وضعیت','text',state.date,v=>{state.date=v;});
-  addField('درصد انجام کل قرارداد تا این صورت وضعیت','number',state.percent,v=>{state.percent=v;},{min:0,max:100,inputMode:'decimal'});
-  addField('توضیحات صورت وضعیت','textarea',state.note,v=>{state.note=v;});
-
-  const n=Number(state.percent); const validPct=Number.isFinite(n)&&n>=0&&n<=100;
-  const doneAmount=validPct?Math.round(total*n/100):0; const previousAmount=Math.round(total*last/100); const stageAmount=Math.max(0,doneAmount-previousAmount); const remaining=Math.max(0,total-doneAmount);
-  const calc=document.createElement('div');calc.className='status-test-info';calc.innerHTML='<b>مبلغ تجمعی انجام‌شده:</b> '+escapeHtml(formatCostDisplay(doneAmount))+'<br><b>مبلغ این مرحله:</b> '+escapeHtml(formatCostDisplay(stageAmount))+'<br><b>مانده قرارداد:</b> '+escapeHtml(formatCostDisplay(remaining));body.appendChild(calc);
-
-  const tl=document.createElement('div'); tl.className='status-test-timeline'; const tt=document.createElement('div'); tt.className='status-test-timeline-title'; tt.textContent='تایم‌لاین پیشرفت قرارداد'; tl.appendChild(tt);
-  const list=document.createElement('div'); list.className='status-test-timeline-list';
-  if(!progress.length){const e=document.createElement('div');e.className='status-test-empty';e.textContent='هنوز صورت وضعیت تستی برای این قرارداد ثبت نشده است.';list.appendChild(e);}
-  else progress.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).forEach((x,i)=>{
-    const pt=document.createElement('div');pt.className='status-test-point';
-    const xa=Math.round(total*Number(x.percent||0)/100);
-    pt.innerHTML='<div class="status-test-point-head"><span>مرحله '+toPersianDigits(String(i+1))+' · '+escapeHtml(x.date||'')+'</span><span class="status-test-point-pct">٪'+escapeHtml(toPersianDigits(String(x.percent||0)))+'</span></div><div style="margin-top:5px;font-size:12px;color:var(--text-dim)">مبلغ تجمعی: '+escapeHtml(formatCostDisplay(x.amount||xa))+' · مبلغ این مرحله: '+escapeHtml(formatCostDisplay(x.stageAmount||0))+'</div>'+(x.note?'<div style="margin-top:5px;font-size:12px;color:var(--text)">'+escapeHtml(x.note)+'</div>':'');
-    list.appendChild(pt);
-  });
-  tl.appendChild(list); body.appendChild(tl);
-
-  const bar=document.createElement('div');bar.className='status-test-savebar';const btn=document.createElement('button');btn.type='button';btn.textContent='ثبت صورت وضعیت تستی';
-  btn.onclick=()=>{
-    const pct=Number(state.percent);
-    if(!Number.isFinite(pct)||pct<0||pct>100){showToast('درصد انجام را بین صفر تا ۱۰۰ وارد کنید');return;}
-    if(pct<last){showToast('درصد انجام جدید نمی‌تواند از مرحله قبلی کمتر باشد');return;}
-    if(pct===last&&progress.length){showToast('این درصد قبلاً ثبت شده است');return;}
-    if(!state.date.trim()){showToast('تاریخ صورت وضعیت را وارد کنید');return;}
-    if(!Array.isArray(selected.progressTimeline))selected.progressTimeline=[];
-    const cumulative=Math.round(total*pct/100); const prev=Math.round(total*last/100);
-    selected.progressTimeline.push({id:uid(),percent:pct,amount:cumulative,stageAmount:Math.max(0,cumulative-prev),date:state.date.trim(),note:String(state.note||'').trim(),createdAt:Date.now()});
-    selected.progressPercent=pct; markDirty(project.id); persist(); showToast('صورت وضعیت تستی ثبت شد');
-    state.percent='';state.note='';renderStatusTestPage();
-  };
-  bar.appendChild(btn);body.appendChild(bar);
-}
 function getCurrentProject(){ const id=getCurrentProjectScopeId(); return id ? findProject(id) : null; }
 function getContacts(project=getCurrentProject()){
   if(!project) return [];
@@ -2729,7 +2501,7 @@ function restoreGlobalRecord(entry){
   if(!entry || !entry.record) return false;
   if(entry.type==='project'){
     const p=findProject(entry.id); if(!p) return false;
-    p.trashed=false; delete p.deletedAt; delete p.deletedType; cloudSyncProjectStatus(p); data.activeTab=p.id; return true;
+    p.trashed=false; delete p.deletedAt; delete p.deletedType; cloudSyncProjectStatus(p); setActiveTab(p.id); return true;
   }
   if(entry.type==='contact'){
     const p=findProject(entry.projectId); const c=findContact(entry.id,p); if(!c) return false;
@@ -2828,7 +2600,7 @@ function renderProjectTrashItem(entry,list){
 
 function renderProjectTrashPage(){
   const body=document.getElementById('projectTrashPageBody'); if(!body) return;
-  const projectId=(data.activeTab && data.activeTab!=='starred') ? data.activeTab : null;
+  const projectId=(getActiveTab() && getActiveTab()!=='starred') ? getActiveTab() : null;
   const items=projectId ? collectProjectTrashedRecords(projectId) : [];
   body.innerHTML='';
 
@@ -2897,14 +2669,14 @@ function refreshCurrentFooterPage(){
 
 function commitActiveContactDraft(){ try{ if(typeof window.__commitContactDraft==='function') window.__commitContactDraft(); }catch(e){} }
 
-document.getElementById('bottomProjectsBtn').onclick=()=>{commitActiveContactDraft();if(data.activeTab&&data.activeTab!=='starred')replaceWorkspaceRoute(data.activeTab,'dashboard');goHomeProjects();};
+document.getElementById('bottomProjectsBtn').onclick=()=>{commitActiveContactDraft();if(getActiveTab()&&getActiveTab()!=='starred')replaceWorkspaceRoute(getActiveTab(),'dashboard');goHomeProjects();};
 
 document.getElementById('bottomReportsBtn').onclick=()=>{
   commitActiveContactDraft();
   leaveMenuRootForFooter();
   closeBottomPages();
   ensureHomeSelection();
-  if(data.activeTab) replaceWorkspaceRoute(data.activeTab,'reports');
+  if(getActiveTab()) replaceWorkspaceRoute(getActiveTab(),'reports');
   enterWorkspaceSurface();
   workspaceSubpage=null;
   setBottomNavActive('Reports');
@@ -2920,7 +2692,7 @@ document.getElementById('bottomAccountingBtn').onclick=()=>{
   leaveMenuRootForFooter();
   closeBottomPages();
   ensureHomeSelection();
-  if(data.activeTab) replaceWorkspaceRoute(data.activeTab,'accounting');
+  if(getActiveTab()) replaceWorkspaceRoute(getActiveTab(),'accounting');
   enterWorkspaceSurface();
   workspaceSubpage=null;
   setBottomNavActive('Accounting');
@@ -2943,7 +2715,7 @@ document.getElementById('bottomSettingsBtn').onclick=()=>{
   leaveMenuRootForFooter();
   closeBottomPages();
   ensureHomeSelection();
-  if(data.activeTab) replaceWorkspaceRoute(data.activeTab,'people');
+  if(getActiveTab()) replaceWorkspaceRoute(getActiveTab(),'people');
   enterWorkspaceSurface();
   workspaceSubpage=null;
   setBottomNavActive('Settings');
@@ -2986,7 +2758,7 @@ function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('
 window.addEventListener('karha:drawer-open', openDrawer);
 window.addEventListener('karha:workspace-route-synced', event=>{
   const routeProjectId=event.detail?.projectId;
-  if(routeProjectId && String(data.activeTab)!==String(routeProjectId)){
+  if(routeProjectId && String(getActiveTab())!==String(routeProjectId)){
     setActiveProject(routeProjectId,{updateRoute:false,render:false,moduleId:event.detail?.moduleId||'dashboard'});
     if(event.detail?.moduleId==='dashboard') renderAll();
   }
@@ -3019,7 +2791,7 @@ function closeConfirm(){
 
 /* ---------- project management page ---------- */
 
-/* ---------- user profile (Phase 8.3: store owned by src/modules/profile/profileStore.js) ---------- */
+/* ---------- user profile (UI owned by src/modules/profile/profileView.js) ---------- */
 const PROFILE_KEY = 'karha_user_profile_v1';
 function loadProfile(){
   if(window.KarhaProfile?.loadProfile) return window.KarhaProfile.loadProfile();
@@ -3033,161 +2805,15 @@ function compressSignatureFile(file){
   if(window.KarhaProfile?.compressSignatureFile) return window.KarhaProfile.compressSignatureFile(file);
   return Promise.reject(new Error('profile store unavailable'));
 }
-
-let profileDraft = null;
-
-function closeProfilePage(fromPopState=false){
-  profileDraft = null;
-  document.getElementById('profilePage').classList.add('hidden');
-  if(menuRootPage === 'profile' || menuRootHistoryPushed){
-    closeMenuRootPage(fromPopState);
-    return;
-  }
-  updateWorkspaceContextBar();
-  const active=document.querySelector('.bottom-nav-item.active');
-  if(active && active.id==='bottomProjectsBtn') enterProjectsSurface();
-  else refreshCurrentFooterPage();
-}
-
-document.getElementById('drawerProfileBtn').onclick = ()=>{ closeDrawer(); openProfilePage(); };
-document.getElementById('profileCancelBtn').onclick = closeProfilePage;
-
-document.getElementById('profileSaveBtn').onclick = ()=>{
-  const nameInp=document.getElementById('profileNameInput');
-  const abbrInp=document.getElementById('profileAbbrInput');
-  const name=(nameInp?.value || '').trim();
-  const senderAbbr=(abbrInp?.value || '').trim();
-  if(!senderAbbr){
-    if(abbrInp){ abbrInp.focus(); abbrInp.style.borderColor='var(--danger)'; }
-    showToast('اختصار فرستنده را وارد کنید');
-    return;
-  }
-  const p={...(profileDraft || loadProfile()), name, senderAbbr};
-  saveProfile(p);
-  profileDraft = {...p};
-  showToast('مشخصات ذخیره شد');
-  // ذخیره در صفحه ثبت مشخصات مانند انصراف، به هوم پروژه‌ها برمی‌گردد.
-  closeProfilePage(false);
-};
-
 function openProfilePage(){
-  closeBottomPages();
-  menuRootMode='profile';
-  enterWorkspaceSurface();
-  ensureHomeSelection();
-  setBottomNavActive('Projects');
-  pushMenuRootHistory('profile');
-  profileDraft = {...loadProfile()};
-  document.getElementById('profilePage').classList.remove('hidden');
-  updateWorkspaceContextBar();
-  renderProfilePage();
+  if(window.KarhaProfileView?.openProfilePage) return window.KarhaProfileView.openProfilePage();
+}
+function closeProfilePage(fromPopState=false){
+  if(window.KarhaProfileView?.closeProfilePage) return window.KarhaProfileView.closeProfilePage(fromPopState);
 }
 function renderProfilePage(){
-  const body = document.getElementById('profilePageBody');
-  body.innerHTML = '';
-  const prof = {...(profileDraft || loadProfile())};
-
-  const nameField = document.createElement('div');
-  nameField.className = 'profile-field';
-  nameField.innerHTML = '<label for="profileNameInput">نام و نام خانوادگی</label>';
-  const nameInp = document.createElement('input');
-  nameInp.type = 'text';
-  nameInp.id = 'profileNameInput';
-  nameInp.placeholder = 'مثلاً علی رضایی';
-  nameInp.value = prof.name || '';
-  nameInp.oninput = ()=>{
-    if(!profileDraft) profileDraft = {...loadProfile()};
-    profileDraft.name = nameInp.value;
-    nameInp.style.borderColor='';
-  };
-  nameField.appendChild(nameInp);
-  body.appendChild(nameField);
-
-  const abbrField = document.createElement('div');
-  abbrField.className = 'profile-field';
-  abbrField.innerHTML = '<label for="profileAbbrInput">اختصار فرستنده <span style="color:var(--danger)">*</span></label>';
-  const abbrInp = document.createElement('input');
-  abbrInp.type = 'text';
-  abbrInp.id = 'profileAbbrInput';
-  abbrInp.placeholder = 'مثلاً م.احمدی';
-  abbrInp.value = prof.senderAbbr || '';
-  abbrInp.oninput = ()=>{
-    if(!profileDraft) profileDraft = {...loadProfile()};
-    profileDraft.senderAbbr = abbrInp.value;
-    abbrInp.style.borderColor='';
-  };
-  abbrField.appendChild(abbrInp);
-  const abbrHint = document.createElement('div');
-  abbrHint.style.cssText = 'font-size:12px;color:var(--text-dim);margin-top:8px;line-height:1.5;';
-  abbrHint.textContent = 'این مقدار از شما گرفته و در شماره نامه ذخیره می‌شود. نمونه: ۴۰۵۰۵۲۱ / م.احمدی / ۰۱';
-  abbrField.appendChild(abbrHint);
-  body.appendChild(abbrField);
-
-  const sigField = document.createElement('div');
-  sigField.className = 'profile-field';
-  sigField.innerHTML = '<label>تصویر امضا</label>';
-  const wrap = document.createElement('div');
-  wrap.className = 'sig-preview-wrap';
-  const preview = document.createElement('div');
-  preview.className = 'sig-preview' + (prof.signature ? '' : ' empty');
-  if(prof.signature){
-    const im = document.createElement('img');
-    im.src = prof.signature;
-    im.alt = 'امضا';
-    preview.appendChild(im);
-  } else {
-    preview.textContent = 'هنوز امضایی آپلود نشده';
-  }
-  wrap.appendChild(preview);
-  const actions = document.createElement('div');
-  actions.className = 'sig-actions';
-  const fileInp = document.createElement('input');
-  fileInp.type = 'file';
-  fileInp.accept = 'image/*';
-  fileInp.style.display = 'none';
-  const upBtn = document.createElement('button');
-  upBtn.className = 'restore-btn';
-  upBtn.type = 'button';
-  upBtn.textContent = prof.signature ? 'تعویض تصویر' : 'آپلود امضا';
-  upBtn.onclick = ()=> fileInp.click();
-  fileInp.onchange = async ()=>{
-    const f = fileInp.files && fileInp.files[0];
-    if(!f) return;
-    try{
-      showToast('در حال آماده‌سازی تصویر…');
-      const dataUrl = await compressSignatureFile(f);
-      if(!profileDraft) profileDraft = {...loadProfile()};
-      profileDraft.signature = dataUrl;
-      renderProfilePage();
-      showToast('امضا آماده ذخیره است');
-    }catch(err){
-      showToast(err.message || 'خطا در آپلود');
-    }
-  };
-  actions.appendChild(upBtn);
-  actions.appendChild(fileInp);
-  if(prof.signature){
-    const delBtn = document.createElement('button');
-    delBtn.className = 'perm-del-btn';
-    delBtn.type = 'button';
-    delBtn.textContent = 'حذف امضا';
-    delBtn.onclick = ()=>{
-      if(!profileDraft) profileDraft = {...loadProfile()};
-      delete profileDraft.signature;
-      renderProfilePage();
-      showToast('حذف امضا آماده ذخیره است');
-    };
-    actions.appendChild(delBtn);
-  }
-  wrap.appendChild(actions);
-  const tip = document.createElement('div');
-  tip.style.cssText = 'font-size:12px;color:var(--text-dim);line-height:1.6;';
-  tip.textContent = 'تصویر به‌صورت خودکار کوچک و فشرده می‌شود. ترجیحاً امضا روی زمینه سفید یا شفاف.';
-  wrap.appendChild(tip);
-  sigField.appendChild(wrap);
-  body.appendChild(sigField);
+  if(window.KarhaProfileView?.renderProfilePage) return window.KarhaProfileView.renderProfilePage();
 }
-
 
 document.getElementById('drawerProjectsBtn').onclick = ()=>{ closeDrawer(); openProjectsPage(); };
 document.getElementById('drawerAddProjectBtn').onclick = ()=>{ closeDrawer(); openCreatePage(); };
@@ -3239,9 +2865,9 @@ async function permanentlyDeleteProject(p){
 
   stopCloudTaskListener(p.id);
   data.projects=data.projects.filter(x=>x.id!==p.id);
-  if(data.activeTab===p.id){
+  if(getActiveTab()===p.id){
     const next=data.projects.find(x=>!x.trashed&&!x.archived) || data.projects.find(x=>!x.trashed) || data.projects.find(x=>!x.archived);
-    data.activeTab=next ? next.id : 'starred';
+    setActiveTab(next ? next.id : 'starred');
   }
   persist();
   return true;
@@ -3302,7 +2928,7 @@ function renderManagementPage(){
       const archBtn=document.createElement('button'); archBtn.className='mgmt-icon-btn'; archBtn.title='آرشیو'; archBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 6h14v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6zM2 4h16v2H2V4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
       archBtn.onclick=()=>{
         window.KarhaApp?.projectApi?.archive?.(p.id,true);
-        if(data.activeTab===p.id)data.activeTab='starred';
+        if(getActiveTab()===p.id)setActiveTab('starred');
         cloudSyncProjectStatus(findProject(p.id)||p);
         // مهم: در همان تب فعلی بمان؛ فقط محتوا و شمارنده‌ها تازه شوند.
         renderManagementPage(); renderAll(); showToast('پروژه آرشیو شد');
@@ -3447,13 +3073,7 @@ function onProjDragEnd(){
   renderAll();
 }
 
-/* ---------- PDF export page (Phase 8.5: notes extracted; page UI still legacy-owned) ---------- */
-let exportPid = null;
-let exportSelected = new Set(); // keys: "t:"+tid or "s:"+tid+":"+sid
-let exportShowCost = false;
-let exportMarkMode = 'square'; // 'square' | 'number' — number فقط آیکون والد را عوض می‌کند
-
-/* Phase 8.5: notes store owned by src/modules/export/exportNotesStore.js; export UI still legacy */
+/* ---------- PDF export page (UI owned by src/modules/export/exportView.js) ---------- */
 const EXPORT_NOTES_KEY = 'karha_export_notes_v1';
 function loadExportNotes(){
   if(window.KarhaExportNotes?.loadExportNotes) return window.KarhaExportNotes.loadExportNotes();
@@ -3462,678 +3082,37 @@ function loadExportNotes(){
 function saveExportNote(pid, text){
   if(window.KarhaExportNotes?.saveExportNote) return window.KarhaExportNotes.saveExportNote(pid, text);
   const all = loadExportNotes();
-  if(text && text.trim()) all[pid] = text;
-  else delete all[pid];
+  if(text && text.trim()) all[pid] = text; else delete all[pid];
   try{ localStorage.setItem(EXPORT_NOTES_KEY, JSON.stringify(all)); }catch(e){}
 }
 function getExportNote(pid){
   if(window.KarhaExportNotes?.getExportNote) return window.KarhaExportNotes.getExportNote(pid);
   return loadExportNotes()[pid] || '';
 }
-
-document.getElementById('closeExportPage').onclick = ()=>{
-  document.getElementById('exportPage').classList.add('hidden');
-  enterProjectsSurface();
-};
-
 function openExportPage(pid){
-  const p = findProject(pid);
-  if(!p) return;
-  enterWorkspaceSurface();
-  exportPid = pid;
-  exportSelected = new Set();
-  exportShowCost = false;
-  exportMarkMode = 'square';
-  // پیش‌فرض: همه موارد انتخاب
-  p.tasks.forEach(t=>{
-    if(t.trashed || isPendingDeleted('task', pid, t.id) || t.done) return;
-    exportSelected.add('t:'+t.id);
-    t.subtasks.forEach(s=>{
-      if(s.trashed || isPendingDeleted('sub', pid, t.id, s.id) || s.done) return;
-      exportSelected.add('s:'+t.id+':'+s.id);
-    });
-  });
-  document.getElementById('exportPageTitle').textContent = 'خروجی: ' + p.name;
-  const noteInp = document.getElementById('exportNoteInput');
-  if(noteInp){
-    noteInp.value = getExportNote(pid);
-    noteInp.oninput = ()=> saveExportNote(pid, noteInp.value);
-  }
-  // سه چک‌باکس گزینه — پیش‌فرض خاموش
-  const numCb = document.getElementById('exportNumberedCb');
-  const costCb = document.getElementById('exportCostCb');
-  const sigCb = document.getElementById('exportIncludeSig');
-  const sigHint = document.getElementById('exportSigHint');
-  if(numCb){ numCb.checked = false; numCb.onchange = ()=>{ exportMarkMode = numCb.checked ? 'number' : 'square'; }; }
-  if(costCb){ costCb.checked = false; costCb.onchange = ()=>{ exportShowCost = costCb.checked; renderExportPage(); }; }
-  const prof = loadProfile();
-  if(sigCb){
-    const canSig = !!(prof.name && prof.signature);
-    sigCb.checked = false;
-    sigCb.disabled = !canSig;
-    if(sigHint) sigHint.textContent = canSig ? '' : 'برای امضا: منو → ثبت مشخصات';
-  }
-  document.getElementById('exportPage').classList.remove('hidden');
-  renderExportPage();
+  if(window.KarhaExportView?.openExportPage) return window.KarhaExportView.openExportPage(pid);
 }
-
 function renderExportPage(){
-  const p = findProject(exportPid);
-  if(!p) return;
-  const toolbar = document.getElementById('exportToolbar');
-  const body = document.getElementById('exportPageBody');
-  toolbar.innerHTML = '';
-  body.innerHTML = '';
-
-  // همگام‌سازی وضعیت از چک‌باکس‌های ثابت
-  const numCb = document.getElementById('exportNumberedCb');
-  const costCb = document.getElementById('exportCostCb');
-  if(numCb) exportMarkMode = numCb.checked ? 'number' : 'square';
-  if(costCb) exportShowCost = costCb.checked;
-
-  const allKeys = [];
-  p.tasks.forEach(t=>{
-    if(t.trashed || isPendingDeleted('task', exportPid, t.id) || t.done) return;
-    allKeys.push('t:'+t.id);
-    t.subtasks.forEach(s=>{
-      if(s.trashed || isPendingDeleted('sub', exportPid, t.id, s.id) || s.done) return;
-      allKeys.push('s:'+t.id+':'+s.id);
-    });
-  });
-  const allChecked = allKeys.length > 0 && allKeys.every(k => exportSelected.has(k));
-
-  // راست: فقط چک‌باکس انتخاب همه (آبی درشت)
-  const allWrap = document.createElement('label');
-  allWrap.className = 'export-check-all-wrap';
-  const allCb = document.createElement('input');
-  allCb.type = 'checkbox';
-  allCb.checked = allChecked;
-  allCb.onchange = ()=>{
-    if(allCb.checked) allKeys.forEach(k => exportSelected.add(k));
-    else exportSelected.clear();
-    renderExportPage();
-  };
-  allWrap.appendChild(allCb);
-  allWrap.appendChild(document.createTextNode('همه'));
-  toolbar.appendChild(allWrap);
-
-  // چپ: PDF و JPEG
-  const actionsWrap = document.createElement('div');
-  actionsWrap.className = 'export-actions';
-  const pdfBtn = document.createElement('button');
-  pdfBtn.className = 'export-pdf-btn';
-  pdfBtn.textContent = 'PDF';
-  pdfBtn.onclick = ()=> generateProjectPdf();
-  actionsWrap.appendChild(pdfBtn);
-  const jpgBtn = document.createElement('button');
-  jpgBtn.className = 'export-jpg-btn';
-  jpgBtn.textContent = 'JPEG';
-  jpgBtn.onclick = ()=> generateProjectJpeg();
-  actionsWrap.appendChild(jpgBtn);
-  toolbar.appendChild(actionsWrap);
-
-  if(exportShowCost){
-    let sum = 0;
-    p.tasks.forEach(t=>{
-      if(t.trashed || isPendingDeleted('task', exportPid, t.id) || t.done) return;
-      if(exportSelected.has('t:'+t.id)) sum += parseFloat(t.cost)||0;
-      t.subtasks.forEach(s=>{
-        if(s.trashed || isPendingDeleted('sub', exportPid, t.id, s.id) || s.done) return;
-        if(exportSelected.has('s:'+t.id+':'+s.id)) sum += parseFloat(s.cost)||0;
-      });
-    });
-    const sumEl = document.createElement('div');
-    sumEl.className = 'export-summary';
-    sumEl.innerHTML = '<span>جمع موارد انتخاب‌شده</span><span class="cost-sum-val"><span class="cost-unit">تومان</span> '+formatCost(sum)+'</span>';
-    body.appendChild(sumEl);
-  }
-
-  const tasks = p.tasks.filter(t => !t.trashed && !isPendingDeleted('task', exportPid, t.id) && !t.done);
-  if(!tasks.length){
-    body.appendChild(elFromHtml('<div class="mgmt-empty">مورد باز (ناتمام) برای خروجی نیست.</div>'));
-    return;
-  }
-
-  tasks.forEach(t=>{
-    const tKey = 't:'+t.id;
-    const row = document.createElement('div');
-    row.className = 'export-row' + (t.done ? ' done' : '');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.className = 'exp-check';
-    cb.checked = exportSelected.has(tKey);
-    cb.onchange = ()=>{
-      if(cb.checked){
-        exportSelected.add(tKey);
-        t.subtasks.forEach(s=>{
-          if(!s.trashed && !isPendingDeleted('sub', exportPid, t.id, s.id) && !s.done)
-            exportSelected.add('s:'+t.id+':'+s.id);
-        });
-      } else {
-        exportSelected.delete(tKey);
-        t.subtasks.forEach(s=> exportSelected.delete('s:'+t.id+':'+s.id));
-      }
-      renderExportPage();
-    };
-    row.appendChild(cb);
-    const bodyEl = document.createElement('div');
-    bodyEl.className = 'exp-body';
-    const title = document.createElement('div');
-    title.className = 'exp-title';
-    title.textContent = t.text;
-    bodyEl.appendChild(title);
-    row.appendChild(bodyEl);
-    if(exportShowCost){
-      const c = document.createElement('span');
-      c.className = 'row-cost';
-      c.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(Number(t.cost)||0);
-      row.appendChild(c);
-    }
-    body.appendChild(row);
-
-    t.subtasks.filter(s => !s.trashed && !isPendingDeleted('sub', exportPid, t.id, s.id) && !s.done).forEach(s=>{
-      const sKey = 's:'+t.id+':'+s.id;
-      const srow = document.createElement('div');
-      srow.className = 'export-row sub' + (s.done ? ' done' : '');
-      const scb = document.createElement('input');
-      scb.type = 'checkbox';
-      scb.className = 'exp-check';
-      scb.checked = exportSelected.has(sKey);
-      scb.onchange = ()=>{
-        if(scb.checked) exportSelected.add(sKey);
-        else exportSelected.delete(sKey);
-        renderExportPage();
-      };
-      srow.appendChild(scb);
-      const sbody = document.createElement('div');
-      sbody.className = 'exp-body';
-      const st = document.createElement('div');
-      st.className = 'exp-title';
-      st.textContent = s.text;
-      sbody.appendChild(st);
-      srow.appendChild(sbody);
-      if(exportShowCost && s.cost){
-        const c = document.createElement('span');
-        c.className = 'row-cost';
-        c.innerHTML = '<span class="cost-unit">تومان</span> '+formatCost(s.cost);
-        srow.appendChild(c);
-      }
-      body.appendChild(srow);
-    });
-  });
+  if(window.KarhaExportView?.renderExportPage) return window.KarhaExportView.renderExportPage();
 }
-
 function generateProjectPdf(){
-  const p = findProject(exportPid);
-  if(!p) return;
-  if(!exportSelected.size){
-    showToast('حداقل یک مورد را انتخاب کنید');
-    return;
-  }
-  const numCb = document.getElementById('exportNumberedCb');
-  const costCb = document.getElementById('exportCostCb');
-  if(numCb) exportMarkMode = numCb.checked ? 'number' : 'square';
-  if(costCb) exportShowCost = costCb.checked;
-
-  function amountHtml(n){
-    if(n===null || n===undefined || n==='' || Number(n)===0) return '';
-    // مثل تب پروژه: تومان سمت چپ + JetBrains Mono
-    return '<span class="row-cost"><span class="cost-unit">تومان</span> '+formatCost(n)+'</span>';
-  }
-
-  // only incomplete items
-  const tasks = p.tasks.filter(t => !t.trashed && !isPendingDeleted('task', exportPid, t.id) && !t.done);
-  let rowsHtml = '';
-  let total = 0;
-
-  let parentNum = 0;
-  tasks.forEach(t=>{
-    const tKey = 't:'+t.id;
-    const tOn = exportSelected.has(tKey);
-    const subs = t.subtasks.filter(s => !s.trashed && !isPendingDeleted('sub', exportPid, t.id, s.id) && !s.done);
-    const anySubOn = subs.some(s => exportSelected.has('s:'+t.id+':'+s.id));
-
-    if(!tOn && !anySubOn) return;
-
-    if(tOn){
-      if(exportShowCost) total += parseFloat(t.cost)||0;
-      const costCell = exportShowCost
-        ? '<td class="cost-cell">'+amountHtml(t.cost!=null?t.cost:0)+'</td>'
-        : '';
-      // شماره فقط آیکون والد را عوض می‌کند؛ فرزندان همیشه □
-      let markCell;
-      if(exportMarkMode === 'number'){
-        parentNum += 1;
-        markCell = '<td class="mark parent-num">'+toPersianDigits(String(parentNum))+'</td>';
-      } else {
-        markCell = '<td class="mark parent-mark">■</td>';
-      }
-      rowsHtml += '<tr>'
-        + markCell
-        + '<td class="title parent-title">'+escapeHtml(t.text)+'</td>'
-        + costCell + '</tr>';
-    } else if(anySubOn){
-      let markCell;
-      if(exportMarkMode === 'number'){
-        parentNum += 1;
-        markCell = '<td class="mark parent-num">'+toPersianDigits(String(parentNum))+'</td>';
-      } else {
-        markCell = '<td class="mark parent-mark">■</td>';
-      }
-      rowsHtml += '<tr class="context">'
-        + markCell
-        + '<td class="title parent-title">'+escapeHtml(t.text)+'</td>'
-        + (exportShowCost?'<td class="cost-cell"></td>':'') + '</tr>';
-    }
-
-    subs.forEach(s=>{
-      if(!exportSelected.has('s:'+t.id+':'+s.id)) return;
-      if(exportShowCost) total += parseFloat(s.cost)||0;
-      const costCell = exportShowCost
-        ? '<td class="cost-cell">'+(s.cost!=null&&s.cost!==''?amountHtml(s.cost):'')+'</td>'
-        : '';
-      rowsHtml += '<tr class="sub">'
-        + '<td class="mark child-mark" style="padding-right:28px;">□</td>'
-        + '<td class="title child-title">'+escapeHtml(s.text)+'</td>'
-        + costCell + '</tr>';
-    });
-  });
-
-  const dateStr = new Date().toLocaleDateString('fa-IR');
-  const costHeader = exportShowCost
-    ? '<th class="cost-head">مبلغ</th>'
-    : '';
-  const totalRow = exportShowCost
-    ? '<tr class="total-row"><td></td><td class="title">جمع کل</td><td class="cost-cell">'+amountHtml(total)+'</td></tr>'
-    : '';
-  const noteText = ((document.getElementById('exportNoteInput') && document.getElementById('exportNoteInput').value) || '').trim();
-  saveExportNote(exportPid, noteText);
-  const noteHtml = noteText
-    ? '<div class="pdf-note">'+escapeHtml(noteText).replace(/\n/g,'<br>')+'</div>'
-    : '';
-  const prof = loadProfile();
-  const wantSig = document.getElementById('exportIncludeSig') && document.getElementById('exportIncludeSig').checked;
-  const sigHtml = (wantSig && prof.signature && prof.name)
-    ? '<div class="pdf-sig"><img src="'+prof.signature+'" alt="امضا"><div class="pdf-sig-name">'+escapeHtml(prof.name)+'</div></div>'
-    : '';
-
-  const doc = `<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>${escapeHtml(p.name)}</title>
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
-<style>
-  @page { margin: 14mm; }
-  body { font-family: 'IRANYekan', IRANYekan, Vazirmatn, Tahoma, sans-serif; color: #202124; margin: 0; padding: 8px 4px; }
-  .pdf-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-  h1 { font-size: 20px; margin: 0; font-weight: 700; flex: 1; text-align: right; }
-  .meta { font-size: 12px; color: #5f6368; margin: 0; flex-shrink: 0; text-align: left; direction: rtl; white-space: nowrap; }
-  .pdf-note { margin-top: 22px; padding-top: 14px; border-top: 1px solid #e8eaed; font-size: 13.5px; line-height: 1.7; color: #00075D; white-space: pre-wrap; }
-  .pdf-sig { margin-top: 28px; text-align: left; direction: ltr; }
-  .pdf-sig img { max-width: 180px; max-height: 70px; object-fit: contain; display: block; margin-left: 0; }
-  .pdf-sig-name { margin-top: 4px; font-size: 11px; font-weight: 500; color: #5f6368; text-align: left; direction: rtl; unicode-bidi: isolate; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: right; padding: 8px 6px; border-bottom: 2px solid #202124; font-size: 12px; color: #5f6368; font-weight: 600; }
-  th.cost-head { text-align: left; direction: ltr; unicode-bidi: isolate; }
-  th.cost-head .unit { font-weight: 500; margin-right: 4px; }
-  td { padding: 7px 6px; vertical-align: top; border-bottom: 1px solid #e8eaed; }
-  td.mark { width: 36px; text-align: center; font-size: 14px; line-height: 1.4; color: #202124; }
-  td.parent-mark { font-size: 13px; }
-  td.parent-num {
-    font-family: 'IRANYekan', IRANYekan, Vazirmatn, Tahoma, sans-serif;
-    font-size: 16px; font-weight: 700; color: #202124;
-    text-align: center; width: 40px;
-  }
-  td.child-mark { font-size: 14px; color: #5f6368; padding-right: 28px; }
-  td.title { font-size: 14px; line-height: 1.45; }
-  td.parent-title { font-weight: 700; }
-  td.child-title { font-size: 13.5px; padding-right: 28px; color: #3c4043; }
-  td.cost-cell { text-align: left; white-space: nowrap; }
-  .row-cost {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: #202124;
-    direction: ltr;
-    unicode-bidi: isolate;
-    display: inline-flex;
-    align-items: baseline;
-    gap: 4px;
-  }
-  .row-cost .cost-unit {
-    font-family: 'IRANYekan', IRANYekan, Vazirmatn, Tahoma, sans-serif;
-    font-size: 10px;
-    font-weight: 500;
-    color: #5f6368;
-  }
-  tr.total-row .row-cost { font-size: 14px; }
-  tr.done td.title { color: #5f6368; text-decoration: line-through; }
-  tr.context td.title { color: #5f6368; font-weight: 600; }
-  tr.total-row td {
-    border-bottom: none;
-    border-top: 2px solid #202124;
-    padding-top: 12px;
-    font-weight: 700;
-  }
-  tr.total-row .amount { font-size: 16px; color: #202124; }
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
-
-  /* ---------- صورت وضعیت ---------- */
-  .st-form{padding:0 0 90px;}
-  .st-row{
-    padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--divider);
-    min-height:52px;display:flex;align-items:center;
-  }
-  .st-row input.st-inp, .st-row textarea.st-inp{
-    width:100%;border:none;outline:none;background:transparent;font-family:inherit;
-    font-size:15px;color:var(--text);text-align:right;direction:rtl;
-  }
-  .st-row input.st-inp::placeholder, .st-row textarea.st-inp::placeholder{color:#b0b3b8;}
-  .st-row textarea.st-inp{resize:none;min-height:44px;line-height:1.5;padding:0;}
-  .st-row.st-tap{cursor:pointer;}
-  .st-row .st-val{width:100%;font-size:15px;color:var(--text);text-align:right;}
-  .st-row .st-val.placeholder{color:#b0b3b8;}
-  .st-section-title{padding:12px 16px 4px;font-size:12px;color:var(--text-dim);background:var(--bg);}
-  .st-pay-block{padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--divider);}
-  .st-pay-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;font-size:14px;color:var(--text);}
-  .st-pay-line input[type="text"]{
-    flex:1;min-width:120px;border:none;border-bottom:1px solid var(--divider);outline:none;
-    background:transparent;font-family:inherit;font-size:14px;padding:6px 4px;color:var(--text);
-  }
-  .st-pay-line label.chk{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--text);cursor:pointer;}
-  .st-pay-line input[type="checkbox"]{width:18px;height:18px;accent-color:var(--green);}
-  .st-save-bar{
-    position:sticky;bottom:0;padding:12px 16px;background:var(--bg);
-    border-top:1px solid var(--divider);display:flex;gap:10px;
-  }
-  .st-save-bar button{
-    flex:1;border:none;border-radius:12px;padding:14px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;
-  }
-  .st-save-bar .st-save{background:var(--green);color:#fff;}
-  .st-save-bar .st-export{background:#202124;color:#fff;}
-  .jalali-pop{
-    position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:80;display:flex;align-items:center;justify-content:center;padding:20px;
-  }
-  .jalali-pop.hidden{display:none;}
-  .jalali-box{
-    background:#fff;border-radius:14px;padding:14px 12px 16px;width:min(320px,100%);
-    box-shadow:0 12px 40px rgba(0,0,0,.18);
-  }
-  .jalali-head{display:flex;align-items:center;justify-content:space-between;direction:ltr;margin-bottom:10px;color:var(--green);font-weight:700;font-size:15px;} .jalali-head span{direction:rtl;}
-  .jalali-head button{border:none;background:transparent;color:var(--green);font-size:18px;cursor:pointer;padding:4px 10px;}
-  .jalali-week{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;color:var(--text-dim);margin-bottom:6px;}
-  .jalali-days{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;}
-  .jalali-days button{
-    border:none;background:transparent;font-family:inherit;font-size:14px;padding:8px 0;border-radius:50%;cursor:pointer;color:var(--text);
-  }
-  .jalali-days button.today{font-weight:700;}
-  .jalali-days button.selected{background:var(--green);color:#fff;}
-  .jalali-days button.muted{color:#c4c7c5;pointer-events:none;}
-  .st-list-row{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider);background:var(--surface);}
-  .st-list-row .st-list-body{flex:1;min-width:0;}
-  .st-list-row .st-list-title{font-size:15px;font-weight:600;color:var(--text);}
-  .st-list-row .st-list-meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
-
-</style><meta name="karha-build" content="210">
-</head><body>
-  <div class="pdf-top">
-    <h1>${escapeHtml(p.name)}</h1>
-    <div class="meta">تاریخ: ${dateStr}</div>
-  </div>
-  <table>
-    <thead><tr>
-      <th style="width:28px;"></th>
-      <th>مورد</th>
-      ${costHeader}
-    </tr></thead>
-    <tbody>${rowsHtml}${totalRow}</tbody>
-  </table>
-  ${noteHtml}
-  ${sigHtml}
-  <script>
-    window.onload = function(){
-      setTimeout(function(){ window.print(); }, 450);
-    };
-  <\/script>
-
-
-<!-- status form save action fixed: bottom above footer -->
-<!-- VERSION 134 -->
-
-
-
-
-<\/body><\/html>`;
-
-  const w = window.open('', '_blank');
-  if(!w){
-    showToast('اجازهٔ باز شدن پنجره را بدهید');
-    return;
-  }
-  w.document.open();
-  w.document.write(doc);
-  w.document.close();
+  if(window.KarhaExportView?.generateProjectPdf) return window.KarhaExportView.generateProjectPdf();
 }
-
-/** یک تصویر JPEG بلند از کل محتوای خروجی */
 async function generateProjectJpeg(){
-  const p = findProject(exportPid);
-  if(!p) return;
-  if(!exportSelected.size){
-    showToast('حداقل یک مورد را انتخاب کنید');
-    return;
-  }
-  const numCb = document.getElementById('exportNumberedCb');
-  const costCb = document.getElementById('exportCostCb');
-  if(numCb) exportMarkMode = numCb.checked ? 'number' : 'square';
-  if(costCb) exportShowCost = costCb.checked;
-  if(typeof html2canvas !== 'function'){
-    showToast('بارگذاری ابزار تصویر ناموفق بود — اینترنت را بررسی کنید');
-    return;
-  }
-
-  function amountHtml(n){
-    if(n===null || n===undefined || n==='' || Number(n)===0) return '';
-    return '<span class="row-cost"><span class="cost-unit">تومان</span> '+formatCost(n)+'</span>';
-  }
-  const tasks = p.tasks.filter(t => !t.trashed && !isPendingDeleted('task', exportPid, t.id) && !t.done);
-  let rowsHtml = '';
-  let total = 0;
-  let parentNum = 0;
-  tasks.forEach(t=>{
-    const tKey = 't:'+t.id;
-    const tOn = exportSelected.has(tKey);
-    const subs = t.subtasks.filter(s => !s.trashed && !isPendingDeleted('sub', exportPid, t.id, s.id) && !s.done);
-    const anySubOn = subs.some(s => exportSelected.has('s:'+t.id+':'+s.id));
-    if(!tOn && !anySubOn) return;
-    if(tOn){
-      if(exportShowCost) total += parseFloat(t.cost)||0;
-      const costCell = exportShowCost ? '<td class="cost-cell">'+amountHtml(t.cost!=null?t.cost:0)+'</td>' : '';
-      let markCell;
-      if(exportMarkMode === 'number'){ parentNum += 1; markCell = '<td class="mark parent-num">'+toPersianDigits(String(parentNum))+'</td>'; }
-      else markCell = '<td class="mark parent-mark">■</td>';
-      rowsHtml += '<tr>'+markCell+'<td class="title parent-title">'+escapeHtml(t.text)+'</td>'+costCell+'</tr>';
-    } else if(anySubOn){
-      let markCell;
-      if(exportMarkMode === 'number'){ parentNum += 1; markCell = '<td class="mark parent-num">'+toPersianDigits(String(parentNum))+'</td>'; }
-      else markCell = '<td class="mark parent-mark">■</td>';
-      rowsHtml += '<tr class="context">'+markCell+'<td class="title parent-title">'+escapeHtml(t.text)+'</td>'+(exportShowCost?'<td class="cost-cell"></td>':'')+'</tr>';
-    }
-    subs.forEach(s=>{
-      if(!exportSelected.has('s:'+t.id+':'+s.id)) return;
-      if(exportShowCost) total += parseFloat(s.cost)||0;
-      const costCell = exportShowCost ? '<td class="cost-cell">'+(s.cost!=null&&s.cost!==''?amountHtml(s.cost):'')+'</td>' : '';
-      rowsHtml += '<tr class="sub"><td class="mark child-mark" style="padding-right:28px;">□</td><td class="title child-title">'+escapeHtml(s.text)+'</td>'+costCell+'</tr>';
-    });
-  });
-  const dateStr = new Date().toLocaleDateString('fa-IR');
-  const costHeader = exportShowCost ? '<th class="cost-head">مبلغ</th>' : '';
-  const totalRow = exportShowCost ? '<tr class="total-row"><td></td><td class="title">جمع کل</td><td class="cost-cell">'+amountHtml(total)+'</td></tr>' : '';
-  const noteText = ((document.getElementById('exportNoteInput') && document.getElementById('exportNoteInput').value) || '').trim();
-  saveExportNote(exportPid, noteText);
-  const noteHtml = noteText ? '<div class="pdf-note">'+escapeHtml(noteText).replace(/\n/g,'<br>')+'</div>' : '';
-  const prof = loadProfile();
-  const wantSig = document.getElementById('exportIncludeSig') && document.getElementById('exportIncludeSig').checked;
-  const sigHtml = (wantSig && prof.signature && prof.name)
-    ? '<div class="pdf-sig"><img src="'+prof.signature+'" alt="امضا"><div class="pdf-sig-name">'+escapeHtml(prof.name)+'</div></div>'
-    : '';
-
-  const wrap = document.createElement('div');
-  wrap.id = 'jpegExportCapture';
-  wrap.setAttribute('dir', 'rtl');
-  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;padding:28px 24px;background:#fff;color:#202124;font-family:Vazirmatn,Tahoma,sans-serif;box-sizing:border-box;z-index:-1;';
-  wrap.innerHTML = `
-    <style>
-      #jpegExportCapture .pdf-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;}
-      #jpegExportCapture h1{font-size:22px;margin:0;font-weight:700;flex:1;text-align:right;}
-      #jpegExportCapture .meta{font-size:13px;color:#5f6368;margin:0;white-space:nowrap;}
-      #jpegExportCapture table{width:100%;border-collapse:collapse;}
-      #jpegExportCapture th{text-align:right;padding:8px 6px;border-bottom:2px solid #202124;font-size:12px;color:#5f6368;}
-      #jpegExportCapture th.cost-head{text-align:left;}
-      #jpegExportCapture td{padding:8px 6px;vertical-align:top;border-bottom:1px solid #e8eaed;font-size:14px;}
-      #jpegExportCapture td.mark{width:40px;text-align:center;}
-      #jpegExportCapture td.parent-num{font-size:16px;font-weight:700;}
-      #jpegExportCapture td.parent-title{font-weight:700;}
-      #jpegExportCapture td.child-title{font-size:13.5px;padding-right:28px;color:#3c4043;}
-      #jpegExportCapture td.cost-cell{text-align:left;white-space:nowrap;}
-      #jpegExportCapture .row-cost{font-family:JetBrains Mono,monospace;font-size:12.5px;font-weight:600;direction:ltr;unicode-bidi:isolate;display:inline-flex;gap:4px;align-items:baseline;}
-      #jpegExportCapture .cost-unit{font-family:Vazirmatn,Tahoma,sans-serif;font-size:10px;font-weight:500;color:#5f6368;}
-      #jpegExportCapture tr.total-row td{border-bottom:none;border-top:2px solid #202124;padding-top:12px;font-weight:700;}
-      #jpegExportCapture .pdf-note{margin-top:22px;padding-top:14px;border-top:1px solid #e8eaed;font-size:13.5px;line-height:1.7;color:#00075D;white-space:pre-wrap;}
-      #jpegExportCapture .pdf-sig{margin-top:28px;text-align:left;direction:ltr;}
-      #jpegExportCapture .pdf-sig img{max-width:180px;max-height:70px;object-fit:contain;display:block;}
-      #jpegExportCapture .pdf-sig-name{margin-top:4px;font-size:11px;font-weight:500;color:#5f6368;text-align:left;direction:rtl;unicode-bidi:isolate;}
-    
-  /* ---------- صورت وضعیت ---------- */
-  .st-form{padding:0 0 90px;}
-  .st-row{
-    padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--divider);
-    min-height:52px;display:flex;align-items:center;
-  }
-  .st-row input.st-inp, .st-row textarea.st-inp{
-    width:100%;border:none;outline:none;background:transparent;font-family:inherit;
-    font-size:15px;color:var(--text);text-align:right;direction:rtl;
-  }
-  .st-row input.st-inp::placeholder, .st-row textarea.st-inp::placeholder{color:#b0b3b8;}
-  .st-row textarea.st-inp{resize:none;min-height:44px;line-height:1.5;padding:0;}
-  .st-row.st-tap{cursor:pointer;}
-  .st-row .st-val{width:100%;font-size:15px;color:var(--text);text-align:right;}
-  .st-row .st-val.placeholder{color:#b0b3b8;}
-  .st-section-title{padding:12px 16px 4px;font-size:12px;color:var(--text-dim);background:var(--bg);}
-  .st-pay-block{padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--divider);}
-  .st-pay-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;font-size:14px;color:var(--text);}
-  .st-pay-line input[type="text"]{
-    flex:1;min-width:120px;border:none;border-bottom:1px solid var(--divider);outline:none;
-    background:transparent;font-family:inherit;font-size:14px;padding:6px 4px;color:var(--text);
-  }
-  .st-pay-line label.chk{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--text);cursor:pointer;}
-  .st-pay-line input[type="checkbox"]{width:18px;height:18px;accent-color:var(--green);}
-  .st-save-bar{
-    position:sticky;bottom:0;padding:12px 16px;background:var(--bg);
-    border-top:1px solid var(--divider);display:flex;gap:10px;
-  }
-  .st-save-bar button{
-    flex:1;border:none;border-radius:12px;padding:14px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;
-  }
-  .st-save-bar .st-save{background:var(--green);color:#fff;}
-  .st-save-bar .st-export{background:#202124;color:#fff;}
-  .jalali-pop{
-    position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:80;display:flex;align-items:center;justify-content:center;padding:20px;
-  }
-  .jalali-pop.hidden{display:none;}
-  .jalali-box{
-    background:#fff;border-radius:14px;padding:14px 12px 16px;width:min(320px,100%);
-    box-shadow:0 12px 40px rgba(0,0,0,.18);
-  }
-  .jalali-head{display:flex;align-items:center;justify-content:space-between;direction:ltr;margin-bottom:10px;color:var(--green);font-weight:700;font-size:15px;} .jalali-head span{direction:rtl;}
-  .jalali-head button{border:none;background:transparent;color:var(--green);font-size:18px;cursor:pointer;padding:4px 10px;}
-  .jalali-week{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;color:var(--text-dim);margin-bottom:6px;}
-  .jalali-days{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;}
-  .jalali-days button{
-    border:none;background:transparent;font-family:inherit;font-size:14px;padding:8px 0;border-radius:50%;cursor:pointer;color:var(--text);
-  }
-  .jalali-days button.today{font-weight:700;}
-  .jalali-days button.selected{background:var(--green);color:#fff;}
-  .jalali-days button.muted{color:#c4c7c5;pointer-events:none;}
-  .st-list-row{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider);background:var(--surface);}
-  .st-list-row .st-list-body{flex:1;min-width:0;}
-  .st-list-row .st-list-title{font-size:15px;font-weight:600;color:var(--text);}
-  .st-list-row .st-list-meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
-
-</style>
-    <div class="pdf-top"><h1>${escapeHtml(p.name)}</h1><div class="meta">تاریخ: ${dateStr}</div></div>
-    <table><thead><tr><th style="width:28px;"></th><th>مورد</th>${costHeader}</tr></thead>
-    <tbody>${rowsHtml}${totalRow}</tbody></table>
-    ${noteHtml}${sigHtml}`;
-  document.body.appendChild(wrap);
-
-  showToast('در حال ساخت تصویر…');
-  try{
-    // صبر کوتاه برای لود فونت/تصویر امضا
-    await new Promise(r => setTimeout(r, 200));
-    const canvas = await html2canvas(wrap, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      windowWidth: 800
-    });
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    const a = document.createElement('a');
-    const safeName = (p.name || 'export').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
-    a.href = dataUrl;
-    a.download = safeName + '.jpg';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    showToast('تصویر JPEG ذخیره شد');
-  }catch(err){
-    console.error(err);
-    showToast('ساخت تصویر ناموفق بود');
-  }finally{
-    wrap.remove();
-  }
+  if(window.KarhaExportView?.generateProjectJpeg) return window.KarhaExportView.generateProjectJpeg();
 }
 
-
-function escapeHtml(str){
-  return String(str||'')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
-}
-
-
-
-/* ---------- collaborations / share (Phase 8.1 condemned runtime removed) ---------- */
-/* Runtime/UI path for share & collab removed. Firestore fields like sharedWith are NOT wiped. */
+/* ---------- collaborations / share removed ---------- */
 function openCollabPage(){ try{ showToast('همکاری در این نسخه حذف شده است'); }catch(e){} }
-function closeCollabPage(){
-  workspaceSubpage = null;
-  mainSurface = 'workspace';
-  const settingsPage = document.getElementById('settingsPage');
-  if(settingsPage){
-    setBottomNavActive('Settings');
-    renderTabs();
-    showOnlyWorkspacePage('settingsPage');
-    renderSettingsWorkspace();
-    updateWorkspaceContextBar();
-  } else {
-    refreshCurrentFooterPage();
-  }
-}
-function renderCollabPage(){ /* no-op: collab DOM removed */ }
-function removeShare(){ return; }
-function openShareForm(pid){ try{ showToast('اشتراک‌گذاری در این نسخه حذف شده است'); }catch(e){} }
-function submitShareForm(){ return; }
-function closeShareForm(){ return; }
-function requestCloseShareForm(){ return; }
-function openShareDialog(){ return; }
-function closeShareDialog(){
-  const ov = document.getElementById('shareOverlay');
-  if(ov) ov.classList.add('hidden');
-}
+function closeCollabPage(){ workspaceSubpage=null; }
+function renderCollabPage(){}
+function openShareForm(){ try{ showToast('اشتراک‌گذاری در این نسخه حذف شده است'); }catch(e){} }
+function submitShareForm(){}
+function closeShareForm(){}
+function requestCloseShareForm(){}
+function openShareDialog(){}
+function closeShareDialog(){}
+function removeShare(){}
 
 /* ---------- PWA service worker registration ---------- */
 if('serviceWorker' in navigator){
@@ -4152,1057 +3131,20 @@ if('serviceWorker' in navigator){
 }
 
 
-/* ==================== صورت وضعیت (مستقل از پروژه) ==================== */
-/* ---------- normalized project domains for future reporting ---------- */
-function makePurchaseRecord(projectId, taskId, item={}){ return { id:uid(), projectId, taskId, item:'', quantity:null, unit:'', estimatedUnitPrice:null, actualUnitPrice:null, status:'pending', notes:'', createdAt:Date.now(), ...item, schemaVersion:DATA_SCHEMA_VERSION }; }
-function makeEstimateRecord(projectId, taskId, item={}){ return { id:uid(), projectId, taskId, title:'', quantity:null, unit:'', unitPrice:null, total:null, notes:'', createdAt:Date.now(), ...item, schemaVersion:DATA_SCHEMA_VERSION }; }
-function makeTaskReportRecord(projectId, taskId, item={}){ return { id:uid(), projectId, taskId, reportDate:null, status:null, percent:null, notes:'', createdAt:Date.now(), ...item, schemaVersion:DATA_SCHEMA_VERSION }; }
-async function addPurchaseRecord(record){
-  if(!cloudMode || !currentUser) throw new Error('cloud-required');
-  const r = {...record, schemaVersion:DATA_SCHEMA_VERSION};
-  await purchaseCollection(r.projectId).doc(r.id).set(r);
-  return r;
-}
-async function addEstimateRecord(record){
-  if(!cloudMode || !currentUser) throw new Error('cloud-required');
-  const r = {...record, schemaVersion:DATA_SCHEMA_VERSION};
-  await estimateCollection(r.projectId).doc(r.id).set(r);
-  return r;
-}
-async function addTaskReportRecord(record){
-  if(!cloudMode || !currentUser) throw new Error('cloud-required');
-  const r = {...record, schemaVersion:DATA_SCHEMA_VERSION};
-  await taskReportCollection(r.projectId).doc(r.id).set(r);
-  return r;
-}
-async function listTaskDomainRecords(projectId, domain){
-  const col = domain==='purchases' ? purchaseCollection(projectId) : domain==='estimates' ? estimateCollection(projectId) : taskReportCollection(projectId);
-  const snap = await col.get();
-  return snap.docs.map(d=>d.data());
-}
-
-
-const STATUS_KEY = 'karha_status_reports_v1';
-let statusEditingId = null;
-let statusFormState = null;
-let jalaliPick = { y:1404, m:1, onPick:null };
-
-function loadStatusReports(){
-  try{ return JSON.parse(localStorage.getItem(STATUS_KEY)||'[]') || []; }catch(e){ return []; }
-}
-function saveStatusReports(list){
-  try{ localStorage.setItem(STATUS_KEY, JSON.stringify(list)); }catch(e){ showToast('ذخیره ممکن نشد'); }
-}
-
-/* --- Jalali helpers (Phase 8.2: owned by src/ui/jalali.js via KarhaUI) --- */
-function gregorianToJalali(gy, gm, gd){ return window.KarhaUI?.gregorianToJalali?.(gy,gm,gd); }
-function jalaliToGregorian(jy, jm, jd){ return window.KarhaUI?.jalaliToGregorian?.(jy,jm,jd); }
-function jalaliMonthLength(jy, jm){ return window.KarhaUI?.jalaliMonthLength?.(jy,jm) ?? 29; }
-function todayJalaliStr(){ return window.KarhaUI?.todayJalaliStr ? window.KarhaUI.todayJalaliStr() : ''; }
-function formatJalaliDisplay(str){ return window.KarhaUI?.formatJalaliDisplay ? window.KarhaUI.formatJalaliDisplay(str) : (str||''); }
-function openJalaliPicker(current, onPick, opts){ return window.KarhaUI?.openJalaliPicker?.(current, onPick, opts); }
-function closeJalaliPicker(fromPopState=false){ return window.KarhaUI?.closeJalaliPicker?.(fromPopState); }
-/* picker DOM binds + popstate installed by installUiPrimitives */
-
-/* ---------- شماره نامه خودکار: YYMMDD / اختصار / شمارنده روزانه ---------- */
-const LETTER_COUNTER_KEY = 'karha_letter_counters_v1';
-
-function jalaliCompactYYMMDD(jDateStr){
-  let jy, jm, jd;
-  if(jDateStr && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(jDateStr)){
-    const p = jDateStr.split('/');
-    jy = +p[0]; jm = +p[1]; jd = +p[2];
-  } else {
-    const n = new Date();
-    const j = gregorianToJalali(n.getFullYear(), n.getMonth()+1, n.getDate());
-    jy = j.jy; jm = j.jm; jd = j.jd;
-  }
-  const yy = String(jy % 1000);
-  const mm = String(jm).padStart(2,'0');
-  const dd = String(jd).padStart(2,'0');
-  return yy + mm + dd;
-}
-
-function getStatusProjectIdForCounter(projectId){
-  const pid = projectId || (statusFormState && statusFormState.projectId) || (data.activeTab !== 'starred' ? data.activeTab : null);
-  return pid ? String(pid) : '';
-}
-function letterCounterStorageKey(compactDate, projectId){
-  return String(compactDate) + '::' + getStatusProjectIdForCounter(projectId);
-}
-function loadLetterCounters(){
-  try{ return JSON.parse(localStorage.getItem(LETTER_COUNTER_KEY) || '{}') || {}; }catch(e){ return {}; }
-}
-function saveLetterCounters(map){
-  try{ localStorage.setItem(LETTER_COUNTER_KEY, JSON.stringify(map)); }catch(e){}
-}
-function getLocalMaxCounter(compactDate, projectId){
-  const key = letterCounterStorageKey(compactDate, projectId);
-  const n = parseInt(loadLetterCounters()[key], 10);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-function setLocalCounter(compactDate, projectId, n){
-  const map = loadLetterCounters();
-  map[letterCounterStorageKey(compactDate, projectId)] = n;
-  saveLetterCounters(map);
-}
-
-/** شمارنده‌های استفاده‌شده در همان روز و همان پروژه از روی صورت‌وضعیت‌های ذخیره‌شده */
-function usedCountersForDate(compactDate, excludeId, projectId){
-  const used = new Set();
-  const compactDigits = String(compactDate).replace(/\D/g, '');
-  const pid = getStatusProjectIdForCounter(projectId);
-  loadStatusReports().forEach(r => {
-    if(excludeId && r.id === excludeId) return;
-    if(pid && String(r.projectId || '') !== pid) return;
-    if(!pid && r.projectId) return;
-    if(!r.letterNo) return;
-    const parts = String(r.letterNo).split('/').map(s => s.trim());
-    if(parts.length < 3) return;
-    const head = toEnglishDigits(parts[0]).replace(/\D/g, '');
-    if(head !== compactDigits) return;
-    const c = parseInt(toEnglishDigits(parts[parts.length - 1]).replace(/\D/g, ''), 10);
-    if(c > 0) used.add(c);
-  });
-  return used;
-}
-
-/** کوچک‌ترین شماره آزاد همان روز در همان پروژه (بعد از حذف، شماره آزاد دوباره استفاده می‌شود) */
-function nextAvailableCounter(compactDate, excludeId, projectId){
-  const used = usedCountersForDate(compactDate, excludeId, projectId);
-  let n = 1;
-  while(used.has(n)) n++;
-  return n;
-}
-
-async function allocateDailyLetterCounter(compactDate, excludeId, projectId){
-  const pid = getStatusProjectIdForCounter(projectId);
-  let next = nextAvailableCounter(compactDate, excludeId, pid);
-  // همگام اختیاری با سرور — کلید شمارنده حالا مستقل از پروژه است.
-  if(cloudMode && currentUser && typeof db !== 'undefined' && db){
-    try{
-      const ref = db.collection('letterCounters').doc(currentUser.uid + '_' + (pid || 'no-project') + '_' + compactDate);
-      await db.runTransaction(async (tx)=>{
-        const snap = await tx.get(ref);
-        const cur = snap.exists && snap.data() && snap.data().n ? parseInt(snap.data().n, 10) : 0;
-        const maxUsed = Math.max(next - 1, Number.isFinite(cur) ? cur : 0);
-        tx.set(ref, {
-          n: Math.max(maxUsed, next),
-          date: compactDate,
-          projectId: pid || null,
-          uid: currentUser.uid,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-      });
-    }catch(err){
-      console.warn('letter counter tx failed, using local gaps', err);
-    }
-  }
-  setLocalCounter(compactDate, pid, Math.max(getLocalMaxCounter(compactDate, pid), next));
-  return next;
-}
-
-function formatLetterNo(compactDate, senderAbbr, counter){
-  const c = String(counter).padStart(2, '0');
-  const abbr = (senderAbbr || '').trim() || '—';
-  return compactDate + ' / ' + abbr + ' / ' + c;
-}
-function formatLetterNoDisplay(letterNo){
-  return toPersianDigits(String(letterNo || ''));
-}
-
-async function generateNextLetterNo(jDateStr, excludeId){
-  // تاریخ شماره نامه = همان تاریخ ثبت‌شده در فرم
-  const compact = jalaliCompactYYMMDD(jDateStr || todayJalaliStr());
-  const prof = loadProfile();
-  const abbr = (prof.senderAbbr || '').trim();
-  const projectId = getStatusProjectIdForCounter();
-  const n = await allocateDailyLetterCounter(compact, excludeId, projectId);
-  return formatLetterNo(compact, abbr, n);
-}
-
-
-function emptyStatusItem(){
-  return { desc:'', percent:'', unitPrice:'', qty:'', unit:'', contractPrice:'', notes:'' };
-}
-function emptyStatusForm(){
-  return {
-    id: null,
-    letterNo: '',
-    date: todayJalaliStr(),
-    personName: '',
-    items: [emptyStatusItem()],
-    payAmount: '',
-    payCard: false,
-    paySheba: false,
-    payAccount: '',
-    payName: '',
-    payExtra: '',
-    createdAt: Date.now()
-  };
-}
-/** سازگاری با صورت‌وضعیت‌های قدیمی تک‌ردیفه */
-function normalizeStatusForm(s){
-  if(!s) return emptyStatusForm();
-  // «موضوع نامه» دیگر بخشی از صورت وضعیت نیست؛ داده‌های قدیمی نیز حذف می‌شوند.
-  if(Object.prototype.hasOwnProperty.call(s, 'subject')) delete s.subject;
-  if(!Array.isArray(s.items) || !s.items.length){
-    if(s.desc || s.unitPrice || s.qty || s.contractPrice || s.percent || s.notes || s.unit){
-      s.items = [{
-        desc: s.desc || '',
-        percent: s.percent || '',
-        unitPrice: s.unitPrice || '',
-        qty: s.qty || '',
-        unit: s.unit || '',
-        contractPrice: s.contractPrice || '',
-        notes: s.notes || ''
-      }];
-    } else {
-      s.items = [emptyStatusItem()];
-    }
-  }
-  // مجموع هزینه برای هر ردیف فقط از «قیمت واحد × مقدار انجام شده» محاسبه می‌شود.
-  s.items.forEach(autoContractPriceForItem);
-  return s;
-}
-
-let statusFormHistoryPushed = false;
-let statusFormReturnSubpage = 'statusList';
-let statusFormDirty = false;
-const STATUS_DRAFT_KEY='karha_status_form_draft_v1';
-function readStatusDraft(){try{return JSON.parse(localStorage.getItem(STATUS_DRAFT_KEY)||'null')}catch(e){return null}}
-function writeStatusDraft(){try{if(statusFormState)localStorage.setItem(STATUS_DRAFT_KEY,JSON.stringify(statusFormState))}catch(e){}}
-function clearStatusDraft(){try{localStorage.removeItem(STATUS_DRAFT_KEY)}catch(e){}}
-function statusFormHasInput(){
-  if(!statusFormState) return false;
-  if(String(statusFormState.personName||'').trim()||String(statusFormState.payAmount||'').trim()||String(statusFormState.payAccount||'').trim()||String(statusFormState.payName||'').trim()||String(statusFormState.payExtra||'').trim()) return true;
-  if(Array.isArray(statusFormState.items) && statusFormState.items.some(x=>String(x.description||'').trim()||String(x.qty||'').trim()||String(x.unit||'').trim()||String(x.unitPrice||'').trim()||String(x.contractPrice||'').trim()||String(x.notes||'').trim())) return true;
-  return false;
-}
-function showStatusExitChoice(){
-  const ov=document.createElement('div'); ov.className='contact-exit-choice';
-  ov.innerHTML='<div class="contact-exit-card"><div class="contact-exit-title">اطلاعات ذخیره نشده است</div><div class="contact-exit-text">می‌خواهید اطلاعات فعلی به‌صورت پیش‌نویس ذخیره شود؟</div><div class="contact-exit-actions"><button type="button" class="mini-btn ghost" data-exit="stay">ادامه ثبت</button><button type="button" class="mini-btn ghost" data-exit="discard">خروج بدون ذخیره</button><button type="button" class="mini-btn primary" data-exit="draft">ذخیره پیش‌نویس</button></div></div>';
-  document.body.appendChild(ov); const close=()=>ov.remove();
-  ov.querySelector('[data-exit="stay"]').onclick=close;
-  ov.querySelector('[data-exit="discard"]').onclick=()=>{close();clearStatusDraft();closeStatusForm();};
-  ov.querySelector('[data-exit="draft"]').onclick=()=>{writeStatusDraft();close();closeStatusForm();};
-}
-function requestCloseStatusForm(){
-  const hasInput=statusFormHasInput();
-  const requiredComplete=validateStatusFormUI(false);
-  if(hasInput && !requiredComplete){
-    showIncompleteFormExitChoice({
-      onYes:()=>{writeStatusDraft();statusFormDirty=false;closeStatusForm();},
-      onNo:()=>{clearStatusDraft();closeStatusForm();}
-    });
-    return;
-  }
-  clearStatusDraft();
-  closeStatusForm();
-}
-
-
-async function openStatusForm(id){
-  try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){}
-  return false;
-
-  closeDrawer();
-  // فرم را قبل از هر عملیات شبکه‌ای/غیرهمزمان باز می‌کنیم تا دکمه + هیچ‌وقت معطل نماند.
-  statusFormReturnSubpage = 'statusList';
-  workspaceSubpage = 'statusForm';
-  enterWorkspaceSurface();
-  statusEditingId = id || null;
-
-  statusFormDirty=false;
-  if(id){
-    const list = loadStatusReports();
-    const found = list.find(x => x.id === id);
-    statusFormState = normalizeStatusForm(found ? JSON.parse(JSON.stringify(found)) : emptyStatusForm());
-  } else {
-    const savedDraft=readStatusDraft();
-    statusFormState = savedDraft ? normalizeStatusForm(savedDraft) : emptyStatusForm();
-    statusFormState.projectId = data.activeTab !== 'starred' ? data.activeTab : (statusFormState.projectId||null);
-  }
-  setInternalFormMode(true);
-  if(!statusFormState.date) statusFormState.date = todayJalaliStr();
-
-  document.getElementById('statusFormTitle').textContent = id ? 'ویرایش صورت وضعیت' : 'صورت وضعیت جدید';
-  setBottomNavActive('Accounting');
-  renderTabs();
-  showOnlyWorkspacePage();
-  updateWorkspaceContextBar();
-
-  if(!statusFormHistoryPushed){
-    try{ history.pushState({karhaWorkspace:'statusForm'}, '', location.href); statusFormHistoryPushed = true; }catch(e){}
-  }
-
-  // فرم فوراً رندر می‌شود؛ شماره نامه در صورت نیاز بعداً تکمیل می‌شود.
-  renderStatusForm();
-  requestAnimationFrame(()=>{
-    const page = null;
-    const pb = page && page.querySelector('.page-body');
-    if(pb) pb.scrollTop = 0;
-    if(page) page.scrollTop = 0;
-  });
-
-  if(!id && !statusFormState.letterNo){
-    const abbr = (loadProfile().senderAbbr || '').trim();
-    if(!abbr) showToast('ابتدا در ثبت مشخصات، اختصار فرستنده را وارد کنید');
-    try{
-      statusFormState.letterNo = await generateNextLetterNo(statusFormState.date);
-    }catch(e){
-      console.warn(e);
-      const compact = jalaliCompactYYMMDD(statusFormState.date);
-      statusFormState.letterNo = formatLetterNo(compact, abbr || '—', nextAvailableCounter(compact, statusFormState.id, statusFormState.projectId));
-    }
-    // فقط اگر هنوز همین فرم باز است، مقدار شماره نامه را به‌روز کن.
-    if(workspaceSubpage === 'statusForm' && statusFormState){
-      renderStatusForm();
-    }
-  }
-}
-function closeStatusForm(fromPopState=false){
-  setInternalFormMode(false);
-  null?.classList.add('hidden');
-  statusFormHistoryPushed = false;
-  const statusActions = document.getElementById('statusFormActions');
-  if(statusActions) statusActions.innerHTML = '';
-  statusFormState = null;
-  statusEditingId = null;
-
-  // خروج عادی/Back از فرم همیشه به لیست صورت وضعیت‌ها برمی‌گردد؛ سپس بک بعدی به حسابداری می‌رود.
-  if(statusFormReturnSubpage === 'statusList'){
-    workspaceSubpage = 'statusList';
-    setBottomNavActive('Accounting');
-    renderTabs();
-    showOnlyWorkspacePage();
-    updateWorkspaceContextBar();
-    renderStatusList();
-  } else {
-    workspaceSubpage = null;
-    setBottomNavActive('Accounting');
-    renderTabs();
-    showOnlyWorkspacePage('accountingPage');
-    updateWorkspaceContextBar();
-    renderAccountingWorkspace();
-  }
-}
-
-function finishStatusSaveAndReturnToList(){
-  // مسیر اختصاصی ذخیره: ابتدا فرم را از DOM خارج می‌کنیم تا هیچ بخشی از آن
-  // دوباره توسط refresh/render فوتر نمایش داده نشود، سپس لیست را می‌سازیم.
-  const formPage = null;
-  if(formPage) formPage.classList.add('hidden');
-  const actions = document.getElementById('statusFormActions');
-  if(actions) actions.innerHTML = '';
-
-  statusFormHistoryPushed = false;
-  statusFormState = null;
-  statusEditingId = null;
-  statusFormReturnSubpage = 'statusList';
-  workspaceSubpage = 'statusList';
-
-  setBottomNavActive('Accounting');
-  renderTabs();
-  showOnlyWorkspacePage();
-  updateWorkspaceContextBar();
-  renderStatusList();
-}
-
-function formatStatusMoney(v){
-  if(v===null || v===undefined || v==='') return '';
-  const n = String(toEnglishDigits(String(v))).replace(/[^\d]/g,'');
-  if(!n) return '';
-  return toPersianDigits(groupWithCommas(n));
-}
-
-/** فیلد با برچسب آبی کوچک بالا (فقط فرم) */
-function stLabeledField(label, getVal, setVal, opts){
-  opts = opts || {};
-  const wrap = document.createElement('div');
-  wrap.className = 'st-field' + (opts.date || opts.numpad ? ' st-tap' : '');
-  if(opts.required){
-    wrap.classList.add('st-required');
-    if(opts.validationKey) wrap.dataset.validationKey = opts.validationKey;
-  }
-  const lab = document.createElement('span');
-  lab.className = 'st-field-lab';
-  lab.textContent = label;
-  wrap.appendChild(lab);
-
-  if(opts.date){
-    const val = document.createElement('div');
-    const cur = getVal();
-    val.className = 'st-val' + (cur ? '' : ' placeholder');
-    val.textContent = cur ? formatJalaliDisplay(cur) : 'انتخاب تاریخ';
-    wrap.appendChild(val);
-    wrap.onclick = ()=>{
-      openJalaliPicker(getVal() || todayJalaliStr(), async (v)=>{
-        statusFormDirty=true; setVal(v);
-        if(opts.onDatePicked) await opts.onDatePicked(v);
-        else renderStatusForm();
-      });
-    };
-    return wrap;
-  }
-
-  if(opts.numpad){
-    const val = document.createElement('div');
-    const raw = getVal();
-    const has = raw!==null && raw!==undefined && String(raw)!=='';
-    val.className = 'st-val' + (has ? '' : ' placeholder');
-    const dsuf = opts.displaySuffix != null ? opts.displaySuffix : '';
-    const dpre = opts.displayPrefix != null ? opts.displayPrefix : '';
-    if(has){
-      const numTxt = opts.noGroup
-        ? toPersianDigits(String(toEnglishDigits(String(raw)).replace(/[^\d]/g,'')))
-        : formatStatusMoney(raw);
-      val.textContent = dpre + numTxt + dsuf;
-      if(dpre === '٪'){
-        val.style.direction = 'ltr';
-        val.style.unicodeBidi = 'isolate';
-        val.style.textAlign = 'right';
-      }
-    } else {
-      val.textContent = 'وارد کنید…';
-    }
-    wrap.appendChild(val);
-    wrap.onclick = ()=>{
-      openNumpadGeneric(getVal(), (buf)=>{
-        setVal(buf === '' ? '' : buf);
-        if(opts.onNumpadDone) opts.onNumpadDone();
-        renderStatusForm();
-      }, {
-        suffix: opts.numpadSuffix != null ? opts.numpadSuffix : ' تومان',
-        prefix: opts.displayPrefix || '',
-        maxLen: opts.maxLen||16,
-        group: !opts.noGroup
-      });
-    };
-    return wrap;
-  }
-
-  if(opts.multiline){
-    const inp = document.createElement('textarea');
-    inp.className = 'st-inp';
-    inp.rows = opts.rows || 2;
-    inp.placeholder = '';
-    inp.value = getVal() || '';
-    inp.oninput = ()=>{
-    setVal(inp.value);
-
-  };
-    wrap.appendChild(inp);
-    return wrap;
-  }
-
-  if(opts.readonly){
-    const val = document.createElement('div');
-    val.className = 'st-val';
-    val.style.textAlign = 'right';
-    val.style.direction = 'rtl';
-    val.style.unicodeBidi = 'isolate';
-    val.textContent = getVal() || '—';
-    wrap.appendChild(val);
-    return wrap;
-  }
-
-  const inp = document.createElement('input');
-  inp.className = 'st-inp';
-  inp.type = 'text';
-  inp.placeholder = '';
-  inp.value = getVal() || '';
-  if(opts.ltr){ inp.dir = 'ltr'; inp.style.textAlign = 'left'; }
-  inp.oninput = ()=> setVal(inp.value);
-  if(opts.onBlur){
-    inp.onblur = ()=>{ try{ opts.onBlur(); }catch(e){} };
-  }
-  wrap.appendChild(inp);
-  return wrap;
-}
-
-function autoContractPriceForItem(item){
-  const uRaw = toEnglishDigits(String(item.unitPrice ?? '')).replace(/[^\d.]/g,'');
-  const qRaw = toEnglishDigits(String(item.qty ?? '')).replace(/[^\d.]/g,'');
-  const u = parseFloat(uRaw);
-  const q = parseFloat(qRaw);
-  // مجموع هزینه همیشه محاسباتی است و هرگز از کاربر دریافت نمی‌شود.
-  if(Number.isFinite(u) && Number.isFinite(q) && u >= 0 && q >= 0 && uRaw !== '' && qRaw !== ''){
-    item.contractPrice = String(Math.round(u * q));
-  } else {
-    item.contractPrice = '';
-  }
-}
-
-
-function statusBlank(v){
-  return v === null || v === undefined || String(v).trim() === '';
-}
-
-function getStatusValidation(){
-  const invalid = new Set();
-  if(!statusFormState) return invalid;
-
-  if(statusBlank(statusFormState.date)) invalid.add('date');
-  if(statusBlank(statusFormState.personName)) invalid.add('personName');
-
-  (statusFormState.items || []).forEach((item, idx)=>{
-    if(statusBlank(item.desc)) invalid.add(`item:${idx}:desc`);
-    if(statusBlank(item.notes)) invalid.add(`item:${idx}:notes`);
-    if(statusBlank(item.unit)) invalid.add(`item:${idx}:unit`);
-    if(statusBlank(item.percent)) invalid.add(`item:${idx}:percent`);
-    if(statusBlank(item.unitPrice)) invalid.add(`item:${idx}:unitPrice`);
-    if(statusBlank(item.qty)) invalid.add(`item:${idx}:qty`);
-  });
-
-  if(statusBlank(statusFormState.payAmount)) invalid.add('payAmount');
-  if(!statusFormState.payCard && !statusFormState.paySheba) invalid.add('payType');
-  if(statusBlank(statusFormState.payAccount)) invalid.add('payAccount');
-  if(statusBlank(statusFormState.payName)) invalid.add('payName');
-
-  // «توضیحات اختیاری پرداخت» عمداً اختیاری است.
-  return invalid;
-}
-
-function validateStatusFormUI(showErrors=false){
-  if(!statusFormState) return false;
-  const invalid = getStatusValidation();
-
-  if(showErrors){
-    document.querySelectorAll('#statusFormBody .st-required[data-validation-key]').forEach(el=>{
-      el.classList.toggle('st-required-invalid', invalid.has(el.dataset.validationKey));
-    });
-  }
-
-  return invalid.size === 0;
-}
-
-function renderStatusForm(){
-  const body = document.getElementById('statusFormBody');
-  body.innerHTML = '';
-  if(!statusFormState) return;
-  normalizeStatusForm(statusFormState);
-
-  // اطلاعات نامه — موضوع نامه عمداً در فرم وجود ندارد.
-  body.appendChild(stLabeledField('شماره نامه',
-    ()=> statusFormState.letterNo, ()=>{}, { readonly:true }));
-  body.appendChild(stLabeledField('تاریخ',
-    ()=> statusFormState.date,
-    v=>{ statusFormState.date = v; },
-    { required:true, validationKey:'date', date:true, onDatePicked: async (v)=>{
-        statusFormState.date = v;
-        if(!statusFormState.id){
-          statusFormState.letterNo = await generateNextLetterNo(v, statusFormState.id);
-          renderStatusForm();
-        }
-      }
-    }));
-  body.appendChild(stLabeledField('عنوان نامه',
-    ()=> statusFormState.personName, v=>{ statusFormState.personName = v; },
-    { required:true, validationKey:'personName' }));
-
-  // ردیف‌های شرح وضعیت
-  statusFormState.items.forEach((item, idx)=>{
-    const block = document.createElement('div');
-    block.className = 'st-item-block';
-    const head = document.createElement('div');
-    head.className = 'st-item-head';
-    head.innerHTML = '<span>شرح وضعیت ' + toPersianDigits(idx+1) + '</span>';
-    if(statusFormState.items.length > 1){
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.textContent = 'حذف';
-      del.onclick = ()=>{
-        statusFormState.items.splice(idx, 1);
-        renderStatusForm();
-      };
-      head.appendChild(del);
-    }
-    block.appendChild(head);
-
-    block.appendChild(stLabeledField('شرح وضعیت',
-      ()=> item.desc, v=>{ item.desc = v; }, { multiline:true, required:true, validationKey:'item:' + idx + ':desc' }));
-    // توضیحات باید بلافاصله بعد از شرح وضعیت قرار بگیرد.
-    block.appendChild(stLabeledField('توضیحات',
-      ()=> item.notes, v=>{ item.notes = v; }, { multiline:true, required:true, validationKey:'item:' + idx + ':notes' }));
-    block.appendChild(stLabeledField('یونیت (مثلاً متر مربع)',
-      ()=> item.unit, v=>{ item.unit = v; },
-      { required:true, validationKey:'item:' + idx + ':unit', onBlur: ()=> renderStatusForm() }));
-    block.appendChild(stLabeledField('درصد انجام',
-      ()=> item.percent, v=>{ item.percent = v; },
-      { required:true, validationKey:'item:' + idx + ':percent', numpad:true, numpadSuffix:'', displayPrefix:'٪', displaySuffix:'', noGroup:true, maxLen:3 }));
-    block.appendChild(stLabeledField('قیمت واحد (تومان)',
-      ()=> item.unitPrice, v=>{ item.unitPrice = v; autoContractPriceForItem(item); },
-      { required:true, validationKey:'item:' + idx + ':unitPrice', numpad:true, numpadSuffix:' تومان', displaySuffix:' تومان', onNumpadDone:()=> autoContractPriceForItem(item) }));
-    // مقدار + یونیت کنار عدد
-    (function(){
-      const unitTxt = (item.unit || '').trim();
-      const wrap = stLabeledField('مقدار انجام شده',
-        ()=> item.qty, v=>{ item.qty = v; autoContractPriceForItem(item); },
-        {
-          required:true,
-          validationKey:'item:' + idx + ':qty',
-          numpad:true,
-          numpadSuffix: unitTxt ? (' ' + unitTxt) : '',
-          displaySuffix: unitTxt ? (' ' + unitTxt) : '',
-          onNumpadDone:()=> autoContractPriceForItem(item)
-        });
-      block.appendChild(wrap);
-    })();
-    autoContractPriceForItem(item);
-    block.appendChild(stLabeledField('مجموع هزینه (تومان)',
-      ()=> item.contractPrice ? (formatStatusMoney(item.contractPrice) + ' تومان') : '—',
-      ()=>{},
-      { readonly:true }));
-
-    body.appendChild(block);
-  });
-
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'st-add-item';
-  addBtn.innerHTML = '<span style="font-size:20px;line-height:1;">+</span> افزودن شرح وضعیت';
-  addBtn.onclick = ()=>{
-    statusFormDirty=true; statusFormState.items.push(emptyStatusItem());
-    renderStatusForm();
-  };
-  body.appendChild(addBtn);
-
-  const sec = document.createElement('div');
-  sec.className = 'st-section-title';
-  sec.textContent = 'اطلاعات واریز';
-  body.appendChild(sec);
-
-  body.appendChild(stLabeledField('مبلغ (تومان)',
-    ()=> statusFormState.payAmount, v=>{ statusFormState.payAmount = v; },
-    { required:true, validationKey:'payAmount', numpad:true, numpadSuffix:' تومان', displaySuffix:' تومان' }));
-
-  const typeRow = document.createElement('div');
-  typeRow.className = 'st-field st-required';
-  typeRow.dataset.validationKey = 'payType';
-  typeRow.style.display = 'flex';
-  typeRow.style.gap = '18px';
-  const mkChk = (label, key, other)=>{
-    const lab = document.createElement('label');
-    lab.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);cursor:pointer;';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = !!statusFormState[key];
-    cb.onchange = ()=>{
-      statusFormDirty=true;
-      statusFormState[key] = cb.checked;
-      if(cb.checked) statusFormState[other] = false;
-      renderStatusForm();
-    };
-    lab.appendChild(cb);
-    lab.appendChild(document.createTextNode(label));
-    return lab;
-  };
-  typeRow.appendChild(mkChk('شماره کارت', 'payCard', 'paySheba'));
-  typeRow.appendChild(mkChk('شماره شبا', 'paySheba', 'payCard'));
-  body.appendChild(typeRow);
-
-  body.appendChild(stLabeledField(
-    statusFormState.paySheba ? 'شماره شبا' : (statusFormState.payCard ? 'شماره کارت' : 'شماره کارت یا شبا'),
-    ()=> statusFormState.payAccount, v=>{ statusFormState.payAccount = v; },
-    { required:true, validationKey:'payAccount', numpad:true, numpadSuffix:'', noGroup:true, maxLen:24 }
-  ));
-  body.appendChild(stLabeledField('به نام',
-    ()=> statusFormState.payName, v=>{ statusFormState.payName = v; },
-    { required:true, validationKey:'payName' }));
-  body.appendChild(stLabeledField('توضیحات اختیاری پرداخت',
-    ()=> statusFormState.payExtra, v=>{ statusFormState.payExtra = v; }, { multiline:true }));
-
-  const actions = document.getElementById('statusFormActions');
-  if(actions) actions.innerHTML='';
-  const bar=document.createElement('div'); bar.className='st-save-bar';
-  const saveBtn=document.createElement('button'); saveBtn.className='st-save'; saveBtn.type='button'; saveBtn.textContent='ذخیره';
-  saveBtn.onclick=async()=>{if(!validateStatusFormUI(true)){showToast('لطفاً فیلدهای مشخص‌شده را تکمیل کنید');return;}if(!statusFormState.letterNo)statusFormState.letterNo=await generateNextLetterNo(statusFormState.date);if(!saveCurrentStatus(false))return;clearStatusDraft();statusFormDirty=false;finishStatusSaveAndReturnToList();};
-  const draftBtn=document.createElement('button'); draftBtn.className='st-draft'; draftBtn.type='button'; draftBtn.textContent='پیش‌نویس'; draftBtn.onclick=()=>{writeStatusDraft();statusFormDirty=false;showToast('پیش‌نویس ذخیره شد');closeStatusForm();};
-  const cancelBtn=document.createElement('button'); cancelBtn.className='st-cancel'; cancelBtn.type='button'; cancelBtn.textContent='انصراف'; cancelBtn.onclick=()=>{clearStatusDraft();closeStatusForm();};
-  bar.append(saveBtn,draftBtn,cancelBtn); if(actions) actions.appendChild(bar);
-}
-
-function saveCurrentStatus(silent){
-  if(!validateStatusFormUI(true)){
-    if(!silent) showToast('لطفاً فیلدهای مشخص‌شده را تکمیل کنید');
-    return false;
-  }
-  if(statusFormState && data.activeTab!=='starred') statusFormState.projectId=data.activeTab;
-  if(!statusFormState) return;
-  // موضوع نامه نباید در داده ذخیره شود؛ حتی اگر رکورد قدیمی آن را داشته باشد.
-  if(Object.prototype.hasOwnProperty.call(statusFormState, 'subject')) delete statusFormState.subject;
-  const list = loadStatusReports();
-  if(!statusFormState.id){
-    statusFormState.id = 'st_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-    statusFormState.createdAt = Date.now();
-    list.unshift(statusFormState);
-  } else {
-    const i = list.findIndex(x => x.id === statusFormState.id);
-    if(i>=0) list[i] = statusFormState;
-    else list.unshift(statusFormState);
-  }
-  statusEditingId = statusFormState.id;
-  saveStatusReports(list);
-  if(!silent) showToast('ذخیره شد');
-  return true;
-}
-
-function openStatusList(){
-  try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){}
-  return;
-
-  ensureHomeSelection();
-  enterWorkspaceSurface();
-  workspaceSubpage='statusList';
-  setBottomNavActive('Accounting');
-  renderTabs();
-  showOnlyWorkspacePage();
-  updateWorkspaceContextBar();
-  pushWorkspaceHistory('statusList');
-  renderStatusList();
-}
-function closeStatusList(){
-  workspaceSubpage=null;
-  setBottomNavActive('Accounting');
-  renderTabs();
-  showOnlyWorkspacePage('accountingPage');
-  updateWorkspaceContextBar();
-  renderAccountingWorkspace();
-}
-
-function renderStatusList(){
-  const body = document.getElementById('statusListBody');
-  body.innerHTML = '';
-  const allList = loadStatusReports();
-  const activeProjectId = data.activeTab !== 'starred' ? data.activeTab : null;
-  const list = activeProjectId ? allList.filter(x=>x.projectId===activeProjectId) : [];
-  if(!list.length){
-    body.innerHTML = '<div class="mgmt-empty">هنوز صورت وضعیتی ثبت نشده.<br>از دکمهٔ + یک مورد بسازید.</div>';
-    return;
-  }
-  list.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'st-list-row';
-    const b = document.createElement('div');
-    b.className = 'st-list-body';
-    b.onclick = ()=> openStatusForm(item.id);
-    const t = document.createElement('div');
-    t.className = 'st-list-title';
-    t.textContent = item.personName || 'بدون عنوان';
-    const m = document.createElement('div');
-    m.className = 'st-list-meta';
-    const unitPart = item.unit ? ' · ' + item.unit : '';
-    m.textContent = (item.date ? formatJalaliDisplay(item.date) : '') + unitPart;
-    b.appendChild(t); b.appendChild(m);
-    row.appendChild(b);
-
-    const pdfB = document.createElement('button');
-    pdfB.className = 'mgmt-icon-btn blue';
-    pdfB.title = 'PDF';
-    pdfB.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 2h7l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 2v4h4M7 11h6M7 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
-    pdfB.onclick = (e)=>{
-      e.stopPropagation();
-      statusFormState = normalizeStatusForm(JSON.parse(JSON.stringify(item)));
-      generateStatusPdf();
-    };
-
-    const jpgB = document.createElement('button');
-    jpgB.className = 'mgmt-icon-btn blue';
-    jpgB.title = 'JPEG';
-    jpgB.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="9" r="1.5" fill="currentColor"/><path d="M3 14l4-4 3 3 3-4 4 5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
-    jpgB.onclick = (e)=>{
-      e.stopPropagation();
-      statusFormState = normalizeStatusForm(JSON.parse(JSON.stringify(item)));
-      generateStatusJpeg();
-    };
-
-    const delB = document.createElement('button');
-    delB.className = 'mgmt-icon-btn danger';
-    delB.title = 'حذف';
-    delB.innerHTML = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.6c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7V4M6.6 7v5M9.4 7v5M3.7 4l.6 9.2c0 .6.5 1 1.1 1h5.2c.6 0 1.1-.4 1.1-1L12.3 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
-    delB.onclick = (e)=>{
-      e.stopPropagation();
-      if(!confirm('این صورت وضعیت حذف شود؟')) return;
-      saveStatusReports(loadStatusReports().filter(x => x.id !== item.id));
-      renderStatusList();
-      showToast('حذف شد');
-    };
-    row.appendChild(pdfB);
-    row.appendChild(jpgB);
-    row.appendChild(delB);
-    body.appendChild(row);
-  });
-}
-
-let statusExportId = null;
-function openStatusExport(id){
-  enterWorkspaceSurface();
-  const list = loadStatusReports();
-  const item = list.find(x => x.id === id);
-  if(!item) return;
-  statusExportId = id;
-  statusFormState = normalizeStatusForm(JSON.parse(JSON.stringify(item)));
-  document.getElementById('statusExportTitle').textContent = 'خروجی: ' + (item.personName || 'صورت وضعیت');
-  null?.classList.remove('hidden');
-  renderStatusExportPage();
-}
-function closeStatusExport(){
-  null?.classList.add('hidden');
-  statusExportId = null;
-}
-function renderStatusExportPage(){
-  const toolbar = document.getElementById('statusExportToolbar');
-  const body = document.getElementById('statusExportBody');
-  if(toolbar){
-    toolbar.innerHTML = '';
-    toolbar.style.display = 'none';
-  }
-  body.innerHTML = '';
-
-  // فقط پیش‌نمایش — خروجی از آیکون‌های لیست
-  const preview = document.createElement('div');
-  preview.style.cssText = 'padding:12px;overflow:auto;max-width:100%;box-sizing:border-box;';
-  preview.innerHTML = '<style>'+STATUS_DOC_CSS+'</style>' + statusExportHtml(statusFormState);
-  const docEl = preview.querySelector('.doc');
-  if(docEl){
-    docEl.style.width = '100%';
-    docEl.style.maxWidth = '100%';
-    docEl.style.padding = '8px';
-    docEl.style.boxSizing = 'border-box';
-  }
-  body.appendChild(preview);
-}
-
-
-const STATUS_DOC_CSS = `
-  .doc{
-    font-family:IRANYekan,Vazirmatn,Tahoma,sans-serif;color:#202124;
-    padding:8px 4px;width:100%;max-width:100%;box-sizing:border-box;background:#fff;
-    -webkit-print-color-adjust:exact;print-color-adjust:exact;
-  }
-  .head-meta{
-    display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
-    font-size:12px;color:#202124;line-height:1.8;margin-bottom:14px;
-  }
-  .head-meta-right{text-align:right;flex:1;}
-  .head-meta-left{text-align:left;direction:rtl;flex-shrink:0;unicode-bidi:isolate;}
-  .org-name{font-size:14px;font-weight:700;color:#202124;margin-bottom:6px;}
-  h1{font-size:16px;text-align:center;margin:0 0 16px;font-weight:700;}
-  table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;}
-  col.c-desc{width:16%;}
-  col.c-pct{width:8%;}
-  col.c-unit{width:13%;}
-  col.c-qty{width:12%;}
-  col.c-sum{width:14%;}
-  col.c-notes{width:37%;}
-  th{
-    background:var(--green);color:#fff;padding:8px 5px;border:1px solid #00075D;
-    font-weight:600;word-wrap:break-word;text-align:center;
-  }
-  td{
-    padding:8px 5px;border:1px solid #cfd8dc;vertical-align:top;
-    word-wrap:break-word;overflow-wrap:anywhere;
-  }
-  td.num{text-align:center;white-space:nowrap;}
-  tr.total td{font-weight:700;background:#eceff1;}
-  .pay-box{
-    margin-top:18px;padding:12px 14px;border:1px solid #cfd8dc;border-radius:8px;
-    background:#fafafa;font-size:12.5px;font-weight:500;line-height:1.75;color:#202124;
-  }
-  .pay-box .pay-line{color:#202124;}
-  .pay-box .extra{color:#c62828;margin-top:8px;}
-  .sig{margin-top:28px;width:max-content;max-width:50%;margin-inline-start:auto;text-align:center;direction:rtl;unicode-bidi:isolate;}
-  .sig-label{font-size:12px;color:#202124;margin-bottom:4px;}
-  .sig-name{font-size:13px;font-weight:600;color:#202124;margin-bottom:6px;}
-  .sig img{max-width:160px;max-height:64px;object-fit:contain;display:block;margin:0 auto;}
-  @media print {
-    html, body { margin: 0; padding: 0; background: #fff; }
-    .doc { width: 100% !important; max-width: 100% !important; padding: 0 !important; }
-    th, tr.total td, .pay-box {
-      -webkit-print-color-adjust:exact;print-color-adjust:exact;
-    }
-  }
-`;
-
-function getStatusProjectName(s){
-  const pid = s && s.projectId ? s.projectId : (data.activeTab !== 'starred' ? data.activeTab : null);
-  const p = pid ? findProject(pid) : null;
-  return (p && p.name ? String(p.name).trim() : '');
-}
-
-function statusExportHtml(s){
-  const prof = loadProfile();
-  s = normalizeStatusForm(JSON.parse(JSON.stringify(s)));
-  const items = s.items || [];
-  const payType = s.paySheba ? 'شبا' : (s.payCard ? 'کارت' : '');
-  let total = 0;
-  let rows = '';
-  items.forEach(it=>{
-    const c = parseFloat(toEnglishDigits(String(it.contractPrice||'')).replace(/[^\d.]/g,'')) || 0;
-    total += c;
-    const qtyLabel = it.unit ? toPersianDigits(String(it.qty||''))+' '+escapeHtml(it.unit) : escapeHtml(formatStatusMoney(it.qty));
-    rows += '<tr>'
-      + '<td>'+escapeHtml(it.desc||'')+'</td>'
-      + '<td class="num">'+(it.percent!==''&&it.percent!=null ? ('<span dir="ltr" style="unicode-bidi:isolate">٪'+escapeHtml(toPersianDigits(it.percent))+'</span>') : '')+'</td>'
-      + '<td class="num">'+escapeHtml(formatStatusMoney(it.unitPrice))+'</td>'
-      + '<td class="num">'+qtyLabel+'</td>'
-      + '<td class="num">'+escapeHtml(formatStatusMoney(it.contractPrice))+'</td>'
-      + '<td>'+escapeHtml(it.notes||'')+'</td>'
-      + '</tr>';
-  });
-  let payBlock = '';
-  if(s.payAmount || s.payAccount || s.payName || s.payExtra){
-    let line = '';
-    if(s.payAmount) line += 'مبلغ '+formatStatusMoney(s.payAmount)+' تومان';
-    if(s.payAccount){
-      if(line) line += ' ';
-      line += 'به شماره '+(payType?payType+' ':'');
-      line += '<span dir="ltr" style="unicode-bidi:isolate">'+escapeHtml(toPersianDigits(String(s.payAccount)))+'</span>';
-    }
-    if(s.payName){
-      if(line) line += ' ';
-      line += 'به نام '+escapeHtml(s.payName)+' واریز گردد';
-    }
-    if(line && !/[.。]$/.test(line.replace(/<[^>]+>/g,'').trim())) line += '.';
-    payBlock = '<div class="pay-box">';
-    if(line) payBlock += '<div class="pay-line">'+line+'</div>';
-    if(s.payExtra) payBlock += '<div class="extra">'+escapeHtml(s.payExtra)+'</div>';
-    payBlock += '</div>';
-  }
-  let sig = '';
-  if(prof.name || prof.signature){
-    sig = '<div class="sig">';
-    sig += '<div class="sig-label">نام و نام خانوادگی و امضا صادر کننده:</div>';
-    if(prof.name) sig += '<div class="sig-name">'+escapeHtml(prof.name)+'</div>';
-    if(prof.signature) sig += '<img src="'+prof.signature+'" alt="امضا">';
-    sig += '</div>';
-  }
-  const projectName = getStatusProjectName(s);
-  return `<div class="doc">
-  <div class="head-meta">
-    <div class="head-meta-right">
-      <div class="org-name">${escapeHtml(projectName ? 'پروژه ' + projectName : 'پروژه')}</div>
-    </div>
-    <div class="head-meta-left">
-      <div>تاریخ: ${escapeHtml(toPersianDigits(s.date||''))}</div>
-      <div>شماره نامه: ${escapeHtml(formatLetterNoDisplay(s.letterNo||''))}</div>
-    </div>
-  </div>
-  <h1>${escapeHtml(s.personName || 'صورت وضعیت')}</h1>
-  <table>
-    <colgroup>
-      <col class="c-desc"><col class="c-pct"><col class="c-unit">
-      <col class="c-qty"><col class="c-sum"><col class="c-notes">
-    </colgroup>
-    <thead><tr>
-      <th>شرح وضعیت</th><th>درصد انجام</th><th>قیمت واحد<br>(تومان)</th>
-      <th>مقدار انجام شده</th><th>مجموع هزینه<br>(تومان)</th><th>توضیحات</th>
-    </tr></thead>
-    <tbody>
-      ${rows}
-      <tr class="total"><td colspan="4" style="text-align:left">جمع کل</td><td class="num">${escapeHtml(formatStatusMoney(total))}</td><td></td></tr>
-    </tbody>
-  </table>
-  ${payBlock}
-  ${sig}
-</div>`;
-}
-
-function generateStatusPdf(){
-  if(!statusFormState) return;
-  const inner = statusExportHtml(statusFormState);
-  const rawTitle = (statusFormState.personName || 'صورت وضعیت').trim();
-  const safeTitle = rawTitle.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
-  const doc = `<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8">
-<title>${escapeHtml(safeTitle)}</title>
-<link href="https://fonts.cdnfonts.com/css/iranyekan" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-  @page { size: A4; margin: 12mm; }
-  html, body { margin: 0; padding: 0; background: #fff; }
-  ${STATUS_DOC_CSS}
-</style></head>
-<body>
-${inner}
-<script>
-  window.onload = function(){
-    setTimeout(function(){ window.print(); }, 450);
-  };
-<\/script>
-
-<\/body><\/html>`;
-
-  const w = window.open('', '_blank');
-  if(!w){
-    showToast('اجازهٔ باز شدن پنجره را بدهید');
-    return;
-  }
-  w.document.open();
-  w.document.write(doc);
-  w.document.close();
-}
-
-async function generateStatusJpeg(){
-  if(!statusFormState) return;
-  if(typeof html2canvas !== 'function'){ showToast('ابزار تصویر در دسترس نیست'); return; }
-  const wrap = document.createElement('div');
-  // عرض ثابت ضروری است؛ width:100% روی والد بدون اندازه باعث تصویر خالی/خراب می‌شود
-  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;background:#fff;z-index:-1;box-sizing:border-box;';
-  wrap.innerHTML = '<style>' + STATUS_DOC_CSS + '.doc{width:900px !important;max-width:900px !important;padding:20px !important;}</style>'
-    + statusExportHtml(statusFormState);
-  document.body.appendChild(wrap);
-  showToast('در حال ساخت تصویر…');
-  try{
-    await new Promise(r=>setTimeout(r,350));
-    const target = wrap.querySelector('.doc') || wrap;
-    const canvas = await html2canvas(target, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      width: 900,
-      windowWidth: 900
-    });
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/jpeg', 0.92);
-    const name = (statusFormState.personName || 'status')
-      .replace(/[\\/:*?"<>|]/g, '_').slice(0, 60);
-    a.download = name + '.jpg';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    showToast('تصویر ذخیره شد');
-  }catch(e){
-    console.error(e);
-    showToast('خطا در ساخت تصویر');
-  }finally{
-    wrap.remove();
-  }
-}
-
-
-
-/* صورت‌وضعیت‌ها / share / collab DOM در فاز ۵–۷ از shell حذف شده‌اند.
-   فقط elementهای موجود bind می‌شوند تا Startup با null.onclick نشکند. */
-function bindClick(id, handler){
-  const el = document.getElementById(id);
-  if(el) el.onclick = handler;
-}
-bindClick('closeStatusFormPage', requestCloseStatusForm);
-bindClick('closeStatusListPage', ()=> closeStatusList());
-bindClick('statusListAddBtn', ()=>{ openStatusForm(null); });
-bindClick('closeStatusExportPage', ()=> closeStatusExport());
-bindClick('closeContractStatusPage', ()=> closeContractStatusPage());
-bindClick('closeContractTemplatesPage', ()=>closeContractTemplatesPage());
-bindClick('closeContractsPage', ()=>closeContractsPage());
-bindClick('contractAddBtn', ()=>openContractForm(null));
-bindClick('closeContractFormPage', ()=>requestCloseContractForm());
-bindClick('closeStatusTestPage', ()=>closeStatusTestPage());
-bindClick('closeContractApprovalPage', ()=>closeContractApprovalPage());
-bindClick('closeActivityFormPage', requestCloseActivityForm);
-bindClick('closeShareFormPage', ()=>requestCloseShareForm(document.getElementById('shareFormBody')?.querySelector('input')));
+/* ==================== Status/Letter removed (Phase Final Sweep) ==================== */
+/* Active product path deleted. Firestore historical data is NOT wiped. */
+function openStatusForm(){ try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){} return false; }
+function closeStatusForm(){ return; }
+function requestCloseStatusForm(){ return; }
+function openStatusList(){ try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){} }
+function closeStatusList(){ return; }
+function renderStatusList(){ return; }
+function renderStatusForm(){ return; }
+function openStatusExport(){ return; }
+function closeStatusExport(){ return; }
+function formatLetterNo(){ return ''; }
+function formatLetterNoDisplay(){ return ''; }
+async function generateNextLetterNo(){ return ''; }
 
 /* ---------- root menu history handling ---------- */
 window.addEventListener('popstate', ()=>{
@@ -5352,12 +3294,12 @@ window.KarhaApp?.taskRuntime?.configure({
 const routedProjectId = getProjectIdFromRoute();
 const routedModuleId = String(location.hash || '').match(/^#\/?projects?\/[^/?&#]+\/([^/?&#]+)/i)?.[1] || 'dashboard';
 if(routedProjectId && findProject(routedProjectId)){
-  data.activeTab = routedProjectId;
+  setActiveTab(routedProjectId);
   if(routedModuleId!=='contracts') replaceWorkspaceRoute(routedProjectId, 'dashboard');
-}else if(data.activeTab && data.activeTab !== 'starred' && findProject(data.activeTab)){
-  replaceWorkspaceRoute(data.activeTab, 'dashboard');
+}else if(getActiveTab() && getActiveTab() !== 'starred' && findProject(getActiveTab())){
+  replaceWorkspaceRoute(getActiveTab(), 'dashboard');
 }else{
-  data.activeTab = null;
+  setActiveTab(null);
 }
 if(routedProjectId && routedModuleId==='contracts'){
   enterWorkspaceSurface(); workspaceSubpage='contracts'; setBottomNavActive('Reports');
@@ -5393,7 +3335,7 @@ var __formRTs = window.KarhaApp?.registerFormRuntimes?.({
 }) || {};
 window.KarhaLegacy = Object.freeze({
 
-  getViewMode(){ return data?.viewMode || 'simple'; },
+  getViewMode(){ return getViewMode(); },
   renderAll,
   elFromHtml(html){
     const template=document.createElement('template');
