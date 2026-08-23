@@ -70,36 +70,23 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   };
 
   form.requestClose = function(fromPopState = false){
-    // Only yield while a child overlay is still open. Time-based suppress is for
-    // the same gesture that closed the child; a later Back belongs to the form.
     const doc = windowRef.document;
     const childOpen = id => {
       const el = doc?.getElementById?.(id);
       return !!(el && !el.classList.contains('hidden'));
     };
+    // Child overlays own this Back; form must not close or prompt.
     if(childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop')) return false;
 
-    // Net change from baseline OR the form's own dirty flag (input handlers).
+    // session baseline OR form dirty flag — never force-clear dirty to false.
     const sessionDirty = !!exitSession?.isDirty?.();
     const flagDirty = !!form.isDirty?.();
     const changed = sessionDirty || flagDirty;
     if(changed) originalSetDirty(true);
 
     const result = originalRequestClose(fromPopState);
-    if(changed && result === false){
-      // Ensure dialog exists even if helper resolution failed once.
-      const hasDialog = !!doc?.querySelector?.('.global-incomplete-exit-choice');
-      if(!hasDialog){
-        const show = windowRef.KarhaUI?.showIncompleteFormExitChoice
-          || windowRef.showIncompleteFormExitChoice
-          || windowRef.KarhaLegacy?.showIncompleteFormExitChoice;
-        if(typeof show === 'function'){
-          // Re-enter module requestClose path by re-calling original after dirty forced
-          originalSetDirty(true);
-          originalRequestClose(fromPopState);
-        }
-      }
-      if(editing) patchEditPrompt({windowRef, form});
+    if(editing && changed && result === false){
+      patchEditPrompt({windowRef, form});
     }
     return result;
   };
