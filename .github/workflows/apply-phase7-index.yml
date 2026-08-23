@@ -1,8 +1,6 @@
-# trigger exact phase7 index restore
 name: Apply exact Phase 7 index
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - migration/phase-7-final
@@ -13,7 +11,6 @@ permissions:
 jobs:
   apply-index:
     runs-on: ubuntu-latest
-    if: github.actor != 'github-actions[bot]'
     steps:
       - uses: actions/checkout@v4
         with:
