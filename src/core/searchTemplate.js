@@ -93,9 +93,6 @@
     setTimeout(()=>{try{inp?.focus();}catch(e){}},30);
   }
   function suppressParentBack(){
-    // Prefer explicit hook (legacy sets this to suppressWorkspaceBackOnce).
-    // Fallback: set the same flag directly so parent form/list popstate handlers
-    // never treat search-template history pops as "close the contract form".
     try{ hooks().suppressBack?.(); }catch(e){}
     try{ if(typeof window!=='undefined') window.__karhaSuppressWorkspaceBackOnce=true; }catch(e){}
   }
@@ -160,13 +157,11 @@
     if(isSearchMode()||searchModePushed){
       exitSearch();
       searchModePushed=false;
-      // Consumed only the search-focus history layer; parent form must stay.
-      suppressParentBack();
+      // Browser consumed search-mode entry only. Do not set suppress — parent
+      // workspace already skipped because the template page is still open.
       return;
     }
-    // Closing the template itself via browser/hardware back: swallow so the
-    // workspace listener does not also requestClose the contract form.
-    suppressParentBack();
+    // Browser consumed the template entry. Hide UI only; no suppress token.
     historyPushed=false;
     searchModePushed=false;
     close(true);
