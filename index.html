@@ -131,7 +131,7 @@
       <span style="width:34px;"></span>
       <span style="font-size:13px;color:#5f6368;">حذف شده ها</span>
       <button class="close-btn" id="closeTrashBtn">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
     </div>
     <div class="sheet-body" id="trashBody"></div>
@@ -146,7 +146,7 @@
     <div class="drawer-account">
       <div class="avatar-circle big" id="drawerAvatarWrap">
         <img id="drawerAvatarImg" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover;">
-        <svg id="drawerAvatarDefaultIcon" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zM4 20.5c0-3.6 3.6-6.5 8-6.5s6 2 6 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg id="drawerAvatarDefaultIcon" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zM4 20.5c0-3.6 3.6-6.5 8-6.5s8 2.9 8 6.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="drawer-account-info">
         <div class="drawer-account-name" id="drawerAccountName">مهمان</div>
@@ -224,6 +224,7 @@
     <button type="button" class="numpad-cancel" id="numpadCancelBtn">انصراف</button>
   </div>
 </div>
+
 
 
 
@@ -422,19 +423,6 @@
   <div class="export-toolbar" id="statusExportToolbar"></div>
   <div class="page-body" id="statusExportBody"></div>
 </div>
-<div class="jalali-pop hidden" id="jalaliPop">
-  <div class="jalali-box" id="jalaliBox"></div>
-</div>
-
-<div class="confirm-overlay hidden" id="confirmOverlay">
-  <div class="confirm-box">
-    <p id="confirmText">آیا مطمئن هستید؟</p>
-    <div class="mini-actions">
-      <button class="mini-btn ghost" id="confirmCancelBtn">انصراف</button>
-      <button class="mini-btn danger" id="confirmOkBtn">تایید</button>
-    </div>
-  </div>
-</div>
 <!-- undo toast (soft delete) -->
 <div class="undo-toast hidden" id="undoToast">
   <span id="undoToastText">حذف شد</span>
@@ -477,7 +465,15 @@
 
 
 
+
+
+
+
+
+
 <!-- v255: centralized reference guard for contact/activity deletion -->
+
+
 
 
 
