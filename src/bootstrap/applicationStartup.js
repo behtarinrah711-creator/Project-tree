@@ -7,6 +7,7 @@ import { listProjects, getProject, getActiveProject, selectProject } from '../co
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
 import { installAppDataStore } from '../data/appDataStore.js';
+import { installHtmlEscape } from '../core/htmlEscape.js';
 import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
 import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
@@ -98,6 +99,7 @@ export async function startApplication({
 
   // D1: AppDataStore must exist before classic loadData() runs.
   installAppDataStore({ windowRef, schemaVersion: 8 });
+  installHtmlEscape({ windowRef });
   await loadLegacy();
   // Attach after install so KarhaApp holds the live store reference.
   if(windowRef.KarhaApp && windowRef.KarhaAppData){
