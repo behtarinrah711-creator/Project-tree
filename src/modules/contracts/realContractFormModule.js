@@ -674,20 +674,27 @@ export const realContractFormModule = {
       helper('pushWorkspaceHistory', 'contractForm');
       formHistoryOwned = true;
     };
-    helper('showIncompleteFormExitChoice', {
+
+    const showExitChoice = (opts) => {
+      const fn =
+        (typeof window !== 'undefined' && window.KarhaUI?.showIncompleteFormExitChoice) ||
+        (typeof window !== 'undefined' && window.showIncompleteFormExitChoice) ||
+        (typeof window !== 'undefined' && window.KarhaLegacy?.showIncompleteFormExitChoice);
+      if (typeof fn === 'function') return fn(opts);
+      return helper('showIncompleteFormExitChoice', opts);
+    };
+
+    showExitChoice({
       onYes: () => {
         try { localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state)); } catch {}
         dirty = false;
-        // Whether the prompt came from Back or the UI, the form owns an entry
-        // here: Back restores one below, while a UI close still has the
-        // original entry. Consume that owned entry when the decision closes.
+        // Consume the restored form-owned entry when the decision closes the form.
         this.close(false);
       },
       onNo: () => this.close(false),
       onStay: restoreHistory
     });
-    // Back consumed the form entry. Keep the still-mounted form as the parent
-    // while its existing save-draft decision is visible.
+    // Back consumed the form entry. Restore one so Stay keeps a single form entry.
     restoreHistory();
     return false;
   },
