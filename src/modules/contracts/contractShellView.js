@@ -63,8 +63,12 @@ export function installContractShellView({ windowRef = globalThis, documentRef =
   }
 
   function openRealContractFormShell(projectId){
-    const p = call(windowRef, 'getCurrentProject');
-    if(!p || String(p.id) !== String(projectId)) return false;
+    // Prefer explicit projectId from realContractFormModule.open. Requiring
+    // getCurrentProject() identity match caused silent false when the project
+    // existed in data/findProject but activeTab/scope lagged after seed + UI nav.
+    const p = (projectId && call(windowRef, 'findProject', projectId))
+      || call(windowRef, 'getCurrentProject');
+    if(!p) return false;
     call(windowRef, 'closeDrawer');
     try{ windowRef.workspaceSubpage = 'contractForm'; }catch(e){}
     call(windowRef, 'setInternalFormMode', true);
