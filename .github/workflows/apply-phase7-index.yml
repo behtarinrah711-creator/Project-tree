@@ -1,0 +1,49 @@
+name: Apply exact Phase 7 index
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - migration/phase-7-final
+
+permissions:
+  contents: write
+
+jobs:
+  apply-index:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/phase-7-final
+          fetch-depth: 0
+      - name: Extract and apply exact index patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show ba15eb10b7c770357b38f1f2f9dd18d6d7b9957e:.phase7/part00.patch > /tmp/all.patch
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/all.patch').read_text()
+          parts = text.split('\ndiff --git ')
+          found = None
+          for i, part in enumerate(parts):
+              candidate = part if i == 0 else 'diff --git ' + part
+              if candidate.startswith('diff --git a/index.html b/index.html'):
+                  found = candidate
+                  break
+          if found is None:
+              raise SystemExit('index.html patch not found')
+          Path('/tmp/index.patch').write_text(found)
+          PY
+          git apply --check /tmp/index.patch
+          git apply /tmp/index.patch
+          test "$(git hash-object index.html)" = "ec39e2a1c3fcf23429a87c5c85e414656ab617d8"
+          rm -f .github/workflows/apply-phase7-index.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html .github/workflows/apply-phase7-index.yml
+          git diff --cached --check
+          git commit -m 'Restore exact Phase 7 index from final package'
+          git push origin HEAD:migration/phase-7-final
