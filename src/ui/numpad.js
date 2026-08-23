@@ -98,9 +98,8 @@ export function installNumpadBindings({ documentRef, windowRef = globalThis } = 
   windowRef.addEventListener('popstate', ()=>{
     const ov = documentRef.getElementById('numpadOverlay');
     if(!ov || ov.classList.contains('hidden')) return;
+    // Browser already consumed the numpad entry. No suppress token for the next gesture.
     numpadHistoryPushed=false;
-    suppressBack(windowRef);
-    try{ windowRef.__karhaSuppressWorkspaceBackOnce = true; }catch(e){}
     closeNumpad(true, { documentRef, windowRef });
   });
 }
