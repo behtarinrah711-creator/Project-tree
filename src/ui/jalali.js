@@ -180,9 +180,9 @@ export function installJalaliBindings({ documentRef, windowRef = globalThis } = 
   windowRef.addEventListener('popstate', ()=>{
     const p = documentRef.getElementById('jalaliPop');
     if(!p || p.classList.contains('hidden')) return;
+    // Browser already consumed the jalali history entry. Do NOT suppress and do NOT
+    // history.back() again — a leftover suppress would steal the form's next Back.
     jalaliPickerHistoryPushed=false;
-    suppressBack(windowRef);
-    try{ windowRef.__karhaSuppressWorkspaceBackOnce=true; }catch(e){}
     closeJalaliPicker(true, { documentRef, windowRef });
   });
 }
