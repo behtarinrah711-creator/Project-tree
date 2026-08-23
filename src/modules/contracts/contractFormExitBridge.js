@@ -70,8 +70,14 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   };
 
   form.requestClose = function(fromPopState = false){
-    // Child UI owns this gesture; leave the contract form untouched.
-    if(windowRef.KarhaBackGestureGuard?.isSuppressed?.()) return false;
+    // Only yield while a child overlay is still open. Time-based suppress is for
+    // the same gesture that closed the child; a later Back belongs to the form.
+    const doc = windowRef.document;
+    const childOpen = id => {
+      const el = doc?.getElementById?.(id);
+      return !!(el && !el.classList.contains('hidden'));
+    };
+    if(childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop')) return false;
 
     const changed = !!exitSession?.isDirty?.();
     // Normalize legacy dirty state to net form-state change. This also detects

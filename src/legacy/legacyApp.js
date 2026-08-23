@@ -393,6 +393,7 @@ function getProjectIdFromRoute(){
 function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dashboard',closeDrawerOnSelect=false}={}){
   const p=findProject(projectId);
   if(!p || p.trashed || p.archived) return false;
+  if(!currentUser && p.ownerUid) return false;
   data.activeTab=p.id;
   taskUI?.setAddItemActive(false);
   // Project selection is navigation state, not a debounced content edit. Save
@@ -494,87 +495,19 @@ function normalizeTaskRecord(task){
 }
 
 function docToProject(doc, localExisting){
-  const d = doc.data();
-  // Keep the locally cached task list until the independent task collection
-  // has been successfully hydrated. A project metadata snapshot must never
-  // erase the UI's task list merely because the task subcollection is still
-  // loading, temporarily unavailable, or denied by security rules.
-  // Backward-compatible fallback: older project documents stored their
-  // دستورکارها directly in the project document under `tasks`.
-  // If the normalized subcollection is not readable yet, the old embedded
-  // records must remain visible instead of presenting an empty project.
-  const localTasks = localExisting && Array.isArray(localExisting.tasks)
-    ? localExisting.tasks.map(normalizeTaskRecord) : [];
-  const legacyTasks = Array.isArray(d.tasks)
-    ? d.tasks.map(normalizeTaskRecord) : [];
-  const recoveryTasks = getRecoveredLocalTasks({id:doc.id});
-  const cachedMap = new Map();
-  [...localTasks, ...legacyTasks, ...recoveryTasks].forEach(t=>{
-    if(t && t.id && !cachedMap.has(String(t.id))) cachedMap.set(String(t.id), t);
-  });
-  const cachedTasks = Array.from(cachedMap.values());
-  const localContacts = localExisting && Array.isArray(localExisting.contacts) ? localExisting.contacts : [];
-  const localActivities = localExisting && Array.isArray(localExisting.activityTemplates) ? localExisting.activityTemplates : [];
-  const localContractTemplates = localExisting && Array.isArray(localExisting.contractTemplates) ? localExisting.contractTemplates : [];
-  const localContracts = localExisting && Array.isArray(localExisting.contracts) ? localExisting.contracts : [];
-  const localContractStatusReports = localExisting && Array.isArray(localExisting.contractStatusReports) ? localExisting.contractStatusReports : [];
-  const policy = window.KarhaApp?.mergePolicy;
-  const projectDirty = !!(dirtyProjectIds.has(doc.id) || pendingCloudWrites.has(doc.id));
-  const mergeCol = (localArr, cloudArr, fieldPresent) => {
-    if(!policy?.mergeCollection){
-      if(!fieldPresent) return localArr;
-      if(Array.isArray(cloudArr) && cloudArr.length === 0 && localArr.length > 0) return localArr;
-      return fieldPresent ? cloudArr : localArr;
-    }
-    // Missing cloud field → treat as no authoritative empty array
-    if(!fieldPresent) return localArr;
-    return policy.mergeCollection(localArr, cloudArr, { dirty: projectDirty }).items;
-  };
-  const hasCloudContacts = Object.prototype.hasOwnProperty.call(d,'contacts');
-  const hasCloudActivities = Object.prototype.hasOwnProperty.call(d,'activityTemplates');
-  const hasCloudContractTemplates = Object.prototype.hasOwnProperty.call(d,'contractTemplates');
-  const hasCloudContracts = Object.prototype.hasOwnProperty.call(d,'contracts');
-  const contacts = mergeCol(localContacts, Array.isArray(d.contacts) ? d.contacts : [], hasCloudContacts);
-  const activityTemplates = mergeCol(localActivities, Array.isArray(d.activityTemplates) ? d.activityTemplates : [], hasCloudActivities);
-  const contractTemplates = mergeCol(localContractTemplates, Array.isArray(d.contractTemplates) ? d.contractTemplates : [], hasCloudContractTemplates);
-  const contracts = mergeCol(localContracts, Array.isArray(d.contracts) ? d.contracts : [], hasCloudContracts);
-  const meta = policy?.mergeProjectMetadata
-    ? policy.mergeProjectMetadata(localExisting, {
-        name: d.name,
-        completedOpen: d.completedOpen,
-        trashed: d.trashed,
-        archived: d.archived,
-        ownerUid: d.ownerUid,
-        ownerEmail: normalizeEmail(d.ownerEmail || ''),
-        sharedWith: (d.sharedWith || []).map(e => normalizeEmail(e)).filter(Boolean),
-      }, { projectDirty })
-    : {
-        name: projectDirty ? (localExisting?.name ?? d.name) : d.name,
-        completedOpen: projectDirty ? !!(localExisting?.completedOpen) : !!d.completedOpen,
-        trashed: projectDirty ? !!(localExisting?.trashed) : !!d.trashed,
-        archived: projectDirty ? !!(localExisting?.archived) : !!d.archived,
-        ownerUid: d.ownerUid,
-        ownerEmail: normalizeEmail(d.ownerEmail || ''),
-        sharedWith: (d.sharedWith || []).map(e => normalizeEmail(e)).filter(Boolean),
-      };
-  return {
-    id: doc.id,
-    name: meta.name,
-    type: 'project',
-    tasks: cachedTasks,
-    contacts,
-    activityTemplates,
-    contractTemplates,
-    contracts,
-    completedOpen: !!meta.completedOpen,
-    ownerUid: meta.ownerUid,
-    ownerEmail: meta.ownerEmail || normalizeEmail(d.ownerEmail || ''),
-    sharedWith: meta.sharedWith || [],
-    trashed: !!meta.trashed,
-    archived: !!meta.archived,
-    schemaVersion: Number(d.schemaVersion || 1),
-    expanded: true
-  };
+  const fn = window.KarhaApp?.docToProjectFromCloud;
+  if(typeof fn === 'function'){
+    return fn(doc, localExisting, {
+      normalizeTaskRecord,
+      getRecoveredLocalTasks,
+      dirtyProjectIds,
+      pendingCloudWrites,
+      normalizeEmail,
+      mergePolicy: window.KarhaApp?.mergePolicy,
+    });
+  }
+  // fallback should not run once KarhaApp is ready
+  return { id: doc.id, name: (doc.data()||{}).name, type:'project', tasks:[], contacts:[], activityTemplates:[], contractTemplates:[], contracts:[], expanded:true };
 }
 
 /**
@@ -593,49 +526,30 @@ function stopCloudTaskListener(pid){
 }
 function startCloudTaskListener(p){
   if(!cloudMode || !p || !p.ownerUid || cloudTaskUnsubs[p.id]) return;
-  const projectId=p.id;
-  cloudTaskUnsubs[p.id] = taskCollection(p.id).onSnapshot(snap=>{
-    // Project metadata snapshots replace objects in `data.projects`. Never
-    // keep mutating the object captured when this listener was installed.
-    const current=findProject(projectId);
-    if(!current) return;
-    const incoming = snap.docs.map(d=>normalizeTaskRecord({id:d.id, ...d.data()}));
-
-    // CRITICAL: an empty subcollection must never erase a non-empty local/legacy
-    // task list. During the migration window Firestore can legitimately return
-    // an empty snapshot before the legacy records have been copied. The old
-    // implementation treated that empty snapshot as authoritative and wiped
-    // the visible دستورکارها from the project.
-    // هیچ Snapshot ابری، حتی Snapshot خالی/ناقص، حق ندارد دستورکارهای
-    // محلی یا نسخهٔ بازیابی را حذف کند. اول همهٔ منابع موجود را با ID پایدار
-    // ادغام می‌کنیم و سپس همان مجموعهٔ کامل را برای repair به سرور می‌فرستیم.
-    const localTasks = Array.isArray(current.tasks) ? current.tasks.map(normalizeTaskRecord) : [];
-    const recoveryTasks = getRecoveredLocalTasks(current);
-    const byId = new Map();
-    [...incoming, ...recoveryTasks, ...localTasks].forEach(t=>{
-      if(t && t.id && !byId.has(String(t.id))) byId.set(String(t.id), t);
-    });
-    const merged = Array.from(byId.values());
-    if(!incoming.length && !merged.length) return;
-    if(!merged.length) return;
-    current.tasks = merged;
-    rememberProjectTasks(current);
-    if(merged.length > incoming.length && !dirtyProjectIds.has(projectId) && !pendingCloudWrites.has(projectId)){
-      pendingCloudWrites.add(projectId);
-      writeTaskRecordsNormalized(projectId, merged)
-        .finally(()=>pendingCloudWrites.delete(projectId));
-    }
-    current.schemaVersion = DATA_SCHEMA_VERSION;
-    try{
-      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
-        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      }
-    }catch(e){}
-    if(String(data.activeTab) === String(projectId) && mainSurface === 'projects') renderAll();
-    else if(mainSurface === 'workspace') refreshCurrentFooterPage();
-  }, err=>console.warn('task listener', p.id, err));
+  const attach = window.KarhaApp?.attachCloudTaskListener;
+  const ctx = {
+    cloudMode, db, findProject, normalizeTaskRecord, getRecoveredLocalTasks,
+    rememberProjectTasks, dirtyProjectIds, pendingCloudWrites,
+    DATA_SCHEMA_VERSION, taskCollection,
+    persistLocalFromCloud(){
+      try{
+        if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+          data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
+        } else {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+      }catch(e){}
+    },
+    onTaskUiRefresh(projectId){
+      if(String(data.activeTab) === String(projectId) && mainSurface === 'projects') renderAll();
+      else if(mainSurface === 'workspace') refreshCurrentFooterPage();
+    },
+  };
+  if(typeof attach === 'function'){
+    const unsub = attach(ctx, p);
+    if(unsub) cloudTaskUnsubs[p.id] = unsub;
+    return;
+  }
 }
 
 async function recoverLegacyTasksForProject(p, projectDocData){
@@ -795,18 +709,11 @@ async function hydrateProjectTasksFromCloud(p, projectDocData){
 }
 
 async function writeTaskRecordsNormalized(pid, tasks){
-  if(!cloudMode || !currentUser) return;
-  const col = taskCollection(pid);
-  const records = (tasks || []).map(normalizeTaskRecord);
-  // Firestore batches are limited to 500 writes. Chunking keeps the migration
-  // safe even for large construction projects.
-  for(let i=0;i<records.length;i+=450){
-    const batch = db.batch();
-    records.slice(i,i+450).forEach(t=>{
-      const ref = col.doc(t.id);
-      batch.set(ref, {...t, projectId:pid, schemaVersion:DATA_SCHEMA_VERSION});
-    });
-    await batch.commit();
+  const fn = window.KarhaApp?.writeTaskRecordsNormalized;
+  if(typeof fn === 'function'){
+    return fn({
+      cloudMode, currentUser, db, taskCollection, normalizeTaskRecord, DATA_SCHEMA_VERSION,
+    }, pid, tasks);
   }
 }
 
@@ -966,68 +873,16 @@ async function cloudSyncProjectStatus(p){
 }
 
 function cloudSyncProjectFull(p){
-  if(!cloudMode || !currentUser || !p || !p.ownerUid) return;
-  pendingCloudWrites.add(p.id);
-  const sharedNorm = (p.sharedWith || []).map(e => normalizeEmail(e)).filter(Boolean);
-  p.sharedWith = sharedNorm;
-  // IMPORTANT: tasks are deliberately NOT stored on the project document.
-  // This keeps project metadata small and gives reports/purchases/estimates
-  // stable, independently addressable records for future expansion.
-  normalizeProjectScopedData(p);
-  const store = window.KarhaApp?.projectRepository?.find?.(p.id) || p;
-  const policy = window.KarhaApp?.mergePolicy;
-  const pickCol = (key) => {
-    const fromStore = Array.isArray(store[key]) ? store[key] : [];
-    const fromLive = Array.isArray(p[key]) ? p[key] : [];
-    // Prefer non-empty store; never upload empty over full store
-    if(policy?.shouldUploadCollection && !policy.shouldUploadCollection(fromStore, fromLive)){
-      return fromStore;
-    }
-    if(fromLive.length === 0 && fromStore.length > 0) return fromStore;
-    return fromLive.length ? fromLive : fromStore;
-  };
-  const contactsPayload = pickCol('contacts');
-  const activitiesPayload = pickCol('activityTemplates');
-  const templatesPayload = pickCol('contractTemplates');
-  const contractsPayload = pickCol('contracts');
-  db.collection('projects').doc(p.id).set({
-    name: p.name,
-    type: 'project',
-    completedOpen: !!p.completedOpen,
-    ownerUid: p.ownerUid,
-    ownerEmail: normalizeEmail(p.ownerEmail),
-    sharedWith: sharedNorm,
-    trashed: !!p.trashed,
-    archived: !!p.archived,
-    contacts: contactsPayload,
-    activityTemplates: activitiesPayload,
-    contractTemplates: templatesPayload,
-    contracts: contractsPayload,
-    schemaVersion: DATA_SCHEMA_VERSION
-  }, { merge:true })
-    .then(async ()=>{
-      // این مسیر قبلاً قبل از هر sync دوباره کل task collection را می‌خواند.
-      // اگر read موقتاً unavailable/denied می‌شد، کل sync پروژه شکست‌خورده تلقی
-      // می‌شد؛ حتی در حالی که metadata با موفقیت ذخیره شده بود.
-      // اکنون local + recovery منبع write هستند و هیچ task سروری delete نمی‌شود.
-      const byId = new Map();
-      [...(p.tasks||[]), ...getRecoveredLocalTasks(p)].forEach(t=>{
-        if(t && t.id && !byId.has(String(t.id))) byId.set(String(t.id),normalizeTaskRecord(t));
-      });
-      const mergedTasks = Array.from(byId.values());
-      p.tasks = mergedTasks;
-      rememberProjectTasks(p);
-      await writeTaskRecordsNormalized(p.id, mergedTasks);
-    })
-    .then(()=>{ pendingCloudWrites.delete(p.id); })
-    .catch(err=>{
-      pendingCloudWrites.delete(p.id);
-      console.warn('cloud project sync failed; UI remains available:', p.id, err);
-      if(isRetryableCloudError(err)){
-        markDirty(p.id);
-        persist();
-      }
-    });
+  const fn = window.KarhaApp?.cloudSyncProjectFull;
+  if(typeof fn === 'function'){
+    return fn({
+      cloudMode, currentUser, db, pendingCloudWrites, normalizeEmail, DATA_SCHEMA_VERSION,
+      normalizeProjectScopedData, mergePolicy: window.KarhaApp?.mergePolicy,
+      projectRepositoryFind: (id)=> window.KarhaApp?.projectRepository?.find?.(id),
+      getRecoveredLocalTasks, normalizeTaskRecord, rememberProjectTasks,
+      writeTaskRecordsNormalized, isRetryableCloudError, markDirty, persist,
+    }, p);
+  }
 }
 
 /** پروژه‌هایی که قبلاً fork شده‌اند تا دوباره ساخته نشوند */
@@ -1039,184 +894,40 @@ const forkedShareIds = new Set();
  * همکار: وقتی دیگر در sharedWith نیست، یک نسخهٔ مستقل برای خودش ساخته می‌شود.
  */
 function mergeCloudSnapshots(ownedDocs, sharedDocs){
-  const map = {};
-  const localById = {};
-  (data && data.projects || []).forEach(lp => { localById[lp.id] = lp; });
-  ownedDocs.forEach(doc => map[doc.id] = docToProject(doc, localById[doc.id]));
-  sharedDocs.forEach(doc => { if(!map[doc.id]) map[doc.id] = docToProject(doc, localById[doc.id]); });
-
-  // If we have local edits not yet confirmed on the server, keep the local version —
-  // otherwise a delayed/racing snapshot can silently erase very recent additions.
-  if(data && data.projects){
-    data.projects.forEach(localP=>{
-      if((dirtyProjectIds.has(localP.id) || pendingCloudWrites.has(localP.id)) && map[localP.id]){
-        map[localP.id] = localP;
-      }
+  const mergeFn = window.KarhaApp?.mergeOwnedCloudSnapshots;
+  const docFn = docToProject;
+  if(typeof mergeFn === 'function'){
+    const preservedActive = data ? data.activeTab : null;
+    const preservedMode = data ? data.viewMode : 'simple';
+    const preservedStarredOrder = data && data.starredOrder ? data.starredOrder.slice() : [];
+    const result = mergeFn({
+      ownedDocs: ownedDocs || [],
+      // sharedDocs ignored — sharing removed
+      localProjects: (data && data.projects) ? data.projects : [],
+      dirtyProjectIds,
+      pendingCloudWrites,
+      currentUser,
+      docToProject: docFn,
+      preservedActive,
+      preservedMode,
+      preservedStarredOrder,
     });
-  }
-
-  const preservedActive = data ? data.activeTab : null;
-  const preservedMode = data ? data.viewMode : 'simple';
-  let preservedStarredOrder = data && data.starredOrder ? data.starredOrder.slice() : [];
-  const prevOrder = (data && data.projects) ? data.projects.map(p => p.id) : [];
-  const idRemap = {}; // oldSharedId -> newOwnedId
-
-  // همکار: پروژه‌ای که دیگر در ابرِ اشتراکی نیست → نسخهٔ مستقل بساز
-  if(data && data.projects && currentUser){
-    data.projects.forEach(localP=>{
-      if(map[localP.id]) return;
-      if(localP.trashed) return;
-      const wasSharedToMe = localP.ownerUid && localP.ownerUid !== currentUser.uid;
-      if(!wasSharedToMe) return;
-      if(forkedShareIds.has(localP.id)) return;
-      forkedShareIds.add(localP.id);
-
-      const fork = JSON.parse(JSON.stringify(localP));
-      const ref = db.collection('projects').doc();
-      fork.id = ref.id;
-      fork.ownerUid = currentUser.uid;
-      fork.ownerEmail = normalizeEmail(currentUser.email);
-      fork.sharedWith = [];
-      fork.archived = !!localP.archived;
-      fork.trashed = false;
-      // نام را نگه می‌داریم؛ کاربر می‌تواند بعداً عوض کند
-      map[fork.id] = fork;
-      idRemap[localP.id] = fork.id;
-
-      const payload = {
-        name: fork.name,
-        type: 'project',
-        completedOpen: !!fork.completedOpen,
-        ownerUid: fork.ownerUid,
-        ownerEmail: fork.ownerEmail,
-        sharedWith: [],
-        trashed: false,
-        archived: !!fork.archived,
-        contacts: fork.contacts || [],
-        activityTemplates: fork.activityTemplates || [],
-        schemaVersion: DATA_SCHEMA_VERSION
-      };
-      pendingCloudWrites.add(fork.id);
-      ref.set(payload)
-        .then(()=> writeTaskRecordsNormalized(fork.id, fork.tasks))
-        .then(()=> pendingCloudWrites.delete(fork.id))
-        .catch(()=> pendingCloudWrites.delete(fork.id));
-      showToast('دسترسی قطع شد — «' + fork.name + '» به‌صورت مستقل برای شما ماند');
-    });
-  }
-
-  // guest / local-only projects without owner that aren't in cloud map: keep them
-  if(data && data.projects){
-    data.projects.forEach(localP=>{
-      if(map[localP.id]) return;
-      if(localP.ownerUid && currentUser && localP.ownerUid !== currentUser.uid) return; // handled above
-      if(localP.ownerUid && currentUser && localP.ownerUid === currentUser.uid){
-        // owned but missing from snapshot briefly — keep local if dirty
-        if(dirtyProjectIds.has(localP.id) || pendingCloudWrites.has(localP.id)){
-          map[localP.id] = localP;
-        }
-        return;
-      }
-      // no ownerUid (offline/guest copy)
-      map[localP.id] = localP;
-    });
-  }
-
-  let projects = Object.values(map);
-  if(prevOrder.length){
-    const byId = {};
-    projects.forEach(p => { byId[p.id] = p; });
-    const ordered = [];
-    prevOrder.forEach(id => {
-      const nid = idRemap[id] || id;
-      if(byId[nid]){ ordered.push(byId[nid]); delete byId[nid]; }
-    });
-    Object.keys(byId).forEach(id => ordered.push(byId[id]));
-    projects = ordered;
-  }
-
-  // starredOrder: remap old shared ids to forked ids
-  if(Object.keys(idRemap).length && preservedStarredOrder.length){
-    preservedStarredOrder = preservedStarredOrder.map(key => {
-      const parts = String(key).split(':');
-      if(parts.length >= 2 && idRemap[parts[0]]){
-        return idRemap[parts[0]] + ':' + parts.slice(1).join(':');
-      }
-      return key;
-    });
-  }
-
-  let activeTab = preservedActive;
-  if(activeTab && idRemap[activeTab]) activeTab = idRemap[activeTab];
-
-  // از این نسخه به بعد Workspace هر پروژه کاملاً مستقل است؛
-  // داده‌های پروژه (مخاطبین/فعالیت‌ها/سطل) از Snapshot همان پروژه می‌آیند.
-  projects.forEach(normalizeProjectScopedData);
-  data = {
-    schemaVersion:DATA_SCHEMA_VERSION,
-    projects: projects,
-    viewMode: preservedMode,
-    activeTab: activeTab,
-    starredOrder: preservedStarredOrder
-  };
-  migrateLegacyGlobalWorkspaceData();
-  if(data.activeTab !== 'starred'){
-    const cur = data.projects.find(p => p.id === data.activeTab);
-    if(!cur || cur.trashed || cur.archived){
-      const first = data.projects.find(p => !p.trashed && !p.archived);
-      data.activeTab = first ? first.id : 'starred';
-    }
-  }
-  // Auth restoration and Firestore snapshots are asynchronous.  On a cleared
-  // browser cache the first render has no project, so there is no route from
-  // which the modular context can recover later.  Synchronize the context from
-  // the now-authoritative cloud collection before refreshing any workspace UI.
-  const synchronizedProjectId = window.KarhaApp?.projectContext?.synchronizeProjects?.(
-    data.projects,
-    data.activeTab !== 'starred' ? data.activeTab : null
-  );
-  data.activeTab = synchronizedProjectId || 'starred';
-  // A cloud snapshot can establish the first valid project after Router.start
-  // already synchronized an empty route.  Context synchronization alone does
-  // not mount a module, so hand the restored project to the Router explicitly.
-  // This is the single initial-workspace render when the Projects surface is
-  // visible; do not follow it with the legacy renderer.
-  const cloudRouteMounted = mainSurface === 'projects' && synchronizedProjectId
-    ? window.KarhaApp?.router?.navigate(synchronizedProjectId, 'dashboard', {replace:true}) === true
-    : false;
-  try{
-      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
+    if(!data) return;
+    data.projects = result.projects;
+    if(result.activeTab != null) data.activeTab = result.activeTab;
+    if(result.viewMode) data.viewMode = result.viewMode;
+    if(result.starredOrder) data.starredOrder = result.starredOrder;
+    try{
+      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data.projects)){
         data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
       } else {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       }
     }catch(e){}
-  const wasAdding = false;
-  const projectsPageVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
-  const profilePageVisible = !document.getElementById('profilePage')?.classList.contains('hidden');
-  const collabPageVisible = !document.getElementById('collabPage')?.classList.contains('hidden');
-
-  // دریافت Snapshot از Firestore نباید ناوبری فعلی کاربر را خراب کند.
-  // قبلاً هر Snapshot مستقیماً renderAll() می‌کرد و ممکن بود وسط صورت‌وضعیت،
-  // نوار سبز/صفحه فعال ناپدید شود یا مدیریت پروژه‌ها خالی به نظر برسد.
-  if(mainSurface === 'workspace'){
-    if(projectsPageVisible){
-      setBottomNavActive('Projects');
-      renderManagementPage();
-    } else if(profilePageVisible){
-      renderProfilePage();
-    } else if(collabPageVisible){
-      setBottomNavActive('Settings');
-      renderCollabPage();
-      updateWorkspaceContextBar();
-    } else {
-      refreshCurrentFooterPage();
-    }
-  } else {
-    if(!cloudRouteMounted) renderAll();
-    if(wasAdding) focusInlineAdd();
+    return;
   }
 }
+
 
 async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
   const docs = [...(ownedDocs||[]), ...(sharedDocs||[])];
@@ -1249,45 +960,35 @@ async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
 function startCloudListeners(){
   stopCloudListeners();
   let ownedDocs = [], sharedDocs = [];
-  const myEmailLower = normalizeEmail(currentUser.email);
-
-  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
-    .onSnapshot(snap => { ownedDocs = snap.docs; mergeCloudSnapshots(ownedDocs, sharedDocs); hydrateAllCloudProjects(ownedDocs, sharedDocs); },
-      err => { console.error('owned listener', err); showToast('خطا در دریافت پروژه‌های خودتان'); });
-
-  // sharedWith باید دقیقاً lowercase باشد (همان‌طور که هنگام اشتراک ذخیره می‌شود)
-  // Phase 5: sharing disabled — do not subscribe to sharedWith.
-  cloudUnsubShared = null; if(false) cloudUnsubShared = db.collection('projects').where('sharedWith','array-contains', myEmailLower)
-    .onSnapshot(snap => {
-      sharedDocs = snap.docs;
-      mergeCloudSnapshots(ownedDocs, sharedDocs);
-      hydrateAllCloudProjects(ownedDocs, sharedDocs);
-      // اگر پروژه‌ای به اشتراک گذاشته شده، یک‌بار اطلاع بده
-      if(snap.docs.length && !window.__sharedToastShown){
-        window.__sharedToastShown = true;
-        showToast(snap.docs.length + ' پروژه اشتراکی دریافت شد');
-      }
-    }, err => {
-      console.error('shared listener', err);
-      const code = err && err.code ? String(err.code) : '';
-      if(code.indexOf('permission') !== -1 || code === 'permission-denied'){
-        showToast('سرور اجازهٔ دیدن پروژه‌های اشتراکی را نمی‌دهد — قوانین Firestore را به‌روز کنید');
-      } else {
-        showToast('خطا در دریافت پروژه‌های اشتراکی');
-      }
+  const onSnap = (docs, shared)=>{
+    ownedDocs = docs || [];
+    sharedDocs = shared || [];
+    mergeCloudSnapshots(ownedDocs, sharedDocs);
+    hydrateAllCloudProjects(ownedDocs, sharedDocs);
+  };
+  const onErr = err => { console.error('owned listener', err); showToast('خطا در دریافت پروژه‌های خودتان'); };
+  // Phase 6.4: ownership in src/sync/cloudListeners — behavior unchanged (owned-only).
+  if(window.KarhaApp?.startOwnedCloudListeners){
+    window.KarhaApp.startOwnedCloudListeners({
+      db,
+      uid: currentUser.uid,
+      onOwnedSnapshot: onSnap,
+      onError: onErr,
     });
-
-  // یک‌بار واکشی فوری برای اطمینان
-  db.collection('projects').where('sharedWith','array-contains', myEmailLower).get()
-    .then(snap => {
-      if(snap.docs.length){
-        sharedDocs = snap.docs;
-        mergeCloudSnapshots(ownedDocs, sharedDocs);
-      }
-    })
-    .catch(err => console.error('shared get', err));
+    cloudUnsubOwned = null;
+    cloudUnsubShared = null;
+    return;
+  }
+  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
+    .onSnapshot(snap => onSnap(snap.docs, []), onErr);
+  cloudUnsubShared = null;
+  sharedDocs = [];
 }
+
 function stopCloudListeners(){
+  if(window.KarhaApp?.stopOwnedCloudListeners){
+    window.KarhaApp.stopOwnedCloudListeners();
+  }
   if(cloudUnsubOwned) cloudUnsubOwned();
   if(cloudUnsubShared) cloudUnsubShared();
   cloudUnsubOwned = null; cloudUnsubShared = null;
@@ -2150,18 +1851,16 @@ function updateWorkspaceContextBar(){
   if(actionBtn){
     // فقط لیست صورت وضعیت‌ها و همکاران پروژه امکان ایجاد مورد جدید دارند.
     // در فرم ویرایش صورت وضعیت عمداً دکمه + وجود ندارد.
-    const hasSubpageAction = !hasOwnInnerSectionBar && (workspaceSubpage === 'statusList' || workspaceSubpage === 'collab' || workspaceSubpage === 'contracts');
+    const hasSubpageAction = !hasOwnInnerSectionBar && (workspaceSubpage === 'contracts');
     actionBtn.hidden = !hasSubpageAction;
-    actionBtn.title = workspaceSubpage === 'statusList' ? 'صورت وضعیت جدید' : (workspaceSubpage === 'collab' ? 'افزودن همکار' : 'ایجاد قرارداد');
+    actionBtn.title = 'ایجاد قرارداد';
     actionBtn.setAttribute('aria-label', actionBtn.title);
     actionBtn.onclick = ()=>{
       if(workspaceSubpage === 'statusList'){ openStatusForm(null); return; }
       if(workspaceSubpage === 'contracts'){ openContractForm(null); return; }
       if(workspaceSubpage === 'collab'){
-        ensureHomeSelection();
-        const p = findProject(data.activeTab);
-        if(p && data.activeTab !== 'starred') openShareForm(p.id);
-        else showToast('ابتدا یک پروژه را انتخاب کنید');
+        showToast('اشتراک‌گذاری حذف شده است');
+        return;
       }
     };
   }
@@ -2194,7 +1893,7 @@ function showOnlyWorkspacePage(pageId){
   // محتوای هوم پروژه‌ها هرگز همزمان با یک صفحه منو نمایش داده نمی‌شود.
   const content = document.getElementById('content');
   if(content) content.replaceChildren();
-  const ids = ['projectsPage','profilePage','collabPage','calendarPage','statusListPage','statusFormPage','statusExportPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','statusTestPage','contractStatusPage','contractApprovalPage','activityFormPage','shareFormPage'];
+  const ids = ['projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','activityFormPage'];
   // اول همه صفحات را قطعاً پنهان کن؛ سپس فقط صفحه مقصد را نشان بده.
   // این کار جلوی هرگونه هم‌پوشانی بین صفحات منوی اصلی و هوم پروژه‌ها را می‌گیرد.
   ids.forEach(id=>{
@@ -2207,7 +1906,7 @@ function showOnlyWorkspacePage(pageId){
 
 function closeBottomPages(){
   workspaceSubpage=null;
-  ['projectsPage','profilePage','collabPage','calendarPage','statusListPage','statusFormPage','statusExportPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','statusTestPage','contractStatusPage','contractApprovalPage','activityFormPage','shareFormPage']
+  ['projectsPage','profilePage','calendarPage','createPage','reportsPage','accountingPage','settingsPage','projectActivitiesPage','contactsPage','projectTrashPage','contractsPage','contractFormPage','contractTemplateFormPage','contractTemplatesPage','activityFormPage']
     .forEach(id=>{
       const el=document.getElementById(id);
       if(el) el.classList.add('hidden');
@@ -2273,10 +1972,7 @@ function renderSettingsWorkspace(){
   body.innerHTML='';
   if(!p){ body.innerHTML='<div class="mgmt-empty">برای نمایش تنظیمات، یک پروژه را انتخاب کنید.</div>'; return; }
   const wrap=document.createElement('div'); wrap.className='workspace-option-list';
-  const collabRow=document.createElement('button'); collabRow.type='button'; collabRow.className='workspace-option';
-  collabRow.innerHTML='<span class="workspace-option-main"><span class="workspace-option-title">همکاران پروژه</span></span><span class="workspace-option-arrow">›</span>';
-  collabRow.onclick=()=>openCollabPage(); wrap.appendChild(collabRow);
-
+  /* همکاران پروژه: UI حذف‌شده در فاز ۵+؛ openCollabPage فقط برای سازگاری باقی مانده */
   const contactRow=document.createElement('button'); contactRow.type='button'; contactRow.className='workspace-option';
   contactRow.innerHTML='<span class="workspace-option-main"><span class="workspace-option-title">مخاطبین</span></span><span class="workspace-option-arrow">›</span>';
   contactRow.onclick=()=>openContactsPage(); wrap.appendChild(contactRow);
@@ -2860,7 +2556,7 @@ function openContractStatusPage(){
   try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){}
 }
 function openContractStatusPageLegacyDisabled(){
-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractStatus'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('contractStatusPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contractStatus'); renderContractStatusPage();
+  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractStatus'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('contractStatus'); renderContractStatusPage();
 }
 function closeContractStatusPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
 function renderContractStatusPage(){
@@ -2871,7 +2567,7 @@ function openContractApprovalPage(){
   // Phase 5 removed path
   try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
 
-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractApproval'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('contractApprovalPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('contractApproval'); renderContractApprovalPage();
+  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractApproval'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('contractApproval'); renderContractApprovalPage();
 }
 function closeContractApprovalPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
 function renderContractApprovalPage(){
@@ -2882,7 +2578,7 @@ function openStatusTestPage(){
   // Phase 5 removed path
   try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
 
-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='statusTest'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('statusTestPage'); updateWorkspaceContextBar(); pushWorkspaceHistory('statusTest'); renderStatusTestPage();
+  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='statusTest'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('statusTest'); renderStatusTestPage();
 }
 function closeStatusTestPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
 function renderStatusTestPage(){
@@ -3253,10 +2949,10 @@ function refreshCurrentFooterPage(){
   }
   if(active.id==='bottomAccountingBtn'){
     if(workspaceSubpage==='statusList'){
-      showOnlyWorkspacePage('statusListPage');
+      showOnlyWorkspacePage();
       renderStatusList();
     } else if(workspaceSubpage==='statusForm' && statusFormState){
-      showOnlyWorkspacePage('statusFormPage');
+      showOnlyWorkspacePage();
       renderStatusForm();
     } else {
       workspaceSubpage=null;
@@ -3271,7 +2967,7 @@ function refreshCurrentFooterPage(){
       showOnlyWorkspacePage('projectTrashPage');
       renderProjectTrashPage();
     } else if(workspaceSubpage==='collab'){
-      showOnlyWorkspacePage('collabPage');
+      showOnlyWorkspacePage();
       renderCollabPage();
     } else {
       workspaceSubpage=null;
@@ -4523,15 +4219,22 @@ function escapeHtml(str){
 
 
 /* ---------- collaborations page ---------- */
-/* همکاری‌ها از منوی اصلی خارج شده‌اند و داخل پروژه مدیریت خواهند شد. */
-document.getElementById('closeCollabPage').onclick = ()=>{
-  document.getElementById('collabPage').classList.add('hidden');
-  workspaceSubpage=null;
-  document.getElementById('settingsPage')?.classList.remove('hidden');
-  setBottomNavActive('Settings');
-  renderTabs();
-  renderSettingsWorkspace();
-};
+/* همکاری‌ها از منوی اصلی خارج شده‌اند و داخل پروژه مدیریت خواهند شد.
+   collabPage DOM در فاز ۵+ حذف شده؛ binding فقط در صورت وجود element. */
+(()=>{
+  const closeBtn = document.getElementById('closeCollabPage');
+  if(closeBtn){
+    closeBtn.onclick = ()=>{
+      const page = document.getElementById('collabPage');
+      if(page) page.classList.add('hidden');
+      workspaceSubpage=null;
+      document.getElementById('settingsPage')?.classList.remove('hidden');
+      setBottomNavActive('Settings');
+      renderTabs();
+      renderSettingsWorkspace();
+    };
+  }
+})();
 
 function openCollabPage(){
   ensureHomeSelection();
@@ -4539,7 +4242,7 @@ function openCollabPage(){
   workspaceSubpage='collab';
   setBottomNavActive('Settings');
   renderTabs();
-  showOnlyWorkspacePage('collabPage');
+  showOnlyWorkspacePage();
   updateWorkspaceContextBar();
   pushWorkspaceHistory('collab');
   renderCollabPage();
@@ -4547,7 +4250,7 @@ function openCollabPage(){
 
 function closeCollabPage(){
   const page =
-    document.getElementById('collabPage') ||
+    null ||
     document.getElementById('collaboratorsPage') ||
     document.getElementById('cooperationPage');
 
@@ -4569,159 +4272,34 @@ function closeCollabPage(){
   }
 }
 
-function renderCollabPage(){
-  const body = document.getElementById('collabPageBody');
-  body.innerHTML = '';
-  ensureHomeSelection();
-  const p = findProject(data.activeTab);
-  if(!p || data.activeTab==='starred'){
-    body.innerHTML = '<div class="mgmt-empty">برای مشاهده همکاری‌ها، ابتدا یک پروژه را انتخاب کنید.</div>';
-    return;
+function renderCollabPage(){ const b=document.getElementById('collabPageBody'); if(b) b.innerHTML=''; }
+
+(()=>{
+  const addBtn = document.getElementById('collabAddBtn');
+  if(addBtn){
+    addBtn.onclick = ()=>{
+      ensureHomeSelection();
+      const p = findProject(data.activeTab);
+      if(!p || data.activeTab==='starred'){
+        showToast('ابتدا یک پروژه را انتخاب کنید');
+        return;
+      }
+      /* phase6 share removed */;
+    };
   }
-  if(!currentUser){
-    body.innerHTML = '<div class="mgmt-empty">برای مشاهده همکاری‌ها با گوگل وارد شوید.</div>';
-    return;
-  }
+})();
 
-  const myEmail = normalizeEmail(currentUser.email);
-  if(p.ownerUid === currentUser.uid && !p.ownerEmail){
-    p.ownerEmail = myEmail;
-    markDirty(p.id);
-    persist();
-  }
-
-  const refreshRow = document.createElement('div');
-  refreshRow.className = 'inner-action-card inner-action-card--primary';
-  const refreshBtn = document.createElement('button');
-  refreshBtn.type = 'button';
-  refreshBtn.className = 'restore-btn';
-  refreshBtn.textContent = 'همگام سازی همکاران';
-  refreshBtn.onclick = ()=>{
-    window.__sharedToastShown = false;
-    startCloudListeners();
-    showToast('در حال دریافت…');
-    setTimeout(()=> renderCollabPage(), 800);
-  };
-  refreshRow.appendChild(refreshBtn);
-  body.appendChild(refreshRow);
-
-  const block = document.createElement('div');
-  block.className = 'collab-block';
-
-  const isOwner = p.ownerUid === currentUser.uid;
-
-  // فقط نقش ادمین/همکار نمایش داده شود؛ نام پروژه در این صفحه تکرار نمی‌شود
-  // چون پروژهٔ فعال از اسکرول افقی بالای صفحه مشخص است.
-  const meta = document.createElement('div');
-  meta.className = 'collab-meta';
-
-  if(isOwner){
-    const prof = loadProfile();
-    const adminName = String(prof.name || '').trim() || myEmail || 'صاحب پروژه';
-    meta.innerHTML = 'ادمین: <span>'+escapeHtml(adminName)+'</span>';
-    block.appendChild(meta);
-
-    const members = Array.isArray(p.sharedWith) ? p.sharedWith : [];
-    if(!members.length){
-      const empty = document.createElement('div');
-      empty.className = 'collab-meta';
-      empty.textContent = 'هنوز همکاری برای این پروژه ثبت نشده است.';
-      block.appendChild(empty);
-    } else {
-      const memberList=document.createElement('div'); memberList.className='collab-member-list';
-      const search=createWorkspaceSearch('جستجوی همکار…',q=>{Array.from(memberList.children).forEach(row=>row.hidden=!workspaceTextMatch(row.dataset.searchText,q));});
-      block.appendChild(search.wrap);
-      block.appendChild(memberList);
-      members.forEach(email=>{
-        const row = document.createElement('div');
-        row.className = 'collab-email-row'; row.dataset.searchText=String(email||'').toLocaleLowerCase('fa');
-        const left = document.createElement('div');
-        left.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;';
-        const span = document.createElement('span');
-        span.textContent = email;
-        const tag = document.createElement('span');
-        tag.className = 'collab-person-tag';
-        tag.textContent = 'همکار';
-        left.appendChild(span);
-        left.appendChild(tag);
-
-        const btn = document.createElement('button');
-        btn.className = 'perm-del-btn';
-        btn.textContent = 'حذف دسترسی';
-        btn.onclick = ()=> removeShare(p, email, ()=> renderCollabPage());
-
-        row.appendChild(left);
-        row.appendChild(btn);
-        memberList.appendChild(row);
-      });
-    }
-  } else {
-    // برای عضو پروژه، اطلاعات مالک پروژه را نگه می‌داریم.
-    // اگر نام مالک در دادهٔ مشترک موجود نباشد، ایمیل مالک نمایش داده می‌شود.
-    const adminLabel = p.ownerEmail ? p.ownerEmail : 'صاحب پروژه';
-    meta.innerHTML = 'ادمین: <span dir="ltr" style="unicode-bidi:isolate;">'+escapeHtml(adminLabel)+'</span>';
-    block.appendChild(meta);
-
-    const others = Array.isArray(p.sharedWith)
-      ? p.sharedWith.filter(e=>normalizeEmail(e)!==myEmail)
-      : [];
-    if(others.length){
-      const note = document.createElement('div');
-      note.className = 'collab-meta';
-      note.textContent = 'سایر همکاران: ' + others.join('، ');
-      block.appendChild(note);
-    }
-  }
-
-  body.appendChild(block);
-}
-
-document.getElementById('collabAddBtn').onclick = ()=>{
-  ensureHomeSelection();
-  const p = findProject(data.activeTab);
-  if(!p || data.activeTab==='starred'){
-    showToast('ابتدا یک پروژه را انتخاب کنید');
-    return;
-  }
-  openShareForm(p.id);
-};
-
-function removeShare(p, email, after){
-  const em = normalizeEmail(email);
-  // حذف همهٔ حالت‌های حروف بزرگ/کوچک احتمالی در آرایهٔ سرور
-  const variants = Array.from(new Set([em, String(email||'').trim()].filter(Boolean)));
-  const updates = variants.map(v => firebase.firestore.FieldValue.arrayRemove(v));
-  // arrayRemove multiple via successive or one update with multiple removes
-  db.collection('projects').doc(p.id).update({
-    sharedWith: firebase.firestore.FieldValue.arrayRemove(...variants)
-  }).then(()=>{
-    p.sharedWith = (p.sharedWith || []).map(e => normalizeEmail(e)).filter(e => e && e !== em);
-    showToast('دسترسی ' + em + ' حذف شد — پروژه برای هر دو طرف می‌ماند، فقط همگام‌سازی قطع شد');
-    if(after) after();
-  }).catch(()=> showToast('خطا در حذف دسترسی'));
-}
+function removeShare(){ return; }
 
 /* ---------- share / collaborate dialog ---------- */
 let shareTargetProjectId = null;
 let shareFormDirty=false;let shareFormHistoryPushed=false;const SHARE_DRAFT_KEY='karha_share_form_draft_v1';
-function openShareForm(pid){shareTargetProjectId=pid;shareFormDirty=false;setInternalFormMode(true);workspaceSubpage='shareForm';showOnlyWorkspacePage('shareFormPage');setBottomNavActive('Settings');renderTabs();updateWorkspaceContextBar();pushWorkspaceHistory('shareForm');shareFormHistoryPushed=true;const body=document.getElementById('shareFormBody');body.innerHTML='';const note=document.createElement('div');note.className='internal-form-note';note.textContent='آدرس جیمیل فردی که می‌خواهید به این پروژه دسترسی بدهید را وارد کنید.';body.appendChild(note);const f=document.createElement('div');f.className='internal-form-field';const l=document.createElement('label');l.textContent='آدرس جیمیل';const input=document.createElement('input');input.type='email';input.dir='ltr';input.className='internal-form-input';input.placeholder='name@gmail.com';try{input.value=JSON.parse(localStorage.getItem(SHARE_DRAFT_KEY)||'null')?.email||''}catch(e){}input.oninput=()=>shareFormDirty=true;f.append(l,input);body.appendChild(f);const actions=document.getElementById('shareFormActions');actions.innerHTML='';const save=document.createElement('button');save.className='if-save';save.textContent='ذخیره';save.onclick=()=>submitShareForm(input);const draft=document.createElement('button');draft.className='if-draft';draft.textContent='پیش‌نویس';draft.onclick=()=>{try{localStorage.setItem(SHARE_DRAFT_KEY,JSON.stringify({email:input.value}))}catch(e){}shareFormDirty=false;showToast('پیش‌نویس ذخیره شد');closeShareForm();};const cancel=document.createElement('button');cancel.className='if-cancel';cancel.textContent='انصراف';cancel.onclick=()=>closeShareForm();actions.append(save,draft,cancel);}
-function submitShareForm(input){const email=normalizeEmail(input.value);if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showToast('یک آدرس جیمیل معتبر وارد کنید');input.focus();return;}const p=findProject(shareTargetProjectId);if(!p||!p.ownerUid){showToast('این پروژه هنوز روی سرور نیست');return;}if(p.ownerUid===currentUser.uid&&currentUser.email)p.ownerEmail=normalizeEmail(currentUser.email);db.collection('projects').doc(p.id).update({sharedWith:firebase.firestore.FieldValue.arrayUnion(email),ownerEmail:p.ownerEmail||normalizeEmail(currentUser.email)}).then(()=>{showToast('دسترسی برای '+email+' اضافه شد');if(!p.sharedWith)p.sharedWith=[];p.sharedWith=p.sharedWith.map(e=>normalizeEmail(e)).filter(Boolean);if(!p.sharedWith.includes(email))p.sharedWith.push(email);try{localStorage.removeItem(SHARE_DRAFT_KEY)}catch(e){}shareFormDirty=false;closeShareForm();renderCollabPage();}).catch(()=>showToast('خطا در افزودن دسترسی'));}
-function closeShareForm(fromPopState=false){if(shareFormHistoryPushed){shareFormHistoryPushed=false;if(!fromPopState){try{history.back()}catch(e){}}}setInternalFormMode(false);document.getElementById('shareFormPage').classList.add('hidden');workspaceSubpage='collab';showOnlyWorkspacePage('collabPage');renderCollabPage();updateWorkspaceContextBar();shareFormDirty=false;}
-function requestCloseShareForm(input,fromPopState=false){
-  const value=String(input?.value||'').trim();
-  const hasInput=!!value;
-  const requiredComplete=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
-  if(hasInput && !requiredComplete){
-    showIncompleteFormExitChoice({
-      onYes:()=>{try{localStorage.setItem(SHARE_DRAFT_KEY,JSON.stringify({email:input.value}))}catch(e){} shareFormDirty=false; closeShareForm(fromPopState);},
-      onNo:()=>closeShareForm(fromPopState)
-    });
-    return;
-  }
-  closeShareForm(fromPopState);
-}
+function openShareForm(pid){ try{ showToast('اشتراک‌گذاری در این نسخه حذف شده است'); }catch(e){} }
+function submitShareForm(){ return; }
+function closeShareForm(){ return; }
+function requestCloseShareForm(){ return; }
 
-function openShareDialog(pid){openShareForm(pid);}
+function openShareDialog(){ return; }
 function closeShareDialog(){document.getElementById('shareOverlay').classList.add('hidden');}
 document.getElementById('shareConfirmBtn').onclick = ()=>{
   const email = normalizeEmail(document.getElementById('shareEmailInput').value);
@@ -4743,7 +4321,7 @@ document.getElementById('shareConfirmBtn').onclick = ()=>{
     // فقط نسخهٔ lowercase در حافظه نگه داشته شود
     p.sharedWith = p.sharedWith.map(e => normalizeEmail(e)).filter(Boolean);
     if(!p.sharedWith.includes(email)) p.sharedWith.push(email);
-    if(!document.getElementById('collabPage').classList.contains('hidden')) renderCollabPage();
+    if(false) renderCollabPage();
   }).catch(()=> showToast('خطا در افزودن دسترسی'));
 };
 
@@ -5195,7 +4773,7 @@ async function openStatusForm(id){
   document.getElementById('statusFormTitle').textContent = id ? 'ویرایش صورت وضعیت' : 'صورت وضعیت جدید';
   setBottomNavActive('Accounting');
   renderTabs();
-  showOnlyWorkspacePage('statusFormPage');
+  showOnlyWorkspacePage();
   updateWorkspaceContextBar();
 
   if(!statusFormHistoryPushed){
@@ -5205,7 +4783,7 @@ async function openStatusForm(id){
   // فرم فوراً رندر می‌شود؛ شماره نامه در صورت نیاز بعداً تکمیل می‌شود.
   renderStatusForm();
   requestAnimationFrame(()=>{
-    const page = document.getElementById('statusFormPage');
+    const page = null;
     const pb = page && page.querySelector('.page-body');
     if(pb) pb.scrollTop = 0;
     if(page) page.scrollTop = 0;
@@ -5229,7 +4807,7 @@ async function openStatusForm(id){
 }
 function closeStatusForm(fromPopState=false){
   setInternalFormMode(false);
-  document.getElementById('statusFormPage').classList.add('hidden');
+  null?.classList.add('hidden');
   statusFormHistoryPushed = false;
   const statusActions = document.getElementById('statusFormActions');
   if(statusActions) statusActions.innerHTML = '';
@@ -5241,7 +4819,7 @@ function closeStatusForm(fromPopState=false){
     workspaceSubpage = 'statusList';
     setBottomNavActive('Accounting');
     renderTabs();
-    showOnlyWorkspacePage('statusListPage');
+    showOnlyWorkspacePage();
     updateWorkspaceContextBar();
     renderStatusList();
   } else {
@@ -5257,7 +4835,7 @@ function closeStatusForm(fromPopState=false){
 function finishStatusSaveAndReturnToList(){
   // مسیر اختصاصی ذخیره: ابتدا فرم را از DOM خارج می‌کنیم تا هیچ بخشی از آن
   // دوباره توسط refresh/render فوتر نمایش داده نشود، سپس لیست را می‌سازیم.
-  const formPage = document.getElementById('statusFormPage');
+  const formPage = null;
   if(formPage) formPage.classList.add('hidden');
   const actions = document.getElementById('statusFormActions');
   if(actions) actions.innerHTML = '';
@@ -5270,7 +4848,7 @@ function finishStatusSaveAndReturnToList(){
 
   setBottomNavActive('Accounting');
   renderTabs();
-  showOnlyWorkspacePage('statusListPage');
+  showOnlyWorkspacePage();
   updateWorkspaceContextBar();
   renderStatusList();
 }
@@ -5620,7 +5198,7 @@ function openStatusList(){
   workspaceSubpage='statusList';
   setBottomNavActive('Accounting');
   renderTabs();
-  showOnlyWorkspacePage('statusListPage');
+  showOnlyWorkspacePage();
   updateWorkspaceContextBar();
   pushWorkspaceHistory('statusList');
   renderStatusList();
@@ -5707,11 +5285,11 @@ function openStatusExport(id){
   statusExportId = id;
   statusFormState = normalizeStatusForm(JSON.parse(JSON.stringify(item)));
   document.getElementById('statusExportTitle').textContent = 'خروجی: ' + (item.personName || 'صورت وضعیت');
-  document.getElementById('statusExportPage').classList.remove('hidden');
+  null?.classList.remove('hidden');
   renderStatusExportPage();
 }
 function closeStatusExport(){
-  document.getElementById('statusExportPage').classList.add('hidden');
+  null?.classList.add('hidden');
   statusExportId = null;
 }
 function renderStatusExportPage(){
@@ -5947,21 +5525,25 @@ async function generateStatusJpeg(){
 
 
 
-/* صورت‌وضعیت‌ها فعلاً از منوی اصلی حذف شده‌اند و در ساختار پروژه قرار خواهند گرفت. */
-document.getElementById('closeStatusFormPage').onclick = requestCloseStatusForm;
-document.getElementById('closeStatusListPage').onclick = ()=> closeStatusList();
-document.getElementById('statusListAddBtn').onclick = ()=>{ openStatusForm(null); };
-document.getElementById('closeStatusExportPage').onclick = ()=> closeStatusExport();
-document.getElementById('closeContractStatusPage').onclick = ()=> closeContractStatusPage();
-document.getElementById('closeContractTemplatesPage').onclick = ()=>closeContractTemplatesPage();
-document.getElementById('closeContractsPage').onclick = ()=>closeContractsPage();
-document.getElementById('contractAddBtn').onclick = ()=>openContractForm(null);
-document.getElementById('closeContractFormPage').onclick = ()=>requestCloseContractForm();
-
-document.getElementById('closeStatusTestPage').onclick = ()=>closeStatusTestPage();
-document.getElementById('closeContractApprovalPage').onclick = ()=>closeContractApprovalPage();
-document.getElementById('closeActivityFormPage').onclick = requestCloseActivityForm;
-document.getElementById('closeShareFormPage').onclick = ()=>requestCloseShareForm(document.getElementById('shareFormBody')?.querySelector('input'));
+/* صورت‌وضعیت‌ها / share / collab DOM در فاز ۵–۷ از shell حذف شده‌اند.
+   فقط elementهای موجود bind می‌شوند تا Startup با null.onclick نشکند. */
+function bindClick(id, handler){
+  const el = document.getElementById(id);
+  if(el) el.onclick = handler;
+}
+bindClick('closeStatusFormPage', requestCloseStatusForm);
+bindClick('closeStatusListPage', ()=> closeStatusList());
+bindClick('statusListAddBtn', ()=>{ openStatusForm(null); });
+bindClick('closeStatusExportPage', ()=> closeStatusExport());
+bindClick('closeContractStatusPage', ()=> closeContractStatusPage());
+bindClick('closeContractTemplatesPage', ()=>closeContractTemplatesPage());
+bindClick('closeContractsPage', ()=>closeContractsPage());
+bindClick('contractAddBtn', ()=>openContractForm(null));
+bindClick('closeContractFormPage', ()=>requestCloseContractForm());
+bindClick('closeStatusTestPage', ()=>closeStatusTestPage());
+bindClick('closeContractApprovalPage', ()=>closeContractApprovalPage());
+bindClick('closeActivityFormPage', requestCloseActivityForm);
+bindClick('closeShareFormPage', ()=>requestCloseShareForm(document.getElementById('shareFormBody')?.querySelector('input')));
 
 /* ---------- root menu history handling ---------- */
 window.addEventListener('popstate', ()=>{
@@ -6005,11 +5587,8 @@ window.addEventListener('popstate', ()=>{
   // اگر بک فقط برای بستن تمپلیت جستجو بوده، فرم قرارداد را نبند
   if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
 
-  // Back از فرم صورت وضعیت: فرم بسته می‌شود و دقیقاً به لیست صورت وضعیت‌ها برمی‌گردیم.
-  if(document.getElementById('statusFormPage') && !document.getElementById('statusFormPage').classList.contains('hidden')){
-    requestCloseStatusForm();
-    return;
-  }
+  // صفحات حذف‌شدهٔ فاز ۵+ (status/collab/share) عمداً دیگر در DOM نیستند؛
+  // getElementById بدون id باعث TypeError و قطع کل handler می‌شد.
 
   // Back از فرم قرارداد واقعی -> لیست قراردادها.
   if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){
@@ -6021,13 +5600,6 @@ window.addEventListener('popstate', ()=>{
   }
   if(document.getElementById('contractsPage') && !document.getElementById('contractsPage').classList.contains('hidden')){ closeContractsPage(); return; }
 
-  // Back از لیست صورت وضعیت‌ها -> حسابداری پروژه.
-  if(document.getElementById('statusListPage') && !document.getElementById('statusListPage').classList.contains('hidden')){
-    workspaceHistoryDepth=Math.max(0,workspaceHistoryDepth-1);
-    closeStatusList();
-    return;
-  }
-
   // Back از حسابداری -> هوم پروژه.
   if(document.getElementById('accountingPage') && !document.getElementById('accountingPage').classList.contains('hidden')){
     workspaceHistoryDepth=Math.max(0,workspaceHistoryDepth-1);
@@ -6035,16 +5607,7 @@ window.addEventListener('popstate', ()=>{
     return;
   }
 
-  // Back از زیرصفحه «همکاران» -> تنظیمات همان پروژه.
-  if(document.getElementById('collabPage') && !document.getElementById('collabPage').classList.contains('hidden')){
-    closeCollabPage();
-    return;
-  }
-
   if(document.getElementById('contractTemplatesPage') && !document.getElementById('contractTemplatesPage').classList.contains('hidden')){ closeContractTemplatesPage(); return; }
-  if(document.getElementById('statusTestPage') && !document.getElementById('statusTestPage').classList.contains('hidden')){ closeStatusTestPage(); return; }
-  if(document.getElementById('contractStatusPage') && !document.getElementById('contractStatusPage').classList.contains('hidden')){ closeContractStatusPage(); return; }
-  if(document.getElementById('contractApprovalPage') && !document.getElementById('contractApprovalPage').classList.contains('hidden')){ closeContractApprovalPage(); return; }
 
   // Back از فرم/لیست مخاطبین: هر سطح فقط یک پله به عقب برمی‌گردد.
   // فرم مخاطب -> لیست مخاطبین -> تنظیمات پروژه.
@@ -6062,10 +5625,8 @@ window.addEventListener('popstate', ()=>{
   }
 
   if(document.getElementById('activityFormPage') && !document.getElementById('activityFormPage').classList.contains('hidden')){ requestCloseActivityForm(true); return; }
-  if(document.getElementById('shareFormPage') && !document.getElementById('shareFormPage').classList.contains('hidden')){ requestCloseShareForm(document.getElementById('shareFormBody')?.querySelector('input'),true); return; }
   // Back از زیرصفحه «فعالیت‌ها» -> تنظیمات همان پروژه.
   if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
-  if(document.getElementById('contractFormPage') && !document.getElementById('contractFormPage').classList.contains('hidden')){requestCloseContractForm(true);return;}if(document.getElementById('contractTemplatesPage') && !document.getElementById('contractTemplatesPage').classList.contains('hidden')){closeContractTemplatesPage();return;}if(document.getElementById('contractsPage') && !document.getElementById('contractsPage').classList.contains('hidden')){closeContractsPage();return;}if(document.getElementById('statusTestPage') && !document.getElementById('statusTestPage').classList.contains('hidden')){closeStatusTestPage();return;}
   if(document.getElementById('projectActivitiesPage') && !document.getElementById('projectActivitiesPage').classList.contains('hidden')){
     workspaceSubpage=null;
     showOnlyWorkspacePage('settingsPage');
@@ -6136,8 +5697,27 @@ if(routedProjectId && routedModuleId==='contracts'){
 
 // Modular architecture bridge: keeps the remaining legacy runtime project-scoped
 // while individual modules are migrated out of this file.
+
 function installLegacyCompatibilityBoundary(){
+var __formRTs = window.KarhaApp?.registerFormRuntimes?.({
+  uid: uid,
+  getCurrentProjectId: getCurrentProjectScopeId,
+  showToast: showToast,
+  enterActivityForm: function(){ setInternalFormMode(true); workspaceSubpage='activityForm'; showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); },
+  leaveActivityForm: function(){ setInternalFormMode(false); document.getElementById('activityFormPage')?.classList.add('hidden'); workspaceSubpage='activities'; showOnlyWorkspacePage('projectActivitiesPage'); renderProjectActivitiesPage(); updateWorkspaceContextBar(); },
+  pushWorkspaceHistory: pushWorkspaceHistory,
+  findProject: findProject,
+  markDirty: markDirty,
+  persist: persist,
+  getCurrentProject: getCurrentProject,
+  getActivityTemplates: getActivityTemplates,
+  openNumpadGeneric: openNumpadGeneric,
+  setInternalFormMode: setInternalFormMode,
+  showIncompleteFormExitChoice: showIncompleteFormExitChoice,
+  closeContactsToSettings: function(){ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); },
+}) || {};
 window.KarhaLegacy = Object.freeze({
+
   getViewMode(){ return data?.viewMode || 'simple'; },
   renderAll,
   elFromHtml(html){
@@ -6211,40 +5791,8 @@ window.KarhaLegacy = Object.freeze({
   openActivityForm,
   openActivityEditForm,
   requestCloseActivityForm,
-  activityFormRuntime: Object.freeze({
-    uid,
-    getCurrentProjectId:getCurrentProjectScopeId,
-    showToast,
-    enterActivityForm(){ setInternalFormMode(true); workspaceSubpage='activityForm'; showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); },
-    leaveActivityForm(){ setInternalFormMode(false); document.getElementById('activityFormPage')?.classList.add('hidden'); workspaceSubpage='activities'; showOnlyWorkspacePage('projectActivitiesPage'); renderProjectActivitiesPage(); updateWorkspaceContextBar(); },
-    pushWorkspaceHistory,
-    renderActivities(projectId){ window.KarhaApp?.modules?.get('activities')?.render(projectId); },
-    persistActivities(projectId){
-      const project=findProject(projectId);
-      const stored=window.KarhaApp?.projectRepository?.find(projectId);
-      if(project && stored) project.activityTemplates=Array.isArray(stored.activityTemplates)?stored.activityTemplates:[];
-      if(project) markDirty(project.id);
-      persist({ local:false });
-    }
-  }),
-  contactFormRuntime: Object.freeze({
-    uid,
-    getCurrentProject,
-    getActivities(projectId){ const project=findProject(projectId); return project ? getActivityTemplates(project) : []; },
-    openNumpadGeneric,
-    setInternalFormMode,
-    showIncompleteFormExitChoice,
-    showToast,
-    markDirty,
-    renderContacts(projectId){ window.KarhaApp?.modules?.get('people')?.render(projectId); },
-    closeContactsToSettings(){ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); },
-    persistContacts(projectId){
-      const project=findProject(projectId);
-      const stored=window.KarhaApp?.projectRepository?.find(projectId);
-      if(project && stored) project.contacts=Array.isArray(stored.contacts)?stored.contacts:[];
-      if(project) markDirty(project.id);
-      persist({ local:false });
-    }
-  })
+  activityFormRuntime: __formRTs.activityFormRuntime || null,
+  contactFormRuntime: __formRTs.contactFormRuntime || null
 });
 }
+
