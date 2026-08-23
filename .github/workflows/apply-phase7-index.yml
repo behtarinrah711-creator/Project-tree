@@ -1,3 +1,4 @@
+# trigger exact phase7 index restore
 name: Apply exact Phase 7 index
 
 on:
