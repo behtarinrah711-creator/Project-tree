@@ -49,6 +49,8 @@ import { installWorkspaceHistory } from '../core/workspaceHistory.js';
 import { installExportNotesStore } from '../modules/export/exportNotesStore.js';
 import { installExportView } from '../modules/export/exportView.js';
 import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
+import { installFirebaseRuntime } from '../firebase/firebaseRuntime.js';
+import { createCloudRuntime } from '../cloud/cloudRuntime.js';
 
 /** Start the modular API, then the classic legacy runtime, then routing. */
 export async function startApplication({
@@ -102,11 +104,13 @@ export async function startApplication({
     getContactFormRuntime,
     showToast: uiShowToast,
     shellSurface: Object.freeze({ showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS }),
+    createCloudRuntime,
   });
   windowRef.KarhaApp = application;
 
   // D1: AppDataStore must exist before classic loadData() runs.
   installAppDataStore({ windowRef, schemaVersion: 8 });
+  installFirebaseRuntime({windowRef});
   installHtmlEscape({ windowRef });
   await loadLegacy();
   // Attach after install so KarhaApp holds the live store reference.

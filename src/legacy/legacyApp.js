@@ -45,24 +45,8 @@ const APP_FORM_ARCHITECTURE = Object.freeze({
   exitChoices: ['بله','خیر']
 });
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBbRk4MsdHtj-gWnjbJExvQgW0sY6Z4uK8",
-  authDomain: "tree-d92af.firebaseapp.com",
-  projectId: "tree-d92af",
-  storageBucket: "tree-d92af.firebasestorage.app",
-  messagingSenderId: "401523332370",
-  appId: "1:401523332370:web:3a524a2b86b967ca4d8fcb"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-db.enablePersistence({ synchronizeTabs: true }).catch((err)=>{
-  console.warn('Offline persistence not enabled:', err.code);
-});
-
 // legacy script anonymous
 const STORAGE_KEY = 'gtasks-clone-v2';
-const TASK_RECOVERY_KEY = 'gtasks-task-recovery-v1';
 // Data architecture v3: project metadata is kept in the project document;
 // operational records (tasks, purchases, estimates, reports) have stable IDs
 // and are designed to live independently from the project document.
@@ -84,30 +68,8 @@ function makeSub(text){ return {id:uid(), text, done:false, starred:false, cost:
 function makeProject(name){ return {id:uid(), name, type:'project', tasks:[], contacts:[], activityTemplates:[], contractTemplates:[], contracts:[], contractStatusReports:[], completedOpen:false, archived:false, trashed:false, schemaVersion:DATA_SCHEMA_VERSION}; }
 
 
-// آخرین نسخهٔ سالم دستورکارهای هر پروژه را محلی نگه می‌داریم تا یک Snapshot
-// ناقص/خالی Firestore نتواند سابقهٔ دستورکارها را برای همیشه از بین ببرد.
-function readTaskRecoveryCache(){
-  try{ return JSON.parse(localStorage.getItem(TASK_RECOVERY_KEY) || '{}'); }catch(e){ return {}; }
-}
-function writeTaskRecoveryCache(cache){
-  try{ localStorage.setItem(TASK_RECOVERY_KEY, JSON.stringify(cache)); }catch(e){}
-}
-function rememberProjectTasks(p){
-  if(!p || !p.id || !Array.isArray(p.tasks) || !p.tasks.length) return;
-  const cache=readTaskRecoveryCache();
-  cache[p.id]={name:p.name||'', tasks:p.tasks.map(normalizeTaskRecord), savedAt:Date.now()};
-  // محدود نگه داشتن کش: حداکثر 100 پروژه.
-  const keys=Object.keys(cache).sort((a,b)=>(cache[b].savedAt||0)-(cache[a].savedAt||0));
-  keys.slice(100).forEach(k=>delete cache[k]);
-  writeTaskRecoveryCache(cache);
-}
-function getRecoveredLocalTasks(p){
-  if(!p || !p.id) return [];
-  const cache=readTaskRecoveryCache();
-  const rec=cache[p.id];
-  if(!rec || !Array.isArray(rec.tasks)) return [];
-  return rec.tasks.map(normalizeTaskRecord);
-}
+function rememberProjectTasks(p){ return cloudRuntime.cache.remember(p); }
+function getRecoveredLocalTasks(p){ return cloudRuntime.cache.recover(p); }
 
 function normalizeProjectScopedData(p){
   if(!p) return;
@@ -210,7 +172,7 @@ function markDirty(pid){ window.KarhaAppData.markProjectDirty(pid); }
 const persistStoreSnapshot = window.KarhaApp.createPersistOrchestrator({
   appDataStore: window.KarhaAppData,
   rememberProjectTasks,
-  isCloudEnabled: ()=>cloudMode && !!currentUser,
+  isCloudEnabled: ()=>isCloudMode() && !!getCurrentUser(),
   findProject,
   syncProject: project=>cloudSyncProjectFull(project),
   onLocalError: ()=>showToast('ذخیره‌سازی با خطا مواجه شد'),
@@ -335,7 +297,7 @@ function normalizeEmail(email){
   return String(email || '').trim().toLowerCase();
 }
 function isFloatingConfirmUser(){
-  return !!(currentUser && currentUser.email && FLOATING_CONFIRM_WHITELIST.includes(normalizeEmail(currentUser.email)));
+  return !!(getCurrentUser() && getCurrentUser().email && FLOATING_CONFIRM_WHITELIST.includes(normalizeEmail(getCurrentUser().email)));
 }
 
 function removeFromStarredOrder(pid, tid){
@@ -385,22 +347,8 @@ function addProject(name){
   const created=window.KarhaApp?.projectApi?.create?.({name:name.trim()});
   if(!created?.ok) return;
   const p=findProject(created.project.id) || created.project;
-  if(cloudMode && currentUser){
-    const ref = db.collection('projects').doc(p.id);
-    p.ownerUid = currentUser.uid;
-    p.ownerEmail = normalizeEmail(currentUser.email);
-    p.sharedWith = [];
-    window.KarhaAppData.markCloudWritePending(p.id);
-    ref.set({ name:p.name, type:'project', completedOpen:false, ownerUid:currentUser.uid, ownerEmail:p.ownerEmail, sharedWith:[], contacts:p.contacts||[], activityTemplates:p.activityTemplates||[], contractTemplates:p.contractTemplates||[], contracts:p.contracts||[], contractStatusReports:p.contractStatusReports||[], schemaVersion:DATA_SCHEMA_VERSION })
-      .then(()=>writeTaskRecordsNormalized(p.id, p.tasks))
-      .then(()=>window.KarhaAppData.clearCloudWritePending(p.id))
-      .catch(err=>{
-        window.KarhaAppData.clearCloudWritePending(p.id);
-        console.warn('project creation sync failed', p.id, err);
-        // پروژه در UI/local باقی می‌ماند؛ persist بعدی آن را دوباره sync می‌کند.
-        markDirty(p.id);
-        persist();
-      });
+  if(isCloudMode() && getCurrentUser()){
+    cloudRuntime.createProject(p);
   }
   if(!findProject(p.id) && Array.isArray(data.projects)) data.projects.push(p);
   setActiveProject(p.id,{updateRoute:true,render:true,moduleId:'dashboard'});
@@ -422,7 +370,7 @@ function getProjectIdFromRoute(){
 function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dashboard',closeDrawerOnSelect=false}={}){
   const p=findProject(projectId);
   if(!p || p.trashed || p.archived) return false;
-  if(!currentUser && p.ownerUid) return false;
+  if(!getCurrentUser() && p.ownerUid) return false;
   if(updateRoute){
     return !!window.KarhaApp?.projectWorkspace?.selectProject?.(p.id,{
       moduleId, closeDrawer:closeDrawerOnSelect,
@@ -452,9 +400,9 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
  *  Owned projects reappear only after the matching Google account signs in. */
 function projectsVisibleForAuth(list){
   const all = Array.isArray(list) ? list : [];
-  if(!currentUser) return all.filter(p => p && !p.ownerUid);
+  if(!getCurrentUser()) return all.filter(p => p && !p.ownerUid);
   // Phase 5: cloud visibility is owner-only (no sharedWith collaborator view).
-  return all.filter(p => p && (!p.ownerUid || p.ownerUid === currentUser.uid));
+  return all.filter(p => p && (!p.ownerUid || p.ownerUid === getCurrentUser().uid));
 }
 
 function renderDrawerProjectList(){
@@ -497,508 +445,59 @@ function deleteProject(pid){
   softDelete('project', pid, null, null, 'پروژه حذف شد');
 }
 
-/* ---------- cloud sync (Firebase) ---------- */
-let cloudMode = false;
-let currentUser = null;
-let cloudUnsubOwned = null;
-let migratedGuestData = false;
-
-function cloudDeleteProject(p){
-  if(!cloudMode || !p || !p.ownerUid) return;
-  db.collection('projects').doc(p.id).delete().catch(()=>{});
-}
-
-function cloudRenameProject(p){
-  if(!cloudMode || !p || !p.ownerUid) return;
-  db.collection('projects').doc(p.id).update({ name: p.name }).catch(()=>{});
-}
-
-function normalizeTaskRecord(task){
-  const normalizeChild=(child)=>({
-    ...child,
-    completedAt: child.completedAt===undefined ? (child.done ? 0 : null) : child.completedAt,
-    activities: Array.isArray(child.activities) ? [...new Set(child.activities.filter(Boolean))] : [],
-    subtasks: Array.isArray(child.subtasks) ? child.subtasks.map(normalizeChild) : []
-  });
-  return {
-    ...task,
-    completedAt: task.completedAt===undefined ? (task.done ? 0 : null) : task.completedAt,
-    activities: Array.isArray(task.activities) ? [...new Set(task.activities.filter(Boolean))] : [],
-    subtasks: Array.isArray(task.subtasks) ? task.subtasks.map(normalizeChild) : []
-  };
-}
-
-function docToProject(doc, localExisting){
-  const fn = window.KarhaApp?.docToProjectFromCloud;
-  if(typeof fn === 'function'){
-    return fn(doc, localExisting, {
-      normalizeTaskRecord,
-      getRecoveredLocalTasks,
-      appDataStore: window.KarhaAppData,
-      normalizeEmail,
-      mergePolicy: window.KarhaApp?.mergePolicy,
-    });
-  }
-  // fallback should not run once KarhaApp is ready
-  return { id: doc.id, name: (doc.data()||{}).name, type:'project', tasks:[], contacts:[], activityTemplates:[], contractTemplates:[], contracts:[], expanded:true };
-}
-
-/**
- * Normalized data layer. The visible UI intentionally remains unchanged.
- * Tasks are independent Firestore documents, while subtasks remain embedded
- * in their task document for backward compatibility with the existing UI.
- */
-function taskCollection(pid){ return db.collection('projects').doc(pid).collection(FIRESTORE_TASKS_SUBCOLLECTION); }
-function purchaseCollection(pid){ return db.collection('projects').doc(pid).collection(FIRESTORE_PURCHASES_SUBCOLLECTION); }
-function estimateCollection(pid){ return db.collection('projects').doc(pid).collection(FIRESTORE_ESTIMATES_SUBCOLLECTION); }
-function taskReportCollection(pid){ return db.collection('projects').doc(pid).collection(FIRESTORE_TASK_REPORTS_SUBCOLLECTION); }
-
-const cloudTaskUnsubs = {};
-function stopCloudTaskListener(pid){
-  if(cloudTaskUnsubs[pid]){ try{ cloudTaskUnsubs[pid](); }catch(e){} delete cloudTaskUnsubs[pid]; }
-}
-function startCloudTaskListener(p){
-  if(!cloudMode || !p || !p.ownerUid || cloudTaskUnsubs[p.id]) return;
-  const attach = window.KarhaApp?.attachCloudTaskListener;
-  const ctx = {
-    cloudMode, db, findProject, normalizeTaskRecord, getRecoveredLocalTasks,
-    rememberProjectTasks, appDataStore: window.KarhaAppData,
-    DATA_SCHEMA_VERSION, taskCollection,
-    persistLocalFromCloud(){
-      try{
-        if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
-          data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
-        } else {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        }
-      }catch(e){}
-    },
-    onTaskUiRefresh(projectId){
-      if(String(getActiveTab()) === String(projectId) && ['dashboard','tasks'].includes(window.KarhaRoute?.moduleId)) renderAll();
-      else refreshCurrentFooterPage();
-    },
-  };
-  if(typeof attach === 'function'){
-    const unsub = attach(ctx, p);
-    if(unsub) cloudTaskUnsubs[p.id] = unsub;
-    return;
-  }
-}
-
-async function recoverLegacyTasksForProject(p, projectDocData){
-  const recovered = [];
-  const seen = new Set();
-  const add = (task, source) => {
-    if(!task) return;
-    const t = normalizeTaskRecord(task);
-    const id = String(t.id || '');
-    if(!id || seen.has(id)) return;
-    seen.add(id);
-    recovered.push(t);
-  };
-
-  // 1) The current project document's old embedded tasks.
-  if(projectDocData && Array.isArray(projectDocData.tasks)){
-    projectDocData.tasks.forEach(t => add(t, 'current-legacy'));
-  }
-
-  // 2) Older project records can exist under another document id after a
-  // migration/fork. If the project name is the same, recover their embedded
-  // tasks and their normalized task subcollections. We never delete those
-  // records here; they remain untouched as a safety net.
-  try{
-    if(p.name && currentUser && currentUser.uid){
-      const sameNameSnap = await db.collection('projects')
-        .where('ownerUid','==',currentUser.uid)
-        .where('name','==',p.name)
-        .get();
-      for(const doc of sameNameSnap.docs){
-        const d = doc.data() || {};
-        if(Array.isArray(d.tasks)) d.tasks.forEach(t => add(t, 'same-name-legacy'));
-        try{
-          const ts = await db.collection('projects').doc(doc.id)
-            .collection(FIRESTORE_TASKS_SUBCOLLECTION).get();
-          ts.docs.forEach(td => add({id:td.id, ...td.data()}, 'same-name-subcollection'));
-        }catch(e){
-          console.warn('legacy task subcollection recovery skipped', doc.id, e);
-        }
-      }
-    }
-  }catch(e){
-    console.warn('same-name legacy task recovery skipped', p.id, e);
-  }
-
-  // 3) Also recover normalized records whose projectId points to this project.
-  // This is useful if the task document was moved/forked while retaining its
-  // original projectId metadata.
-  try{
-    const cg = await db.collectionGroup(FIRESTORE_TASKS_SUBCOLLECTION)
-      .where('projectId','==',p.id).get();
-    cg.docs.forEach(td => add({id:td.id, ...td.data()}, 'collection-group'));
-  }catch(e){
-    // collectionGroup may be unavailable under older Firestore rules/indexes;
-    // this recovery path is optional and must never break normal loading.
-    console.warn('collectionGroup task recovery skipped', p.id, e);
-  }
-
-  return recovered;
-}
-
-async function hydrateProjectTasksFromCloud(p, projectDocData){
-  if(!cloudMode || !p || !p.ownerUid) return false;
-  const projectId=p.id;
-  // Subscribe first. Recovery performs several optional network reads and must
-  // not delay the normal task collection from reaching the visible project.
-  startCloudTaskListener(p);
-  try{
-    const snap = await taskCollection(projectId).get();
-    const normalizedTasks = snap.docs.map(d => normalizeTaskRecord({id:d.id, ...d.data()}));
-    const legacyTasks = Array.isArray(projectDocData && projectDocData.tasks)
-      ? projectDocData.tasks.map(normalizeTaskRecord) : [];
-
-    // مهم: وجود حتی یک رکورد در مجموعه جدید به معنی کامل بودن مهاجرت نیست.
-    // علاوه بر سند فعلی و کش، رکوردهای قدیمی پروژه‌های هم‌نام و taskهای دارای
-    // projectId را هم بازیابی می‌کنیم. هیچ رکوردی صرفاً به دلیل وجود رکورد جدید
-    // حذف یا جایگزین نمی‌شود.
-    const recoveredTasks = await recoverLegacyTasksForProject(p, projectDocData);
-    // Either of the awaited reads above may overlap a metadata snapshot. Merge
-    // into the current object, not the now-detached `p` passed by the caller.
-    const current=findProject(projectId) || p;
-    const cachedTasks = Array.isArray(current.tasks)
-      ? current.tasks.map(normalizeTaskRecord) : [];
-    const recoveryTasks = getRecoveredLocalTasks(current);
-    const byId = new Map();
-    normalizedTasks.forEach(t => byId.set(String(t.id), t));
-    legacyTasks.forEach(t => { const id=String(t.id); if(!byId.has(id)) byId.set(id,t); });
-    recoveredTasks.forEach(t => { const id=String(t.id); if(!byId.has(id)) byId.set(id,t); });
-    recoveryTasks.forEach(t => { const id=String(t.id); if(!byId.has(id)) byId.set(id,t); });
-    cachedTasks.forEach(t => { const id=String(t.id); if(!byId.has(id)) byId.set(id,t); });
-
-    const mergedTasks = Array.from(byId.values());
-    const needsRepair = mergedTasks.length > normalizedTasks.length ||
-      legacyTasks.some(t => !normalizedTasks.some(n => String(n.id)===String(t.id))) ||
-      recoveredTasks.some(t => !normalizedTasks.some(n => String(n.id)===String(t.id))) ||
-      recoveryTasks.some(t => !normalizedTasks.some(n => String(n.id)===String(t.id))) ||
-      cachedTasks.some(t => !normalizedTasks.some(n => String(n.id)===String(t.id)) &&
-                            !legacyTasks.some(l => String(l.id)===String(t.id)));
-
-    if(mergedTasks.length){
-      current.tasks = mergedTasks;
-      rememberProjectTasks(current);
-      current.schemaVersion = DATA_SCHEMA_VERSION;
-      try{
-      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
-        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      }
-    }catch(e){}
-
-      if(needsRepair || Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-        window.KarhaAppData.markCloudWritePending(projectId);
-        try{
-          // رکوردهای موجود حفظ می‌شوند و رکوردهای گمشده دوباره در مجموعه مستقل نوشته می‌شوند.
-          await writeTaskRecordsNormalized(projectId, mergedTasks);
-          const verify = await taskCollection(projectId).get();
-          const verifiedIds = new Set(verify.docs.map(d => d.id));
-          if(mergedTasks.some(t => !verifiedIds.has(String(t.id)))){
-            throw new Error('task repair verification failed');
-          }
-          // کپی قدیمی داخل سند پروژه عمداً حذف نمی‌شود. این کپی تا زمانی که
-          // پایداری داده‌ها در نسخه‌های بعدی ثابت شود، به‌عنوان recovery backup
-          // باقی می‌ماند و هرگز نباید به خاطر یک Snapshot ناقص از بین برود.
-          if(Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-            await db.collection('projects').doc(projectId).update({schemaVersion:DATA_SCHEMA_VERSION});
-          }
-        } finally {
-          window.KarhaAppData.clearCloudWritePending(projectId);
-        }
-      }
-      startCloudTaskListener(current);
-      return true;
-    }
-
-    // پروژه واقعاً بدون دستورکار است.
-    if(Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-      window.KarhaAppData.markCloudWritePending(projectId);
-      try{
-        await db.collection('projects').doc(projectId).update({
-          tasks: firebase.firestore.FieldValue.delete(),
-          schemaVersion: DATA_SCHEMA_VERSION
-        });
-      } finally { window.KarhaAppData.clearCloudWritePending(projectId); }
-    }
-    current.tasks = [];
-    current.schemaVersion = DATA_SCHEMA_VERSION;
-    startCloudTaskListener(current);
-    return true;
-  }catch(err){
-    // در هیچ خطایی آرایه دستورکارهای موجود را با [] جایگزین نکن.
-    console.warn('task hydration/repair failed; keeping cached tasks:', projectId, err);
-    const current=findProject(projectId) || p;
-    if(!Array.isArray(current.tasks)) current.tasks = [];
-    return false;
-  }
-}
-
-async function writeTaskRecordsNormalized(pid, tasks){
-  const fn = window.KarhaApp?.writeTaskRecordsNormalized;
-  if(typeof fn === 'function'){
-    return fn({
-      cloudMode, currentUser, db, taskCollection, normalizeTaskRecord, DATA_SCHEMA_VERSION,
-    }, pid, tasks);
-  }
-}
-
-function cloudSyncTaskDomain(p){
-  if(!cloudMode || !currentUser || !p || !p.ownerUid) return;
-  writeTaskRecordsNormalized(p.id, p.tasks).catch(err=>{
-    console.warn('task domain sync failed; UI remains available', p.id, err);
-    if(isRetryableCloudError(err)){
-      markDirty(p.id);
-      scheduleProjectStatusRetry();
-      persist();
-    }
-  });
-}
-
-
-// ---------- project status sync owned by src/sync/projectStatusSync.js ----------
-function readProjectStatusQueue(){
-  return window.KarhaApp?.readProjectStatusQueue?.() || {};
-}
-function writeProjectStatusQueue(q){
-  return window.KarhaApp?.writeProjectStatusQueue?.(q);
-}
-function queueProjectStatus(p){
-  return window.KarhaApp?.queueProjectStatus?.(p);
-}
-function dequeueProjectStatus(pid){
-  return window.KarhaApp?.dequeueProjectStatus?.(pid);
-}
-function isPermissionError(err){
-  const code = String(err && err.code || '').toLowerCase();
-  return code === 'permission-denied' || code.indexOf('permission') !== -1;
-}
-function isRetryableCloudError(err){
-  if(!err) return true;
-  if(isPermissionError(err)) return false;
-  const code = String(err.code || '').toLowerCase();
-  return [
-    'unavailable','deadline-exceeded','aborted','failed-precondition',
-    'resource-exhausted','internal','unknown'
-  ].includes(code) || !code;
-}
-
-async function writeProjectStatusVerified(p){
-  const fn = window.KarhaApp?.writeProjectStatusVerified;
-  if(typeof fn === 'function'){
-    return fn(cloudSyncCtx(), p);
-  }
-  return {ok:false, skipped:true};
-}
-async function flushProjectStatusQueue(){
-  const fn = window.KarhaApp?.flushProjectStatusQueue;
-  if(typeof fn === 'function') return fn(cloudSyncCtx());
-}
-function scheduleProjectStatusRetry(){
-  const fn = window.KarhaApp?.scheduleProjectStatusRetry;
-  if(typeof fn === 'function') return fn(cloudSyncCtx());
-}
-async function cloudSyncProjectStatus(p){
-  const fn = window.KarhaApp?.cloudSyncProjectStatus;
-  if(typeof fn === 'function') return fn(cloudSyncCtx(), p);
-  return false;
-}
-function cloudSyncCtx(){
-  return {
-    cloudMode, currentUser, db, DATA_SCHEMA_VERSION, firebase,
-    findProject, isPermissionError, isRetryableCloudError,
-  };
-}
-
-function cloudSyncProjectFull(p){
-  const fn = window.KarhaApp?.cloudSyncProjectFull;
-  if(typeof fn === 'function'){
-    return fn({
-      cloudMode, currentUser, db, appDataStore: window.KarhaAppData, normalizeEmail, DATA_SCHEMA_VERSION,
-      normalizeProjectScopedData, mergePolicy: window.KarhaApp?.mergePolicy,
-      projectRepositoryFind: (id)=> window.KarhaApp?.projectRepository?.find?.(id),
-      getRecoveredLocalTasks, normalizeTaskRecord, rememberProjectTasks,
-      writeTaskRecordsNormalized, isRetryableCloudError, markDirty, persist,
-    }, p);
-  }
-}
-
-/* D5: metadata orchestration is extracted; this is a thin runtime dependency bridge. */
-function mergeCloudSnapshots(ownedDocs, sharedDocs){
-  const apply = window.KarhaApp?.applyOwnedCloudProjects;
-  if(typeof apply !== 'function') return;
-  return apply({
-    appDataStore: window.KarhaAppData,
-    ownedDocs: ownedDocs || [],
-    currentUser,
-    docToProject,
-  });
-}
-
-async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
-  const docs = [...(ownedDocs||[]), ...(sharedDocs||[])];
-  const seen = new Set();
-  const hydrations=[];
-  for(const doc of docs){
-    if(seen.has(doc.id)) continue;
-    seen.add(doc.id);
-    const p = findProject(doc.id);
-    if(!p) continue;
-    const before = p.tasks.length;
-    hydrations.push(hydrateProjectTasksFromCloud(p, doc.data()).then(hydrated=>{
-      const current=findProject(doc.id);
-      if(hydrated && current && (current.tasks.length !== before || current.schemaVersion !== DATA_SCHEMA_VERSION)){
-        try{
-      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
-        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      }
-    }catch(e){}
-        if(String(getActiveTab()) === String(doc.id) && ['dashboard','tasks'].includes(window.KarhaRoute?.moduleId)) renderAll();
-        else refreshCurrentFooterPage();
-      }
-    }));
-  }
-  await Promise.allSettled(hydrations);
-}
-
-function startCloudListeners(){
-  stopCloudListeners();
-  const createHandler = window.KarhaApp?.createOwnedSnapshotHandler;
-  const onSnap = typeof createHandler === 'function'
-    ? createHandler({
-        appDataStore: window.KarhaAppData,
-        getCurrentUser: ()=>currentUser,
-        docToProject,
-        hydrateProjects: docs=>hydrateAllCloudProjects(docs, []),
-        persistLocal: ()=>window.KarhaAppData.persistLocal(),
-      })
-    : docs=>{ mergeCloudSnapshots(docs, []); hydrateAllCloudProjects(docs, []); };
-  const onErr = err => { console.error('owned listener', err); showToast('خطا در دریافت پروژه‌های خودتان'); };
-  // Phase 6.4: ownership in src/sync/cloudListeners — behavior unchanged (owned-only).
-  if(window.KarhaApp?.startOwnedCloudListeners){
-    window.KarhaApp.startOwnedCloudListeners({
-      db,
-      uid: currentUser.uid,
-      onOwnedSnapshot: onSnap,
-      onError: onErr,
-    });
-    cloudUnsubOwned = null;
-    return;
-  }
-  cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
-    .onSnapshot(snap => onSnap(snap.docs, []), onErr);
-}
-
-function stopCloudListeners(){
-  if(window.KarhaApp?.stopOwnedCloudListeners){
-    window.KarhaApp.stopOwnedCloudListeners();
-  }
-  if(cloudUnsubOwned) cloudUnsubOwned();
-  cloudUnsubOwned = null;
-  Object.keys(cloudTaskUnsubs).forEach(stopCloudTaskListener);
-}
-
-async function migrateGuestDataToCloud(){
-  if(migratedGuestData) return;
-  migratedGuestData = true;
-  const guestProjects = (data && data.projects) ? data.projects.filter(p=>!p.ownerUid && !p.trashed) : [];
-  for(const p of guestProjects){
-    // همان شناسهٔ محلی را نگه می‌داریم تا پروژهٔ مهمان بعد از ورود دوباره ساخته/دوبرابر نشود.
-    p.type = 'project';
-    p.ownerUid = currentUser.uid;
-    p.ownerEmail = normalizeEmail(currentUser.email);
-    p.sharedWith = [];
-    const ref = db.collection('projects').doc(p.id);
-    // تا وقتی Snapshot سرور وجود پروژه را تأیید نکرده، آن را pending نگه می‌داریم
-    // تا Snapshot خالیِ اولیه باعث ناپدید شدن پروژه از «مدیریت پروژه‌ها» نشود.
-    window.KarhaAppData.markCloudWritePending(p.id);
-    try{
-      await ref.set({
-        name: p.name, type:'project', completedOpen: !!p.completedOpen,
-        ownerUid: currentUser.uid, ownerEmail: normalizeEmail(currentUser.email), sharedWith: [],
-        contacts: p.contacts||[], activityTemplates: p.activityTemplates||[],
-        trashed: !!p.trashed, archived: !!p.archived, schemaVersion:DATA_SCHEMA_VERSION
-      }, {merge:true});
-      await writeTaskRecordsNormalized(p.id, p.tasks);
-    }catch(err){
-      console.warn('guest project migration failed; local copy retained:', p.id, err);
-      // pending را نگه می‌داریم تا Snapshot بعدی پروژه محلی را حذف نکند.
-      // در ورود/اتصال بعدی migrateGuestDataToCloud دوباره تلاش خواهد کرد.
-      continue;
-    }
-    window.KarhaAppData.clearCloudWritePending(p.id);
-  }
-  try{
-      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){
-        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      }
-    }catch(e){}
-}
-
-function updateAccountUI(){
-  const nameEl = document.getElementById('drawerAccountName');
-  const subEl = document.getElementById('drawerAccountSub');
-  const signBtn = document.getElementById('drawerSigninBtn');
-  const headerImg = document.getElementById('avatarImg');
-  const headerIcon = document.getElementById('avatarDefaultIcon');
-  const drawerImg = document.getElementById('drawerAvatarImg');
-  const drawerIcon = document.getElementById('drawerAvatarDefaultIcon');
-
-  if(currentUser){
-    nameEl.textContent = currentUser.displayName || 'کاربر گوگل';
-    subEl.textContent = currentUser.email || '';
-    signBtn.textContent = 'خروج از حساب';
-    if(currentUser.photoURL){
-      headerImg.src = currentUser.photoURL; headerImg.style.display='block'; headerIcon.style.display='none';
-      drawerImg.src = currentUser.photoURL; drawerImg.style.display='block'; drawerIcon.style.display='none';
-    }
-  } else {
-    nameEl.textContent = 'مهمان';
-    subEl.textContent = 'وارد نشده‌اید';
-    signBtn.textContent = 'ورود با گوگل';
-    headerImg.style.display='none'; headerIcon.style.display='flex';
-    drawerImg.style.display='none'; drawerIcon.style.display='flex';
-  }
-}
-
-auth.onAuthStateChanged(async (user)=>{
-  currentUser = user;
-  cloudMode = !!user;
-  updateAccountUI();
-  if(user){
-    await migrateGuestDataToCloud();
-    startCloudListeners();
-  } else {
-    stopCloudListeners();
-    loadData();
-    // Guest must not keep a cloud-owned project selected/visible.
-    const active = data && getActiveTab() && getActiveTab() !== 'starred' /* legacy guard */
-      ? (data.projects||[]).find(p => String(p.id)===String(getActiveTab()))
-      : null;
-    if(active && active.ownerUid){
-      setActiveTab(null);
-      try{ window.KarhaApp?.projectContext?.setProjectId?.(null); }catch(e){}
-    }
-    renderDrawerProjectList();
-    renderAll();
-  }
+/* ---------- cloud sync (Firebase): L5 modular ownership ---------- */
+const firebaseRuntime=window.KarhaFirebaseRuntime;
+const cloudRuntime=window.KarhaApp.createCloudRuntime({
+  windowRef:window,documentRef:document,firebase:firebaseRuntime.firebase,auth:firebaseRuntime.auth,db:firebaseRuntime.db,
+  app:window.KarhaApp,store:window.KarhaAppData,schemaVersion:DATA_SCHEMA_VERSION,findProject,
+  getProjects:()=>data?.projects||[],normalizeEmail,
+  persistLocalFromCloud(){
+    try{(data?.projects||[]).forEach(project=>project?.id&&window.KarhaApp.applyCloudSnapshot(project));}catch(e){}
+  },
+  onTaskUiRefresh(projectId){
+    if(String(getActiveTab())===String(projectId)&&['dashboard','tasks'].includes(window.KarhaRoute?.moduleId))renderAll();
+    else refreshCurrentFooterPage();
+  },
+  onHydrated(projectId){
+    if(String(getActiveTab())===String(projectId)&&['dashboard','tasks'].includes(window.KarhaRoute?.moduleId))renderAll();
+    else refreshCurrentFooterPage();
+  },
+  onCloudError(error){console.error('owned listener',error);showToast('خطا در دریافت پروژه‌های خودتان');},
+  onGuest(){
+    loadData();const active=getActiveTab()?(data.projects||[]).find(project=>String(project.id)===String(getActiveTab())):null;
+    if(active?.ownerUid){setActiveTab(null);try{window.KarhaApp?.projectContext?.setProjectId?.(null);}catch(e){}}
+    renderDrawerProjectList();renderAll();
+  },
+  flushStatus:()=>flushProjectStatusQueue(),
+  onWriteFailure(project){markDirty(project.id);persist();},
+  syncContext(session,{db,cache,writeTasks}){return {cloudMode:session.cloudMode,currentUser:session.currentUser,db,
+    appDataStore:window.KarhaAppData,normalizeEmail,DATA_SCHEMA_VERSION,normalizeProjectScopedData,
+    mergePolicy:window.KarhaApp?.mergePolicy,projectRepositoryFind:id=>window.KarhaApp?.projectRepository?.find?.(id),
+    getRecoveredLocalTasks:cache.recover,normalizeTaskRecord:cloudRuntime.normalizeTaskRecord,
+    rememberProjectTasks:cache.remember,writeTaskRecordsNormalized:writeTasks,isRetryableCloudError,markDirty,persist};}
 });
-
-window.addEventListener('online', ()=>{
-  if(cloudMode) flushProjectStatusQueue();
-});
-
+function getCurrentUser(){return cloudRuntime.getSession().currentUser;}
+function isCloudMode(){return cloudRuntime.getSession().cloudMode;}
+function cloudDeleteProject(p){return cloudRuntime.lifecycle.remove(p);}
+function cloudRenameProject(p){return cloudRuntime.lifecycle.rename(p);}
+function normalizeTaskRecord(task){return cloudRuntime.normalizeTaskRecord(task);}
+function taskCollection(pid){return cloudRuntime.collections.tasks(pid);}
+function purchaseCollection(pid){return cloudRuntime.collections.purchases(pid);}
+function estimateCollection(pid){return cloudRuntime.collections.estimates(pid);}
+function taskReportCollection(pid){return cloudRuntime.collections.taskReports(pid);}
+function stopCloudTaskListener(pid){return cloudRuntime.taskListeners.stop(pid);}
+function startCloudTaskListener(p){return cloudRuntime.taskListeners.start(p);}
+function hydrateProjectTasksFromCloud(p,d){return cloudRuntime.hydrateProject(p,d);}
+function writeTaskRecordsNormalized(pid,tasks){return cloudRuntime.writeTasks(pid,tasks);}
+function cloudSyncTaskDomain(p){return cloudRuntime.cloudSyncTask(p).catch(error=>console.warn('task domain sync failed; UI remains available',p.id,error));}
+function isPermissionError(err){const code=String(err?.code||'').toLowerCase();return code==='permission-denied'||code.includes('permission');}
+function isRetryableCloudError(err){if(!err)return true;if(isPermissionError(err))return false;return ['unavailable','deadline-exceeded','aborted','failed-precondition','resource-exhausted','internal','unknown'].includes(String(err.code||'').toLowerCase())||!err.code;}
+function cloudSyncCtx(){const session=cloudRuntime.getSession();return {cloudMode:session.cloudMode,currentUser:session.currentUser,db:firebaseRuntime.db,DATA_SCHEMA_VERSION,firebase:firebaseRuntime.firebase,findProject,isPermissionError,isRetryableCloudError};}
+function flushProjectStatusQueue(){return window.KarhaApp?.flushProjectStatusQueue?.(cloudSyncCtx());}
+function scheduleProjectStatusRetry(){return window.KarhaApp?.scheduleProjectStatusRetry?.(cloudSyncCtx());}
+function cloudSyncProjectStatus(p){return window.KarhaApp?.cloudSyncProjectStatus?.(cloudSyncCtx(),p);}
+function cloudSyncProjectFull(p){return cloudRuntime.cloudSyncProject(p);}
+function docToProject(doc,localExisting){return window.KarhaApp.docToProjectFromCloud(doc,localExisting,{normalizeTaskRecord,getRecoveredLocalTasks,appDataStore:window.KarhaAppData,normalizeEmail,mergePolicy:window.KarhaApp.mergePolicy});}
 
 /* ---------- dependency guard for contacts / activities ---------- */
 /*
@@ -2379,38 +1878,11 @@ async function permanentlyDeleteProject(p){
     hideUndoToast();
   }
 
-  // Remove the project and all project-scoped normalized records from Firebase.
-  // Firestore does NOT delete subcollections when their parent document is deleted,
-  // so the child records must be removed explicitly.
-  if(cloudMode && currentUser && p.ownerUid){
-    try{
-      const refs=[];
-      const collections=[
-        taskCollection(p.id),
-        purchaseCollection(p.id),
-        estimateCollection(p.id),
-        taskReportCollection(p.id)
-      ];
-      for(const col of collections){
-        const snap=await col.get();
-        snap.docs.forEach(d=>refs.push(d.ref));
-      }
-
-      // Firestore batches are limited to 500 operations.
-      for(let i=0;i<refs.length;i+=450){
-        const batch=db.batch();
-        refs.slice(i,i+450).forEach(ref=>batch.delete(ref));
-        await batch.commit();
-      }
-      await db.collection('projects').doc(p.id).delete();
-    }catch(e){
+  try{await cloudRuntime.lifecycle.permanentlyDelete(p);}catch(e){
       console.warn('permanent project delete failed',e);
       showToast('حذف همیشگی پروژه روی سرور انجام نشد');
       return false;
-    }
   }
-
-  stopCloudTaskListener(p.id);
   data.projects=data.projects.filter(x=>x.id!==p.id);
   if(getActiveTab()===p.id){
     const next=data.projects.find(x=>!x.trashed&&!x.archived) || data.projects.find(x=>!x.trashed) || data.projects.find(x=>!x.archived);
