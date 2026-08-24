@@ -1,3 +1,5 @@
+import { isDirty, isPending } from './storeSyncState.js';
+
 /**
  * Phase 7.2 — project metadata doc → local project shape.
  * Behavior: mergePolicy anti-empty + projectDirty metadata; tasks cached until hydrate.
@@ -7,8 +9,6 @@ export function docToProjectFromCloud(doc, localExisting, ctx = {}){
   const d = doc.data?.() || doc.data || {};
   const normalizeTaskRecord = ctx.normalizeTaskRecord || (t => t);
   const getRecoveredLocalTasks = ctx.getRecoveredLocalTasks || (() => []);
-  const dirtyProjectIds = ctx.dirtyProjectIds || new Set();
-  const pendingCloudWrites = ctx.pendingCloudWrites || new Set();
   const normalizeEmail = ctx.normalizeEmail || (e => String(e || '').trim().toLowerCase());
   const policy = ctx.mergePolicy || (typeof window !== 'undefined' ? window.KarhaApp?.mergePolicy : null);
 
@@ -27,7 +27,7 @@ export function docToProjectFromCloud(doc, localExisting, ctx = {}){
   const localContractTemplates = localExisting && Array.isArray(localExisting.contractTemplates) ? localExisting.contractTemplates : [];
   const localContracts = localExisting && Array.isArray(localExisting.contracts) ? localExisting.contracts : [];
 
-  const projectDirty = !!(dirtyProjectIds.has(doc.id) || pendingCloudWrites.has(doc.id));
+  const projectDirty = !!(isDirty(ctx.appDataStore, doc.id) || isPending(ctx.appDataStore, doc.id));
   const mergeCol = (localArr, cloudArr, fieldPresent) => {
     if(!policy?.mergeCollection){
       if(!fieldPresent) return localArr;

@@ -77,7 +77,6 @@ const FIRESTORE_PURCHASES_SUBCOLLECTION = 'purchases';
 const FIRESTORE_ESTIMATES_SUBCOLLECTION = 'estimates';
 const FIRESTORE_TASK_REPORTS_SUBCOLLECTION = 'taskReports';
 let data = null;
-let saveTimer = null;
 
 function uid(){ return 'i' + Math.random().toString(36).slice(2,10); }
 function makeTask(text){ return {id:uid(), text, done:false, starred:false, cost:null, activities:[], subtasks:[], completedAt:null}; }
@@ -205,40 +204,18 @@ function loadData(){
   persist();
 }
 
-// D4: KarhaAppData owns both runtime synchronization guards. These stable Set
-// references keep the extracted sync contexts compatible without a second
-// container that could diverge from the canonical state.
-const dirtyProjectIds = window.KarhaAppData.getDirtyProjectIds();
+// D5: extracted sync receives the Store, never loose Set/context copies.
 function markDirty(pid){ window.KarhaAppData.markProjectDirty(pid); }
-const pendingCloudWrites = window.KarhaAppData.getPendingCloudWrites();
 
-function persist(options){
-  const writeLocal = !options || options.local !== false;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(()=>{
-    if(writeLocal){
-      (data.projects||[]).forEach(rememberProjectTasks);
-      // D1: persist canonical store snapshot (data is that reference when KarhaAppData is installed).
-      const snap = (window.KarhaAppData && typeof window.KarhaAppData.getSnapshot === 'function')
-        ? window.KarhaAppData.getSnapshot()
-        : data;
-      try{
-        if(window.KarhaAppData && typeof window.KarhaAppData.persistLocal === 'function' && snap === window.KarhaAppData.getSnapshot()){
-          if(!window.KarhaAppData.persistLocal()) showToast('ذخیره‌سازی با خطا مواجه شد');
-        } else {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
-        }
-      }catch(e){ showToast('ذخیره‌سازی با خطا مواجه شد'); }
-    }
-    if(cloudMode && currentUser){
-      dirtyProjectIds.forEach(pid => {
-        const p = findProject(pid);
-        if(p) cloudSyncProjectFull(p);
-      });
-    }
-    window.KarhaAppData.clearProjectDirty();
-  }, 120);
-}
+const persistStoreSnapshot = window.KarhaApp.createPersistOrchestrator({
+  appDataStore: window.KarhaAppData,
+  rememberProjectTasks,
+  isCloudEnabled: ()=>cloudMode && !!currentUser,
+  findProject,
+  syncProject: project=>cloudSyncProjectFull(project),
+  onLocalError: ()=>showToast('ذخیره‌سازی با خطا مواجه شد'),
+});
+function persist(options){ return persistStoreSnapshot(options); }
 
 /* D2: activeTab / viewMode sole owner is KarhaAppData */
 function getActiveTab(){
@@ -413,12 +390,12 @@ function addProject(name){
     p.ownerUid = currentUser.uid;
     p.ownerEmail = normalizeEmail(currentUser.email);
     p.sharedWith = [];
-    pendingCloudWrites.add(p.id);
+    window.KarhaAppData.markCloudWritePending(p.id);
     ref.set({ name:p.name, type:'project', completedOpen:false, ownerUid:currentUser.uid, ownerEmail:p.ownerEmail, sharedWith:[], contacts:p.contacts||[], activityTemplates:p.activityTemplates||[], contractTemplates:p.contractTemplates||[], contracts:p.contracts||[], contractStatusReports:p.contractStatusReports||[], schemaVersion:DATA_SCHEMA_VERSION })
       .then(()=>writeTaskRecordsNormalized(p.id, p.tasks))
-      .then(()=>pendingCloudWrites.delete(p.id))
+      .then(()=>window.KarhaAppData.clearCloudWritePending(p.id))
       .catch(err=>{
-        pendingCloudWrites.delete(p.id);
+        window.KarhaAppData.clearCloudWritePending(p.id);
         console.warn('project creation sync failed', p.id, err);
         // پروژه در UI/local باقی می‌ماند؛ persist بعدی آن را دوباره sync می‌کند.
         markDirty(p.id);
@@ -568,8 +545,7 @@ function docToProject(doc, localExisting){
     return fn(doc, localExisting, {
       normalizeTaskRecord,
       getRecoveredLocalTasks,
-      dirtyProjectIds,
-      pendingCloudWrites,
+      appDataStore: window.KarhaAppData,
       normalizeEmail,
       mergePolicy: window.KarhaApp?.mergePolicy,
     });
@@ -597,7 +573,7 @@ function startCloudTaskListener(p){
   const attach = window.KarhaApp?.attachCloudTaskListener;
   const ctx = {
     cloudMode, db, findProject, normalizeTaskRecord, getRecoveredLocalTasks,
-    rememberProjectTasks, dirtyProjectIds, pendingCloudWrites,
+    rememberProjectTasks, appDataStore: window.KarhaAppData,
     DATA_SCHEMA_VERSION, taskCollection,
     persistLocalFromCloud(){
       try{
@@ -730,7 +706,7 @@ async function hydrateProjectTasksFromCloud(p, projectDocData){
     }catch(e){}
 
       if(needsRepair || Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-        pendingCloudWrites.add(projectId);
+        window.KarhaAppData.markCloudWritePending(projectId);
         try{
           // رکوردهای موجود حفظ می‌شوند و رکوردهای گمشده دوباره در مجموعه مستقل نوشته می‌شوند.
           await writeTaskRecordsNormalized(projectId, mergedTasks);
@@ -746,7 +722,7 @@ async function hydrateProjectTasksFromCloud(p, projectDocData){
             await db.collection('projects').doc(projectId).update({schemaVersion:DATA_SCHEMA_VERSION});
           }
         } finally {
-          pendingCloudWrites.delete(projectId);
+          window.KarhaAppData.clearCloudWritePending(projectId);
         }
       }
       startCloudTaskListener(current);
@@ -755,13 +731,13 @@ async function hydrateProjectTasksFromCloud(p, projectDocData){
 
     // پروژه واقعاً بدون دستورکار است.
     if(Number(projectDocData && projectDocData.schemaVersion || 1) < DATA_SCHEMA_VERSION){
-      pendingCloudWrites.add(projectId);
+      window.KarhaAppData.markCloudWritePending(projectId);
       try{
         await db.collection('projects').doc(projectId).update({
           tasks: firebase.firestore.FieldValue.delete(),
           schemaVersion: DATA_SCHEMA_VERSION
         });
-      } finally { pendingCloudWrites.delete(projectId); }
+      } finally { window.KarhaAppData.clearCloudWritePending(projectId); }
     }
     current.tasks = [];
     current.schemaVersion = DATA_SCHEMA_VERSION;
@@ -856,7 +832,7 @@ function cloudSyncProjectFull(p){
   const fn = window.KarhaApp?.cloudSyncProjectFull;
   if(typeof fn === 'function'){
     return fn({
-      cloudMode, currentUser, db, pendingCloudWrites, normalizeEmail, DATA_SCHEMA_VERSION,
+      cloudMode, currentUser, db, appDataStore: window.KarhaAppData, normalizeEmail, DATA_SCHEMA_VERSION,
       normalizeProjectScopedData, mergePolicy: window.KarhaApp?.mergePolicy,
       projectRepositoryFind: (id)=> window.KarhaApp?.projectRepository?.find?.(id),
       getRecoveredLocalTasks, normalizeTaskRecord, rememberProjectTasks,
@@ -865,42 +841,17 @@ function cloudSyncProjectFull(p){
   }
 }
 
-/* Phase 8.7: sharing fork path removed; merge is owned-only via src/sync/mergeCloudSnapshots. sharedWith data fields retained. */
+/* D5: metadata orchestration is extracted; this is a thin runtime dependency bridge. */
 function mergeCloudSnapshots(ownedDocs, sharedDocs){
-  const mergeFn = window.KarhaApp?.mergeOwnedCloudSnapshots;
-  const docFn = docToProject;
-  if(typeof mergeFn === 'function'){
-    const preservedActive = data ? getActiveTab() : null;
-    const preservedMode = data ? getViewMode() : 'simple';
-    const preservedStarredOrder = data && data.starredOrder ? data.starredOrder.slice() : [];
-    const result = mergeFn({
-      ownedDocs: ownedDocs || [],
-      // sharedDocs ignored — sharing removed
-      localProjects: (data && data.projects) ? data.projects : [],
-      dirtyProjectIds,
-      pendingCloudWrites,
-      currentUser,
-      docToProject: docFn,
-      preservedActive,
-      preservedMode,
-      preservedStarredOrder,
-    });
-    if(!data) return;
-    data.projects = result.projects;
-    if(result.activeTab != null) setActiveTab(result.activeTab);
-    if(result.viewMode) setViewMode(result.viewMode);
-    if(result.starredOrder) data.starredOrder = result.starredOrder;
-    try{
-      if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data.projects)){
-        data.projects.forEach(pr=>{ if(pr&&pr.id) window.KarhaApp.applyCloudSnapshot(pr); });
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      }
-    }catch(e){}
-    return;
-  }
+  const apply = window.KarhaApp?.applyOwnedCloudProjects;
+  if(typeof apply !== 'function') return;
+  return apply({
+    appDataStore: window.KarhaAppData,
+    ownedDocs: ownedDocs || [],
+    currentUser,
+    docToProject,
+  });
 }
-
 
 async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
   const docs = [...(ownedDocs||[]), ...(sharedDocs||[])];
@@ -932,13 +883,16 @@ async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
 
 function startCloudListeners(){
   stopCloudListeners();
-  let ownedDocs = [], sharedDocs = [];
-  const onSnap = (docs, shared)=>{
-    ownedDocs = docs || [];
-    sharedDocs = shared || [];
-    mergeCloudSnapshots(ownedDocs, sharedDocs);
-    hydrateAllCloudProjects(ownedDocs, sharedDocs);
-  };
+  const createHandler = window.KarhaApp?.createOwnedSnapshotHandler;
+  const onSnap = typeof createHandler === 'function'
+    ? createHandler({
+        appDataStore: window.KarhaAppData,
+        getCurrentUser: ()=>currentUser,
+        docToProject,
+        hydrateProjects: docs=>hydrateAllCloudProjects(docs, []),
+        persistLocal: ()=>window.KarhaAppData.persistLocal(),
+      })
+    : docs=>{ mergeCloudSnapshots(docs, []); hydrateAllCloudProjects(docs, []); };
   const onErr = err => { console.error('owned listener', err); showToast('خطا در دریافت پروژه‌های خودتان'); };
   // Phase 6.4: ownership in src/sync/cloudListeners — behavior unchanged (owned-only).
   if(window.KarhaApp?.startOwnedCloudListeners){
@@ -953,7 +907,6 @@ function startCloudListeners(){
   }
   cloudUnsubOwned = db.collection('projects').where('ownerUid','==',currentUser.uid)
     .onSnapshot(snap => onSnap(snap.docs, []), onErr);
-  sharedDocs = [];
 }
 
 function stopCloudListeners(){
@@ -978,7 +931,7 @@ async function migrateGuestDataToCloud(){
     const ref = db.collection('projects').doc(p.id);
     // تا وقتی Snapshot سرور وجود پروژه را تأیید نکرده، آن را pending نگه می‌داریم
     // تا Snapshot خالیِ اولیه باعث ناپدید شدن پروژه از «مدیریت پروژه‌ها» نشود.
-    pendingCloudWrites.add(p.id);
+    window.KarhaAppData.markCloudWritePending(p.id);
     try{
       await ref.set({
         name: p.name, type:'project', completedOpen: !!p.completedOpen,
@@ -993,7 +946,7 @@ async function migrateGuestDataToCloud(){
       // در ورود/اتصال بعدی migrateGuestDataToCloud دوباره تلاش خواهد کرد.
       continue;
     }
-    pendingCloudWrites.delete(p.id);
+    window.KarhaAppData.clearCloudWritePending(p.id);
   }
   try{
       if(window.KarhaApp?.applyCloudSnapshot && Array.isArray(data?.projects)){

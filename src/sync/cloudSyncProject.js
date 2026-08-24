@@ -1,3 +1,5 @@
+import { markPending, acknowledgePending } from './storeSyncState.js';
+
 /**
  * Phase 7.4 — full project cloud sync (metadata + tasks).
  * shouldUploadCollection / anti-empty payload rules preserved.
@@ -37,7 +39,7 @@ export function buildProjectCloudPayload(p, store, policy, normalizeEmail, DATA_
  */
 export function cloudSyncProjectFull(ctx, p){
   if(!ctx.cloudMode || !ctx.currentUser || !p || !p.ownerUid) return;
-  ctx.pendingCloudWrites.add(p.id);
+  markPending(ctx.appDataStore, p.id);
   const sharedNorm = (p.sharedWith || []).map(e => ctx.normalizeEmail(e)).filter(Boolean);
   p.sharedWith = sharedNorm;
   ctx.normalizeProjectScopedData?.(p);
@@ -55,9 +57,9 @@ export function cloudSyncProjectFull(ctx, p){
       ctx.rememberProjectTasks(p);
       await ctx.writeTaskRecordsNormalized(p.id, mergedTasks);
     })
-    .then(() => { ctx.pendingCloudWrites.delete(p.id); })
+    .then(() => { acknowledgePending(ctx.appDataStore, p.id); })
     .catch(err => {
-      ctx.pendingCloudWrites.delete(p.id);
+      acknowledgePending(ctx.appDataStore, p.id);
       console.warn('cloud project sync failed; UI remains available:', p.id, err);
       if(ctx.isRetryableCloudError?.(err)){
         ctx.markDirty(p.id);

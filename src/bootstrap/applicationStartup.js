@@ -26,13 +26,14 @@ import { contractApi } from '../domain/contractApi.js';
 import { taskApi } from '../domain/taskApi.js';
 import { projectApi } from '../domain/projectApi.js';
 import * as mergePolicy from '../domain/mergePolicy.js';
-import { registerPersistImpl } from '../sync/persistAdapter.js';
+import { registerPersistImpl, createPersistOrchestrator } from '../sync/persistAdapter.js';
 import { applyCloudSnapshot, applyCloudProjectList } from '../sync/applyCloudSnapshot.js';
 import { startOwnedCloudListeners, stopOwnedCloudListeners } from '../sync/cloudListeners.js';
 import { docToProjectFromCloud } from '../sync/docToProject.js';
 import { mergeOwnedCloudSnapshots } from '../sync/mergeCloudSnapshots.js';
 import { writeTaskRecordsNormalized, attachCloudTaskListener } from '../sync/taskCloud.js';
 import { cloudSyncProjectFull } from '../sync/cloudSyncProject.js';
+import { applyOwnedCloudProjects, createOwnedSnapshotHandler } from '../sync/cloudHydration.js';
 import {
   readProjectStatusQueue, writeProjectStatusQueue, queueProjectStatus, dequeueProjectStatus,
   writeProjectStatusVerified, flushProjectStatusQueue, scheduleProjectStatusRetry, cloudSyncProjectStatus,
@@ -72,6 +73,7 @@ export async function startApplication({
     taskApi,
     projectApi,
     mergePolicy,
+    createPersistOrchestrator,
     applyCloudSnapshot,
     applyCloudProjectList,
     startOwnedCloudListeners,
@@ -81,6 +83,8 @@ export async function startApplication({
     writeTaskRecordsNormalized,
     attachCloudTaskListener,
     cloudSyncProjectFull,
+    applyOwnedCloudProjects,
+    createOwnedSnapshotHandler,
     readProjectStatusQueue,
     writeProjectStatusQueue,
     queueProjectStatus,
