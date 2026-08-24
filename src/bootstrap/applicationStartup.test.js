@@ -60,7 +60,7 @@ test('successful startup publishes KarhaApp before Legacy and starts Router afte
       windowRef,
       registry,
       modules: [{ id:'dashboard' }],
-      loadLegacy: async () => {
+      loadRuntime: async () => {
         legacyLoads++;
         assert.ok(windowRef.KarhaApp, 'KarhaApp must exist before Legacy loads');
         order.push('legacy');

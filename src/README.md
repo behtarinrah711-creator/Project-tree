@@ -9,7 +9,7 @@
 - `src/data/` reads existing localStorage data without resetting or renaming legacy keys.
 - `src/modules/<module>/` contains one independently registered project module.
 - `src/styles/legacy.css` contains CSS extracted from the old monolithic file.
-- `src/legacy/legacyApp.js` contains the remaining legacy application runtime and a small `window.KarhaLegacy` bridge used during migration.
+- `src/bootstrap/applicationRuntime.js` is the final startup/wiring fragment; the state-free `window.KarhaLegacy` publisher lives in `src/legacy/karhaLegacyFacade.js`.
 
 ## Migrated module boundaries
 
@@ -27,9 +27,14 @@ The following real capabilities are registered as project modules and receive th
 | `reports` | reports workspace | `renderReportsWorkspace` | tasks, contracts, status reports |
 | `people` | contacts, staff, contractors | `openContactsPage` / `renderContactsPage` | `contacts`, activity templates |
 
-## Legacy that intentionally remains
+## Final L6 runtime boundaries
 
-`src/legacy/legacyApp.js` still contains the large shared runtime because the original app keeps cross-cutting state (`data`, sync queues, auth state, dialogs, PDF/export helpers, and undo/delete flows) in one lexical scope. It was moved out of `index.html` first, then exposed through `window.KarhaLegacy` so new modules can safely set the active `projectId` without losing existing data. Future migrations should move one module's renderer and state helpers at a time from `src/legacy/legacyApp.js` into its `src/modules/<module>/` folder.
+`src/legacy/legacyApp.js` no longer exists. Startup loads ordered, classic-script
+fragments for the data foundation, workspace presentation, contract
+compatibility, feature composition, child history, and final bootstrap. This
+preserves the original browser execution semantics while giving each remaining
+responsibility an explicit modular file. `src/legacy/karhaLegacyFacade.js` owns
+only state-free publication of compatibility delegates.
 
 ## Navigation and workspace scope
 
@@ -79,7 +84,7 @@ The actual `renderReportsWorkspace` implementation now lives in
 It reads the active project through `ProjectContext`/`ProjectRepository` and routes
 the contracts option through the modular hash router.
 
-`legacyApp.js` retains only a compatibility bridge named `renderReportsWorkspace`
+`applicationRuntime.js` retains only a compatibility bridge named `renderReportsWorkspace`
 so existing legacy navigation call sites continue to work; the renderer itself is
 no longer implemented there.
 
@@ -172,7 +177,7 @@ The reusable contract-template data/domain helpers were migrated into
 lookup, item creation/defaults, normalization, numbering, draft normalization,
 and draft storage-key generation.
 
-`legacyApp.js` now contains only compatibility wrappers for these helpers; the
+`applicationRuntime.js` now contains only compatibility wrappers for these helpers; the
 implementation/source of truth is the modular domain file. Storage keys and data
 shape are unchanged.
 
@@ -183,7 +188,7 @@ The contract-template form state and UI renderer, including inline item/material
 editing, preview, activity selection, add-row behavior and drag interactions,
 were moved into `src/modules/contracts/contractTemplateFormModule.js`.
 
-`legacyApp.js` now keeps only the surrounding workspace/navigation compatibility
+`applicationRuntime.js` now keeps only the surrounding workspace/navigation compatibility
 entry point and delegates the actual form UI to the module. Contract-template
 save/persistence remains in the existing legacy handler until the next migration
 step, so the current save behavior is not duplicated or rewritten.
@@ -206,7 +211,7 @@ verifying its exact data-shape compatibility.
 
 The migrated contract-template form now saves through
 `contractTemplatePersistence.saveContractTemplate()`. The old
-`saveContractTemplateClean` implementation in `legacyApp.js` has been replaced
+`saveContractTemplateClean` implementation in `applicationRuntime.js` has been replaced
 by a compatibility bridge only.
 
 The modular save preserves the existing data-shape behavior: activity-based title,
@@ -223,7 +228,7 @@ lookup, draft normalization/creation, template cloning, item renumbering, and
 item movement.
 
 The real-contract form renderer, event wiring, and save workflow remain legacy
-for now. `legacyApp.js` contains compatibility wrappers for the migrated domain
+for now. `applicationRuntime.js` contains compatibility wrappers for the migrated domain
 functions rather than duplicate implementations.
 
 
@@ -250,7 +255,7 @@ retention, contractor/contact compatibility, activity title, item normalization,
 retention amount calculations, timestamps, and the existing `contracts`
 collection.
 
-`legacyApp.js` now retains only a compatibility bridge for `saveRealContract`.
+`applicationRuntime.js` now retains only a compatibility bridge for `saveRealContract`.
 
 
 ## Refactor step 298 — contract pickers
@@ -299,7 +304,7 @@ The legacy `renderContractApprovalPage` is now only a compatibility bridge.
 
 ## Refactor step 302 — contract legacy audit cleanup
 
-An audit of the remaining contract-related code in `legacyApp.js` found several
+An audit of the remaining contract-related code in `applicationRuntime.js` found several
 small domain helpers still implemented there despite the larger migrations.
 `makeRealContractDraft`, real-contract item renumbering/movement, and
 contract-party data synchronization are now delegated to
@@ -328,7 +333,7 @@ The real contractor-contract inline add workflow is now owned by
 dirty state, repeated Enter/focus behavior, and cancellation state are handled
 inside the module.
 
-The corresponding `legacyApp.js` implementation is now a compatibility bridge.
+The corresponding `applicationRuntime.js` implementation is now a compatibility bridge.
 
 
 ## Refactor step 305 — contract item mutation API
@@ -366,13 +371,13 @@ code preserves all IDs and deliberately does not guess which template to use.
 
 ## Refactor step 308 — shared Search Template component
 
-The existing Search Template UI was extracted from `legacyApp.js` into
+The existing Search Template UI was extracted from `applicationRuntime.js` into
 `src/core/searchTemplate.js` without changing its visual contract or its
 selection/add/search behavior. The component owns its UI state and history
 layers. Legacy data persistence for per-context stars remains behind an
 explicit bridge, so localStorage/project data behavior is unchanged.
 
-`legacyApp.js` now contains only compatibility wrappers for the Search Template
+`applicationRuntime.js` now contains only compatibility wrappers for the Search Template
 API and the existing persistence hooks; the actual renderer and interaction
 logic live in the shared component.
 

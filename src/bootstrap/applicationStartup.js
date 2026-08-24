@@ -7,7 +7,8 @@ import { listProjects, getProject, getActiveProject, selectProject } from '../co
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { createProjectTrashView } from '../modules/trash/projectTrashView.js';
 import { createProjectManagementView } from '../modules/projects/projectManagementView.js';
-import { loadLegacyRuntime } from './legacyBootstrap.js';
+import { loadApplicationRuntime } from './applicationRuntimeLoader.js';
+import { exposeKarhaLegacyInstaller } from '../legacy/karhaLegacyFacade.js';
 import { installAppDataStore } from '../data/appDataStore.js';
 import { installHtmlEscape } from '../core/htmlEscape.js';
 import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
@@ -52,14 +53,15 @@ import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } fr
 import { installFirebaseRuntime } from '../firebase/firebaseRuntime.js';
 import { createCloudRuntime } from '../cloud/cloudRuntime.js';
 
-/** Start the modular API, then the classic legacy runtime, then routing. */
+/** Start the modular API, then the classic application runtime, then routing. */
 export async function startApplication({
   windowRef = window,
   registry = moduleRegistry,
   modules = projectModules,
   router = appRouter,
-  loadLegacy = loadLegacyRuntime,
+  loadRuntime = loadApplicationRuntime,
 } = {}){
+  exposeKarhaLegacyInstaller({ windowRef });
   modules.forEach(moduleDefinition => registry.register(moduleDefinition));
 
   const application = Object.freeze({
@@ -112,7 +114,7 @@ export async function startApplication({
   installAppDataStore({ windowRef, schemaVersion: 8 });
   installFirebaseRuntime({windowRef});
   installHtmlEscape({ windowRef });
-  await loadLegacy();
+  await loadRuntime();
   // Attach after install so KarhaApp holds the live store reference.
   if(windowRef.KarhaApp && windowRef.KarhaAppData){
     try{

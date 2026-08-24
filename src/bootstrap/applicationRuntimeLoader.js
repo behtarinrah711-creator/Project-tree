@@ -1,4 +1,11 @@
-const LEGACY_RUNTIME_SELECTOR = 'script[data-karha-legacy-runtime]';
+export const APPLICATION_RUNTIME_URLS = Object.freeze([
+  new URL('../core/applicationFoundation.js', import.meta.url).href,
+  new URL('../ui/workspacePresentationRuntime.js', import.meta.url).href,
+  new URL('../modules/contracts/contractCompatibility.js', import.meta.url).href,
+  new URL('../modules/runtime/featureComposition.js', import.meta.url).href,
+  new URL('../core/childHistoryController.js', import.meta.url).href,
+  new URL('./applicationRuntime.js', import.meta.url).href,
+]);
 
 function installLegacyGlobalHelpers(windowRef, documentRef){
   if(typeof windowRef.elFromHtml !== 'function'){
@@ -9,7 +16,7 @@ function installLegacyGlobalHelpers(windowRef, documentRef){
     };
   }
 
-  // legacyApp passes this bare identifier while constructing taskRuntime UI.
+  // applicationRuntime passes this bare identifier while constructing taskRuntime UI.
   // The actual task UI also owns its own focus helper, but the global must
   // exist so classic-script evaluation does not stop before KarhaLegacy is published.
   if(typeof windowRef.focusInlineAdd !== 'function'){
@@ -95,7 +102,7 @@ function installGuestFirebaseFallback(windowRef){
 }
 
 /**
- * Loads the remaining legacy runtime with classic-script semantics.
+ * Loads the remaining application runtime with classic-script semantics.
  *
  * The runtime intentionally is not an ES module: it has no imports or exports,
  * and its existing HTML/router integrations rely on classic global function
@@ -103,40 +110,35 @@ function installGuestFirebaseFallback(windowRef){
  * publishes the modular KarhaApp API first, this script executes second, and
  * routing starts only after the legacy compatibility boundary is available.
  */
-export function loadLegacyRuntime({
+export function loadApplicationRuntime({
   documentRef = document,
   windowRef = window,
-  sourceUrl = new URL('../legacy/legacyApp.js', import.meta.url).href,
+  sourceUrl,
+  sourceUrls = sourceUrl ? [sourceUrl] : APPLICATION_RUNTIME_URLS,
 } = {}){
-  // legacyApp still passes bare helper identifiers into taskRuntime before it
+  // applicationRuntime still passes bare helper identifiers into taskRuntime before it
   // installs KarhaLegacy. Missing globals stop evaluation halfway through and
   // leave footer navigation/forms non-interactive.
   installLegacyGlobalHelpers(windowRef, documentRef);
 
   // Firebase is optional for the local/guest workspace. If the CDN is blocked
-  // (as it can be in CI, offline mode, or restrictive networks), legacyApp must
+  // (as it can be in CI, offline mode, or restrictive networks), applicationRuntime must
   // still finish booting so project navigation and local data remain usable.
   installGuestFirebaseFallback(windowRef);
 
-  const existing = documentRef.querySelector(LEGACY_RUNTIME_SELECTOR);
-  if(existing){
-    if(existing.dataset.loaded === 'true') return Promise.resolve(existing);
-    return new Promise((resolve, reject) => {
-      existing.addEventListener('load', () => resolve(existing), { once: true });
-      existing.addEventListener('error', () => reject(new Error('Legacy runtime failed to load')), { once: true });
-    });
-  }
-
-  return new Promise((resolve, reject) => {
-    const script = documentRef.createElement('script');
-    script.src = sourceUrl;
-    script.async = false;
-    script.dataset.karhaLegacyRuntime = '';
-    script.addEventListener('load', () => {
-      script.dataset.loaded = 'true';
-      resolve(script);
-    }, { once: true });
-    script.addEventListener('error', () => reject(new Error(`Legacy runtime failed to load: ${sourceUrl}`)), { once: true });
-    documentRef.body.appendChild(script);
-  });
+  if(windowRef.__karhaApplicationRuntimePromise) return windowRef.__karhaApplicationRuntimePromise;
+  windowRef.__karhaApplicationRuntimePromise = sourceUrls.reduce((previous, url) =>
+    previous.then(() => new Promise((resolve, reject) => {
+      const script = documentRef.createElement('script');
+      script.src = url;
+      script.async = false;
+      script.dataset.karhaApplicationRuntime = '';
+      script.addEventListener('load', () => {
+        script.dataset.loaded = 'true';
+        resolve(script);
+      }, { once: true });
+      script.addEventListener('error', () => reject(new Error(`Application runtime failed to load: ${url}`)), { once: true });
+      documentRef.body.appendChild(script);
+    })), Promise.resolve());
+  return windowRef.__karhaApplicationRuntimePromise;
 }
