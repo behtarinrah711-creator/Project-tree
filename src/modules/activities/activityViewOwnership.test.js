@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 test('Contact and Activity presentation have one modular owner',async()=>{
   const [legacy,people,contactForm,activities,activityForm,taskView]=await Promise.all([
-    readFile(new URL('../../legacy/legacyApp.js',import.meta.url),'utf8'),
+    readFile(new URL('../runtime/featureComposition.js',import.meta.url),'utf8'),
     readFile(new URL('../people/peopleModule.js',import.meta.url),'utf8'),
     readFile(new URL('../people/contactFormModule.js',import.meta.url),'utf8'),
     readFile(new URL('./activitiesModule.js',import.meta.url),'utf8'),
@@ -25,7 +25,7 @@ test('Contact and Activity presentation have one modular owner',async()=>{
 });
 
 test('legacy retains only history-sensitive Contact and Activity navigation delegates',async()=>{
-  const legacy=await readFile(new URL('../../legacy/legacyApp.js',import.meta.url),'utf8');
+  const legacy=await readFile(new URL('../runtime/featureComposition.js',import.meta.url),'utf8');
   assert.match(legacy,/function openContactsPage\(\).*workspaceSubpage='contacts'/);
   assert.match(legacy,/function renderContactsPage\(\)[\s\S]*?modules\?\.get\('people'\)/);
   assert.match(legacy,/function openProjectActivitiesPage\(\)[\s\S]*?workspaceSubpage='activities'/);

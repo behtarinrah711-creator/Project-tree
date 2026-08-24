@@ -11,7 +11,7 @@ test('task actions continue to use the canonical runtime repository',()=>{
 });
 
 test('task/trash/project-management rendering has one modular owner and no legacy implementation',async()=>{
-  const legacy=await readFile(new URL('../../legacy/legacyApp.js',import.meta.url),'utf8');
+  const legacy=await readFile(new URL('../runtime/featureComposition.js',import.meta.url),'utf8');
   assert.doesNotMatch(legacy,/function renderTaskBlock\([^)]*\)\s*\{/);
   assert.doesNotMatch(legacy,/function renderProjectTrashItem\(/);
   assert.doesNotMatch(legacy,/function startProjectMgmtDrag\(/);

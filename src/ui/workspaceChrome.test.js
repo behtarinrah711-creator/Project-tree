@@ -141,7 +141,7 @@ test('route-sync events refresh drawer and context presentation for Back/Forward
 });
 
 test('legacy retains only thin chrome delegates and keeps contract back policy callback',async()=>{
-  const source=await readFile(new URL('../legacy/legacyApp.js',import.meta.url),'utf8');
+  const source=await readFile(new URL('./workspacePresentationRuntime.js',import.meta.url),'utf8');
   assert.doesNotMatch(source,/function updateWorkspaceContextBar\(\)\{\s*const context/);
   assert.doesNotMatch(source,/getElementById\('bottomProjectsBtn'\)\.onclick/);
   assert.doesNotMatch(source,/addEventListener\('karha:drawer-open'/);

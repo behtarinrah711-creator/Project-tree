@@ -11,7 +11,7 @@ const removed = [
 test('canonical surfaces install in the required startup order', async () => {
   const source = await read('./applicationStartup.js');
   const positions = [
-    'windowRef.KarhaApp = application', 'installAppDataStore({ windowRef', 'await loadLegacy()',
+    'windowRef.KarhaApp = application', 'installAppDataStore({ windowRef', 'await loadRuntime()',
     'installUiPrimitives({ windowRef', 'router.start()',
   ].map(token => source.indexOf(token));
   assert.ok(positions.every(position => position >= 0));
@@ -22,7 +22,7 @@ test('canonical surfaces install in the required startup order', async () => {
 
 test('removed legacy remnants have no production caller or facade entry', async () => {
   const production = (await Promise.all([
-    read('../legacy/legacyApp.js'), read('./applicationStartup.js'), read('../modules/legacyModule.js'),
+    read('./applicationRuntime.js'), read('./applicationStartup.js'), read('../modules/legacyModule.js'),
   ])).join('\n');
   removed.forEach(symbol => assert.doesNotMatch(production, new RegExp(`\\b${symbol}\\b`), symbol));
 });
