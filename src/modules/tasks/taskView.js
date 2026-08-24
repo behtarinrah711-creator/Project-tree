@@ -1,10 +1,12 @@
+import { renderTaskActivities } from '../activities/activityView.js';
+
 /** Task-owned DOM rendering, editing, detail sheet, and pointer drag behavior. */
 export function createTaskView(runtime, dependencies){
   const { getData, document, requestAnimationFrame, setTimeout, isPendingDeleted,
     formatCost, formatCostDisplay, projectCostSum, taskCostSum, svgPlus, svgGrip, svgChevron, svgTrash,
     svgCheck, svgStar, itemChildren, findNestedItem, findProject, findTask, findSub, walkItems,
     toggleTaskDone, toggleSubDone, toggleTaskStar, toggleSubStar, removeFromStarredOrder,
-    openConfirm, showToast, renderAll, refreshStarredPartial, softDelete, renderItemActivities,
+    openConfirm, showToast, renderAll, refreshStarredPartial, softDelete,
     isFloatingConfirmUser, persist, markDirty, openNumpadGeneric, addTrashSourceBadge, appendTrashActions } = dependencies;
   let addItemActive=false;
   let currentDetail=null;
@@ -607,7 +609,13 @@ function renderSheet(){
   };
   body.appendChild(starRow);
 
-  renderItemActivities(item,pid,body);
+  renderTaskActivities({
+    document,item,projectId:pid,container:body,
+    onChange:activities=>{
+      if(isSub) runtime.updateSubtask(pid,tid,sid,{activities});
+      else runtime.update(pid,tid,{activities});
+    },
+  });
 
   {
     const subField = document.createElement('div');

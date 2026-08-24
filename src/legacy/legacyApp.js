@@ -2160,7 +2160,6 @@ function getActivityTemplates(project=getCurrentProject()){
   return project.activityTemplates;
 }
 function findActivityTemplate(id, project=getCurrentProject()){ return getActivityTemplates(project).find(a=>a.id===id) || null; }
-function activityName(id){ const a=findActivityTemplate(id); return a ? (a.trashed ? 'فعالیت حذف‌شده' : a.name) : 'فعالیت حذف‌شده'; }
 function openProjectActivitiesPage(){
   closeBottomPages();
   enterWorkspaceSurface();
@@ -2183,62 +2182,6 @@ function openActivityForm(){
 }
 function requestCloseActivityForm(fromPopState=false){
   return window.KarhaApp?.modules?.get('activities')?.requestCloseActivityForm(fromPopState);
-}
-
-function renderItemActivities(item,pid,body){
-  const field=document.createElement('div'); field.className='detail-field';
-  field.innerHTML='<div class="detail-label">فعالیت‌ها (اختیاری)</div>';
-  const list=document.createElement('div'); list.className='detail-activities-list';
-  const render=()=>{
-    list.innerHTML='';
-    const ids=Array.isArray(item.activities)?item.activities:[];
-    ids.forEach(id=>{
-      const chip=document.createElement('div'); chip.className='detail-activity-chip';
-      const span=document.createElement('span'); span.textContent=activityName(id);
-      const rm=document.createElement('button'); rm.type='button'; rm.textContent='حذف';
-      rm.onclick=()=>{ item.activities=(item.activities||[]).filter(x=>x!==id); markDirty(pid); persist(); render(); };
-      chip.append(span,rm); list.appendChild(chip);
-    });
-    if(!ids.length){ const empty=document.createElement('div'); empty.style.cssText='font-size:12px;color:var(--text-dim);'; empty.textContent='برای این آیتم فعالیتی انتخاب نشده است.'; list.appendChild(empty); }
-  };
-  render(); field.appendChild(list);
-
-  const picker=document.createElement('div'); picker.className='activity-picker';
-  const input=document.createElement('input'); input.type='search'; input.className='activity-search-input'; input.placeholder='جستجوی فعالیت...'; input.autocomplete='off';
-  const results=document.createElement('div'); results.className='activity-search-results';
-  picker.append(input,results); field.appendChild(picker);
-
-  const getAvailable=()=>getActivityTemplates().filter(a=>!(item.activities||[]).includes(a.id));
-  const choose=(a)=>{
-    item.activities=Array.isArray(item.activities)?item.activities:[];
-    if(!item.activities.includes(a.id)){
-      item.activities.push(a.id);
-      markDirty(pid);
-      persist();
-      render();
-      input.value='';
-      renderResults(true);
-      setTimeout(()=>input.focus(),0);
-    }
-  };
-  const renderResults=(open=true)=>{
-    const q=input.value.trim().toLocaleLowerCase('fa');
-    const available=getAvailable().filter(a=>String(a.name||'').toLocaleLowerCase('fa').includes(q));
-    results.innerHTML='';
-    if(!available.length){ const e=document.createElement('div'); e.className='activity-search-empty'; e.textContent=q?'فعالیتی پیدا نشد.':'فعالیت جدیدی برای انتخاب وجود ندارد.'; results.appendChild(e); }
-    else available.forEach(a=>{ const b=document.createElement('button'); b.type='button'; b.className='activity-search-option'; b.textContent=a.name; b.onclick=()=>{ choose(a); results.classList.remove('open'); input.value=''; }; results.appendChild(b); });
-    results.classList.toggle('open',open);
-  };
-  input.addEventListener('focus',()=>renderResults(true));
-  input.addEventListener('input',()=>renderResults(true));
-  input.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){ results.classList.remove('open'); input.blur(); }
-    if(e.key==='Enter'){ const first=results.querySelector('.activity-search-option'); if(first){ e.preventDefault(); first.click(); } }
-  });
-  document.addEventListener('click',function activityPickerOutside(e){
-    if(!picker.contains(e.target)) results.classList.remove('open');
-  },{once:false});
-  body.appendChild(field);
 }
 
 function permanentlyDeleteGlobalRecord(entry){
@@ -2357,7 +2300,7 @@ const taskUI = window.KarhaApp.taskRuntime.createUI({
   formatCost, formatCostDisplay, projectCostSum, taskCostSum, svgPlus, svgGrip, svgChevron, svgTrash,
   svgCheck, svgStar, itemChildren, findNestedItem, findProject, findTask, findSub, walkItems,
   toggleTaskDone, toggleSubDone, toggleTaskStar, toggleSubStar, removeFromStarredOrder,
-  openConfirm, showToast, renderAll, refreshStarredPartial, softDelete, renderItemActivities,
+  openConfirm, showToast, renderAll, refreshStarredPartial, softDelete,
   isFloatingConfirmUser, persist, markDirty, openNumpadGeneric, addTrashSourceBadge, appendTrashActions
 });
 const {renderProjectView,refreshProjectPartial,renderInlineAddRow,renderTaskBlock,renderStarredView,
@@ -2580,7 +2523,7 @@ function returnToSettingsWorkspace(){
   updateWorkspaceContextBar();
 }
 document.getElementById('closeProjectActivitiesPage').onclick = returnToSettingsWorkspace;
-document.getElementById('closeContactsPage').onclick = ()=>{ document.getElementById('contactsPage')?.classList.remove('contact-form-mode'); const h=document.querySelector('#contactsPage .inner-section-bar h2'); if(h) h.textContent='مخاطبین'; const b=document.getElementById('contactAddBtn'); if(b) b.hidden=false; returnToSettingsWorkspace(); };
+document.getElementById('closeContactsPage').onclick = ()=>{ window.KarhaApp?.modules?.get('people')?.resetContactFormShell?.(); returnToSettingsWorkspace(); };
 document.getElementById('contactAddBtn').onclick = ()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
 document.getElementById('activityAddBtn').onclick = openActivityForm;
 
