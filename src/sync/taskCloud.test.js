@@ -29,7 +29,7 @@ test('cloud acknowledgement clears the canonical pending-write owner', async () 
   const ctx = {
     cloudMode: true,
     currentUser: { uid: 'u1' },
-    pendingCloudWrites: appData.getPendingCloudWrites(),
+    appDataStore: appData,
     normalizeEmail: value => String(value || ''),
     normalizeProjectScopedData(){},
     projectRepositoryFind(){ return project; },
@@ -49,5 +49,5 @@ test('cloud acknowledgement clears the canonical pending-write owner', async () 
   assert.equal(appData.isCloudWritePending('p1'), true);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(appData.isCloudWritePending('p1'), false);
-  assert.equal(ctx.pendingCloudWrites, appData.getPendingCloudWrites());
+  assert.equal(ctx.appDataStore.getPendingCloudWrites(), appData.getPendingCloudWrites());
 });

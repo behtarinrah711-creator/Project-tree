@@ -1,3 +1,5 @@
+import { dirtyProjectIds, pendingCloudWrites } from './storeSyncState.js';
+
 /**
  * Phase 7.2 — merge owned cloud docs into local project list.
  * Sharing/collaborator fork removed (product Phase 5/6). Behavior for owner + guest preserved.
@@ -5,40 +7,42 @@
 
 export function mergeOwnedCloudSnapshots({
   ownedDocs = [],
-  localProjects = [],
-  dirtyProjectIds = new Set(),
-  pendingCloudWrites = new Set(),
+  localProjects,
+  appDataStore,
   currentUser = null,
   docToProject,
   preservedActive = null,
   preservedMode = 'simple',
   preservedStarredOrder = [],
 } = {}){
+  const local = Array.isArray(localProjects) ? localProjects : appDataStore.getProjects();
+  const dirty = dirtyProjectIds(appDataStore);
+  const pending = pendingCloudWrites(appDataStore);
   const map = {};
   const localById = {};
-  (localProjects || []).forEach(lp => { localById[lp.id] = lp; });
+  local.forEach(lp => { localById[lp.id] = lp; });
 
   ownedDocs.forEach(doc => {
     map[doc.id] = docToProject(doc, localById[doc.id]);
   });
 
-  if(localProjects){
-    localProjects.forEach(localP => {
-      if((dirtyProjectIds.has(localP.id) || pendingCloudWrites.has(localP.id)) && map[localP.id]){
+  if(local){
+    local.forEach(localP => {
+      if((dirty.has(localP.id) || pending.has(localP.id)) && map[localP.id]){
         map[localP.id] = localP;
       }
     });
   }
 
-  const prevOrder = (localProjects || []).map(p => p.id);
+  const prevOrder = local.map(p => p.id);
 
   // Keep guest/local-only and dirty owned missing briefly from snapshot
-  if(localProjects){
-    localProjects.forEach(localP => {
+  if(local){
+    local.forEach(localP => {
       if(map[localP.id]) return;
       if(localP.ownerUid && currentUser && localP.ownerUid !== currentUser.uid) return;
       if(localP.ownerUid && currentUser && localP.ownerUid === currentUser.uid){
-        if(dirtyProjectIds.has(localP.id) || pendingCloudWrites.has(localP.id)){
+        if(dirty.has(localP.id) || pending.has(localP.id)){
           map[localP.id] = localP;
         }
         return;

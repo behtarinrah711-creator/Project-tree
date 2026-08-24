@@ -1,3 +1,5 @@
+import { isDirty, isPending, markPending, acknowledgePending } from './storeSyncState.js';
+
 /**
  * Phase 7.3 — task subcollection write + listen helpers.
  * Anti-empty merge behavior must stay identical to prior legacy path.
@@ -48,10 +50,10 @@ export function attachCloudTaskListener(ctx, p){
     if(!merged.length) return;
     current.tasks = merged;
     ctx.rememberProjectTasks(current);
-    if(merged.length > incoming.length && !ctx.dirtyProjectIds.has(projectId) && !ctx.pendingCloudWrites.has(projectId)){
-      ctx.pendingCloudWrites.add(projectId);
+    if(merged.length > incoming.length && !isDirty(ctx.appDataStore, projectId) && !isPending(ctx.appDataStore, projectId)){
+      markPending(ctx.appDataStore, projectId);
       writeTaskRecordsNormalized(ctx, projectId, merged)
-        .finally(() => ctx.pendingCloudWrites.delete(projectId));
+        .finally(() => acknowledgePending(ctx.appDataStore, projectId));
     }
     current.schemaVersion = ctx.DATA_SCHEMA_VERSION;
     ctx.persistLocalFromCloud?.();

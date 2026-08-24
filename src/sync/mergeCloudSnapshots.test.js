@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeOwnedCloudSnapshots } from './mergeCloudSnapshots.js';
+import { createAppDataStore } from '../data/appDataStore.js';
 
 test('merge keeps dirty local over cloud map entry', () => {
   const dirty = new Set(['p1']);
@@ -9,8 +10,7 @@ test('merge keeps dirty local over cloud map entry', () => {
   const result = mergeOwnedCloudSnapshots({
     ownedDocs,
     localProjects: local,
-    dirtyProjectIds: dirty,
-    pendingCloudWrites: new Set(),
+    appDataStore: Object.assign(createAppDataStore({storage:null}), { getDirtyProjectIds(){ return dirty; } }),
     currentUser: { uid: 'u1' },
     docToProject: (doc) => ({ id: doc.id, name: doc.data().name, ownerUid: 'u1' }),
   });
@@ -22,8 +22,7 @@ test('merge keeps guest project without ownerUid', () => {
   const result = mergeOwnedCloudSnapshots({
     ownedDocs: [],
     localProjects: local,
-    dirtyProjectIds: new Set(),
-    pendingCloudWrites: new Set(),
+    appDataStore: createAppDataStore({storage:null}),
     currentUser: { uid: 'u1' },
     docToProject: () => null,
   });
