@@ -49,6 +49,42 @@ describe('appDataStore D1', () => {
     assert.equal(again.getActiveTab(), 'x');
   });
 
+  it('owns the sole runtime dirty and pending cloud-write state without serializing it', () => {
+    const storage = memoryStorage();
+    const s = createAppDataStore({ storage, schemaVersion: 8 });
+    const dirtyFacade = s.getDirtyProjectIds();
+    const pendingFacade = s.getPendingCloudWrites();
+
+    s.markProjectDirty('project-1');
+    s.markCloudWritePending('project-1');
+    assert.equal(dirtyFacade.has('project-1'), true);
+    assert.equal(pendingFacade.has('project-1'), true);
+    assert.equal(s.isProjectDirty('project-1'), true);
+    assert.equal(s.isCloudWritePending('project-1'), true);
+
+    // Hydration replaces only persisted app data, never these session guards.
+    s.replaceSnapshot({ projects: [{ id: 'project-1' }] });
+    assert.equal(s.getDirtyProjectIds(), dirtyFacade);
+    assert.equal(s.getPendingCloudWrites(), pendingFacade);
+    assert.equal(s.isProjectDirty('project-1'), true);
+    assert.equal(s.isCloudWritePending('project-1'), true);
+
+    s.clearProjectDirty('project-1');
+    s.clearCloudWritePending('project-1');
+    assert.equal(dirtyFacade.has('project-1'), false);
+    assert.equal(pendingFacade.has('project-1'), false);
+
+    s.markProjectDirty('project-2');
+    s.markCloudWritePending('project-2');
+    s.persistLocal();
+    const persisted = JSON.parse(storage.getItem(APP_DATA_STORAGE_KEY));
+    assert.equal(Object.hasOwn(persisted, 'dirtyProjectIds'), false);
+    assert.equal(Object.hasOwn(persisted, 'pendingCloudWrites'), false);
+    s.loadFromStorage();
+    assert.equal(s.isProjectDirty('project-2'), true);
+    assert.equal(s.isCloudWritePending('project-2'), true);
+  });
+
   it('replaceSnapshot becomes the shared reference', () => {
     const s = createAppDataStore({ storage: memoryStorage(), schemaVersion: 8 });
     const next = { schemaVersion: 8, projects: [{ id: 'n' }], viewMode: 'simple', activeTab: null, starredOrder: [] };

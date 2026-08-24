@@ -1,7 +1,7 @@
 /**
  * Phase D1 — in-memory app snapshot sole owner.
  * STORAGE_KEY and shape unchanged (gtasks-clone-v2).
- * Auth/Sync/dirty sets are NOT owned here.
+ * Auth/Sync orchestration is not owned here. D4 runtime dirty/pending guards are.
  */
 
 export const APP_DATA_STORAGE_KEY = 'gtasks-clone-v2';
@@ -39,6 +39,10 @@ export function createAppDataStore({
   schemaVersion = 8,
 } = {}){
   let snapshot = createEmptySnapshot(schemaVersion);
+  // Runtime-only synchronization guards. They deliberately remain outside the
+  // persisted snapshot so load/hydrate keeps the existing storage contract.
+  const dirtyProjectIds = new Set();
+  const pendingCloudWrites = new Set();
 
   function getSnapshot(){
     return snapshot;
@@ -93,6 +97,26 @@ export function createAppDataStore({
   function getViewMode(){ return snapshot.viewMode; }
   function getStarredOrder(){ return snapshot.starredOrder; }
 
+  function getDirtyProjectIds(){ return dirtyProjectIds; }
+  function markProjectDirty(projectId){
+    if(projectId) dirtyProjectIds.add(projectId);
+  }
+  function isProjectDirty(projectId){ return dirtyProjectIds.has(projectId); }
+  function clearProjectDirty(projectId){
+    if(projectId === undefined) dirtyProjectIds.clear();
+    else dirtyProjectIds.delete(projectId);
+  }
+
+  function getPendingCloudWrites(){ return pendingCloudWrites; }
+  function markCloudWritePending(projectId){
+    if(projectId) pendingCloudWrites.add(projectId);
+  }
+  function isCloudWritePending(projectId){ return pendingCloudWrites.has(projectId); }
+  function clearCloudWritePending(projectId){
+    if(projectId === undefined) pendingCloudWrites.clear();
+    else pendingCloudWrites.delete(projectId);
+  }
+
   /** D2: sole write path for activeTab */
   function setActiveTab(value){
     snapshot.activeTab = (value === undefined) ? null : value;
@@ -120,6 +144,14 @@ export function createAppDataStore({
     getViewMode,
     setViewMode,
     getStarredOrder,
+    getDirtyProjectIds,
+    markProjectDirty,
+    isProjectDirty,
+    clearProjectDirty,
+    getPendingCloudWrites,
+    markCloudWritePending,
+    isCloudWritePending,
+    clearCloudWritePending,
   };
 }
 
