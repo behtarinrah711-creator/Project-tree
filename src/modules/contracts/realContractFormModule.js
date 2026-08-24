@@ -418,37 +418,86 @@ function renderContractForm() {
   ftTextRow(form, 'محل انعقاد قرارداد', state.contractPlace || '', value => { state.contractPlace = value; }, { placeholder: 'پیش‌فرض: محل پروژه' });
 
   ftSelectRow(form, 'آیتم پروژه', state.projectItemPath || '', () => openContractPicker('projectItem'), { placeholder: 'انتخاب' });
-  ftSelectRow(form, 'پیمانکار', state.contractorName || '', () => openContractPicker('contractor'), { placeholder: 'انتخاب' });
-  ftSelectRow(form, 'کارفرما', state.employerName || '', () => openContractPicker('employer'), { placeholder: 'انتخاب' });
+  ftSelectRow(form, 'کارفرما', state.employerId ? contactDisplayName(findContact(state.employerId)) : '', () => openContractPicker('employer'), { placeholder: 'انتخاب' });
+  ftSelectRow(form, 'پیمانکار', state.contractorId ? contactDisplayName(findContact(state.contractorId)) : '', () => openContractPicker('contractor'), { placeholder: 'انتخاب' });
 
-  const duration = document.createElement('div');
-  duration.className = 'form-template';
-  ftDateRow(duration, 'تاریخ شروع', state.startDate || '', value => {
-    state.startDate = value;
-    state.endDate = realContractDomain.addDaysToJalali(value, Number(state.durationDays || 0), helper('toEnglishDigits'));
-  }, { maxToday: false });
-  ftNumberRow(duration, 'مدت قرارداد', state.durationDays || '', value => {
-    state.durationDays = value;
-    state.endDate = realContractDomain.addDaysToJalali(state.startDate, Number(value || 0), helper('toEnglishDigits'));
-  }, { suffix: 'روز', group: false, maxLen: 4 });
-  ftTextRow(duration, 'تاریخ پایان', helper('formatJalaliDisplay', state.endDate || '') || '', () => {}, { readonly: true, dirty: false });
-  body.appendChild(duration);
+  const templates = contractTemplatesDomain.getContractTemplates(project).filter(template => !template.trashed);
+  const matchingTemplates = templates.filter(template => String(template.activityId) === String(state.activityId));
+  if (state.activityId && matchingTemplates.length > 1) {
+    const label = matchingTemplates.find(template => String(template.id) === String(state.templateId))?.title || '';
+    ftSelectRow(form, 'قالب قرارداد', label, () => {
+      contractPickers.openStaticChoicePicker(
+        'انتخاب قالب قرارداد',
+        'قالب‌ها',
+        matchingTemplates.map(template => ({ value: template.id, label: template.title || 'قالب قرارداد' })),
+        state.templateId,
+        id => {
+          state.templateId = id;
+          const template = matchingTemplates.find(item => String(item.id) === String(id));
+          if (template) {
+            state.items = realContractDomain.cloneTemplateIntoContract(template);
+            state.paymentItems = JSON.parse(JSON.stringify(template.paymentItems || []));
+          }
+          dirty = true;
+          renderContractForm();
+        }
+      );
+    }, { placeholder: 'انتخاب' });
+  } else if (state.activityId && matchingTemplates.length === 1 && !state.templateId) {
+    state.templateId = matchingTemplates[0].id;
+    state.items = realContractDomain.cloneTemplateIntoContract(matchingTemplates[0]);
+    state.paymentItems = JSON.parse(JSON.stringify(matchingTemplates[0].paymentItems || []));
+  }
 
-  const financial = document.createElement('div');
-  financial.className = 'form-template';
-  ftNumberRow(financial, 'مبلغ قرارداد', state.amount || '', value => { state.amount = value; }, { suffix: 'تومان' });
-  ftNumberRow(financial, 'درصد حسن انجام کار', state.retentionPercent || '', value => { state.retentionPercent = value; }, { suffix: '٪', group: false, maxLen: 3 });
-  const retentionAmount = realContractDomain.calculateRetentionAmount(state.amount, state.retentionPercent, helper('toEnglishDigits'));
-  ftCalcRow(financial, 'مبلغ حسن انجام کار: ' + (helper('formatCost', retentionAmount) ?? retentionAmount) + ' تومان');
-  ftTextRow(financial, 'مبنای شروع مدت نگهداری حسن انجام کار', state.retentionBasis || '', value => { state.retentionBasis = value; }, { placeholder: 'مثلاً تحویل موقت' });
-  ftTextRow(financial, 'مدت نگهداری حسن انجام کار', state.retentionDuration || '', value => { state.retentionDuration = value; }, { placeholder: 'مثلاً ۶ ماه' });
-  body.appendChild(financial);
+  ftDateRow(form, 'تاریخ شروع قرارداد', state.startDate || '', value => { state.startDate = value; });
+  ftDateRow(form, 'تاریخ پایان قرارداد', state.endDate || '', value => { state.endDate = value; });
+  ftNumberRow(form, 'مبلغ کل قرارداد', state.amount, value => {
+    const normalized = helper('toEnglishDigits', String(value)) ?? value;
+    state.amount = String(normalized).replace(/[^\d]/g, '');
+  }, { suffix: 'تومان', maxLen: 16, group: true, placeholder: 'وارد کنید' });
+  ftNumberRow(form, 'درصد حسن انجام کار', state.retentionPercent, value => {
+    const normalized = helper('toEnglishDigits', String(value)) ?? value;
+    state.retentionPercent = String(normalized).replace(/[^\d]/g, '');
+  }, { prefix: '٪', maxLen: 3, group: false, placeholder: 'وارد کنید' });
+
+  const retentionAmount = (Number(state.amount) || 0) * (Number(state.retentionPercent) || 0) / 100;
+  const netAmount = Math.max(0, (Number(state.amount) || 0) - retentionAmount);
+  state.retentionAmount = String(Math.round(retentionAmount || 0));
+  state.amountAfterRetention = String(Math.round(netAmount || 0));
+  ftCalcRow(form, 'مبلغ حسن انجام کار: ' + (retentionAmount ? (helper('formatCost', retentionAmount) ?? retentionAmount) : '۰') + ' تومان');
+  ftCalcRow(form, 'مبلغ قرارداد پس از کسر حسن انجام کار: ' + (netAmount ? (helper('formatCost', netAmount) ?? netAmount) : '۰') + ' تومان');
+
+  const basisOptions = [
+    { value: 'پایان قرارداد', label: 'تاریخ پایان قرارداد' },
+    { value: 'تحویل موقت', label: 'تحویل موقت' },
+    { value: 'تحویل قطعی', label: 'تحویل قطعی' },
+    { value: 'تسویه نهایی', label: 'تسویه نهایی' }
+  ];
+  ftSelectRow(form, 'مبنای شروع مدت نگهداری حسن انجام کار', state.retentionBasis || '', () => {
+    contractPickers.openStaticChoicePicker('مبنای شروع نگهداری', 'گزینه‌ها', basisOptions, state.retentionBasis, value => {
+      state.retentionBasis = value;
+      dirty = true;
+      renderContractForm();
+    });
+  }, { placeholder: 'انتخاب' });
+
+  const durationOptions = ['یک هفته', 'دو هفته', 'سه هفته', 'چهار هفته', 'یک ماه', 'یک ماه و نیم', 'دو ماه', 'دو ماه و نیم', 'سه ماه', 'چهار ماه', 'پنج ماه', 'شش ماه']
+    .map(value => ({ value, label: value }));
+  ftSelectRow(form, 'مدت نگهداری حسن انجام کار', state.retentionDuration || '', () => {
+    contractPickers.openStaticChoicePicker('مدت نگهداری', 'مدت‌ها', durationOptions, state.retentionDuration, value => {
+      state.retentionDuration = value;
+      dirty = true;
+      renderContractForm();
+    });
+  }, { placeholder: 'انتخاب' });
 
   paymentStagesModule.renderPaymentStages(body, state, {
     dirty: () => { dirty = true; },
     toEnglishDigits: value => helper('toEnglishDigits', value),
     toPersianDigits: value => helper('toPersianDigits', value),
     openNumpadGeneric: (value, onCommit, opts) => helper('openNumpadGeneric', value, onCommit, opts),
+    onDirty: () => { dirty = true; },
+    onNumpad: (value, onCommit, opts) => helper('openNumpadGeneric', value, onCommit, opts),
     onRender: () => renderContractForm()
   });
 
