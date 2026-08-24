@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installProjectRouteSurfaceSync } from './projectRouteSurface.js';
+import { installWorkspaceChrome } from '../ui/workspaceChrome.js';
 
 function classList(initial=[]){
   const values=new Set(initial);
   return {
     add(value){values.add(value);},
     remove(value){values.delete(value);},
+    toggle(value,force){if(force)values.add(value);else values.delete(value);},
     contains(value){return values.has(value);},
   };
 }
@@ -33,6 +35,7 @@ function createHarness(){
     document:documentRef,
     addEventListener(type,listener){listeners.set(type,listener);},
   };
+  installWorkspaceChrome({windowRef,documentRef});
   return {windowRef,documentRef,listeners,ids,topbar,tabbar};
 }
 

@@ -14,7 +14,7 @@ import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
 import { installProjectRecoveryRetention } from '../core/projectRecoveryRetention.js';
 import { installBackGestureGuard } from '../core/backGestureGuard.js';
 import { installSoftDelete } from '../core/softDelete.js';
-import { installWorkspaceSurface } from '../core/workspaceSurface.js';
+import { installWorkspaceChrome } from '../ui/workspaceChrome.js';
 import { installContractFormExitBridge } from '../modules/contracts/contractFormExitBridge.js';
 import { installContractShellView } from '../modules/contracts/contractShellView.js';
 import { installContractItemDrag } from '../modules/contracts/contractItemDrag.js';
@@ -140,7 +140,20 @@ export async function startApplication({
   // gesture and must never cascade into closing the parent contract form.
   installBackGestureGuard({windowRef,documentRef:windowRef.document});
   installSoftDelete({ windowRef, documentRef: windowRef.document });
-  installWorkspaceSurface({ windowRef, documentRef: windowRef.document });
+  installWorkspaceChrome({
+    windowRef,
+    documentRef: windowRef.document,
+    getPresentationState: () => windowRef.KarhaLegacy?.getWorkspaceChromeState?.() || {},
+    navigateFooter: moduleId => windowRef.KarhaLegacy?.navigateFooter?.(moduleId),
+    pushWorkspaceHistory: state => windowRef.KarhaLegacy?.pushWorkspaceHistory?.(state),
+    goHomeProjects: () => windowRef.KarhaLegacy?.goHomeProjects?.(),
+    renderDrawerProjectList: () => windowRef.KarhaLegacy?.renderDrawerProjectList?.(),
+    clearWorkspaceSubpage: () => windowRef.KarhaLegacy?.clearWorkspaceSubpage?.(),
+    clearMenuRoot: () => windowRef.KarhaLegacy?.clearMenuRoot?.(),
+    renderProjectsSurface: () => windowRef.KarhaLegacy?.renderAll?.(),
+    handleContextBack: () => windowRef.KarhaLegacy?.handleWorkspaceContextBack?.(),
+    handleContextAction: () => windowRef.KarhaLegacy?.handleWorkspaceContextAction?.(),
+  });
   // Contract forms use a reusable baseline/dirty policy. New records may save
   // drafts; edits never draft and save changes back to the same contract.
   installContractFormExitBridge({windowRef});
@@ -150,10 +163,7 @@ export async function startApplication({
   // when Firebase actually transitions from an authenticated user to guest,
   // then reload so legacy in-memory recovery state cannot resurrect it.
   installLogoutSessionGuard({windowRef});
-  // Legacy still owns visibility of the internal page shells. Install one
-  // explicit handoff before Router starts so Dashboard navigation always
-  // exposes the mounted project/task surface instead of leaving Reports,
-  // Settings or another internal page covering it.
+  // Workspace Chrome owns route presentation; Router remains the route owner.
   installProjectRouteSurfaceSync({windowRef,documentRef:windowRef.document});
   // Preserve the last known-good project set across the migration boundary.
   // A later legacy Firestore snapshot must not erase projects already restored
