@@ -37,10 +37,13 @@ export function createPersistOrchestrator({
   delay = 120,
 } = {}){
   let timer = null;
+  let scheduleVersion = 0;
   return function persistStoreSnapshot(options){
     const writeLocal = !options || options.local !== false;
     clearTimeout(timer);
-    timer = setTimeout(() => {
+    const version = ++scheduleVersion;
+    const flush = () => {
+      if(version !== scheduleVersion) return;
       if(writeLocal){
         appDataStore.getProjects().forEach(rememberProjectTasks);
         if(!appDataStore.persistLocal()) onLocalError();
@@ -54,6 +57,16 @@ export function createPersistOrchestrator({
         });
       }
       appDataStore.clearProjectDirty();
-    }, delay);
+    };
+    // A zero delay is used by deterministic callers/tests to request the next
+    // turn without a wall-clock timer. setTimeout(0) can run after setImmediate
+    // when scheduled from an I/O phase, so use a cancellable microtask there.
+    // The normal 120ms runtime debounce remains timer-backed and unchanged.
+    if(delay === 0){
+      timer = null;
+      queueMicrotask(flush);
+    } else {
+      timer = setTimeout(flush, delay);
+    }
   };
 }
