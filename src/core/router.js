@@ -71,9 +71,7 @@ export class AppRouter{
     this.lastSyncedHash = window.location.hash;
     const session = getSession();
     const rawProject = route.projectId
-      ? (window.KarhaLegacy?.getProject?.(route.projectId)
-        || window.KarhaApp?.projectRepository?.find?.(route.projectId)
-        || null)
+      ? (window.KarhaApp?.projectRepository?.find?.(route.projectId) || null)
       : null;
     const allowed = !rawProject || isProjectVisibleForSession(rawProject, session);
     const projectId = allowed ? route.projectId : null;

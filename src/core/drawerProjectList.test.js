@@ -73,21 +73,26 @@ test('project selection remains deterministic across reconciliation and refresh'
 test('drawer keeps selected project highlighted on Projects footer home', () => {
   const projects=[{id:'project-A'},{id:'project-B'}];
   const windowRef={
-    KarhaApp:{projectContext:{getProjectId:()=> 'project-B'}},
-    KarhaLegacy:{getProjectsList:()=>projects},
+    KarhaApp:{
+      projectContext:{getProjectId:()=> 'project-B'},
+      projectWorkspace:{listProjects:()=>projects},
+    },
   };
   const state=resolveDrawerProjectState([], {activeProjectId:'starred',windowRef});
   assert.deepEqual(state.projects,projects);
   assert.equal(state.activeProjectId,'project-B');
 });
 
-test('drawer falls back to live recovered projects when repository snapshot is empty', () => {
-  const liveProjects=[{id:'project-A'},{id:'project-B'}];
+test('drawer resolves projects only through the canonical workspace list', () => {
+  const projects=[{id:'project-A'},{id:'project-B'}];
   const windowRef={
-    KarhaApp:{projectContext:{getProjectId:()=> 'project-A'}},
-    KarhaLegacy:{getProjectsList:()=>liveProjects},
+    KarhaApp:{
+      projectContext:{getProjectId:()=> 'project-A'},
+      projectWorkspace:{listProjects:()=>projects},
+    },
+    KarhaLegacy:{getProjectsList:()=>[{id:'contradictory'}]},
   };
   const state=resolveDrawerProjectState([], {activeProjectId:null,windowRef});
-  assert.deepEqual(state.projects,liveProjects);
+  assert.deepEqual(state.projects,projects);
   assert.equal(state.activeProjectId,'project-A');
 });
