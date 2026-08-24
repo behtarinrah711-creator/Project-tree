@@ -408,27 +408,11 @@ function addProject(name){
 
 function setWorkspaceRoute(projectId, moduleId='dashboard'){
   if(!projectId) return;
-  if(window.KarhaApp?.router?.navigate){
-    window.KarhaApp.router.navigate(projectId,moduleId);
-    return;
-  }
-  const next = '#/projects/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(moduleId || 'dashboard');
-  if(location.hash !== next){
-    try{ history.pushState({projectId, moduleId}, '', next); }catch(e){ location.hash = next; }
-  }
-  if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(projectId);
+  return window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId});
 }
 function replaceWorkspaceRoute(projectId, moduleId='dashboard'){
   if(!projectId) return;
-  if(window.KarhaApp?.router?.navigate){
-    window.KarhaApp.router.navigate(projectId,moduleId,{replace:true});
-    return;
-  }
-  const next = '#/projects/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(moduleId || 'dashboard');
-  if(location.hash !== next){
-    try{ history.replaceState({projectId, moduleId}, '', next); }catch(e){ location.hash = next; }
-  }
-  if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(projectId);
+  return window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId,replace:true});
 }
 function getProjectIdFromRoute(){
   const m = String(location.hash || '').match(/^#\/?projects\/([^/?&#]+)/i) || String(location.hash || '').match(/^#\/?project\/([^/?&#]+)/i);
@@ -439,6 +423,11 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
   const p=findProject(projectId);
   if(!p || p.trashed || p.archived) return false;
   if(!currentUser && p.ownerUid) return false;
+  if(updateRoute){
+    return !!window.KarhaApp?.projectWorkspace?.selectProject?.(p.id,{
+      moduleId, closeDrawer:closeDrawerOnSelect,
+    });
+  }
   setActiveTab(p.id);
   taskUI?.setAddItemActive(false);
   // Project selection is navigation state, not a debounced content edit. Save
@@ -451,8 +440,7 @@ function setActiveProject(projectId,{updateRoute=true,render=true,moduleId='dash
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       }
     }catch(e){}
-  if(updateRoute) setWorkspaceRoute(p.id,moduleId);
-  else if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
+  if(window.KarhaApp?.projectContext) window.KarhaApp.projectContext.setProjectId(p.id);
   if(closeDrawerOnSelect) closeDrawer();
   // Programmatic navigation renders through Router -> module.mount. Callers
   // that explicitly suppress routing still retain the legacy render option.
@@ -493,7 +481,9 @@ function renderDrawerProjectList(){
       row.querySelector('.drawer-project-count').textContent=toPersianDigits(String(undone));
     },
     onSelect(projectId){
-      setActiveProject(projectId,{updateRoute:true,render:true,moduleId:'dashboard',closeDrawerOnSelect:true});
+      window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{
+        moduleId:'dashboard', closeDrawer:true,
+      });
     }
   });
 }
@@ -585,8 +575,8 @@ function startCloudTaskListener(p){
       }catch(e){}
     },
     onTaskUiRefresh(projectId){
-      if(String(getActiveTab()) === String(projectId) && mainSurface === 'projects') renderAll();
-      else if(mainSurface === 'workspace') refreshCurrentFooterPage();
+      if(String(getActiveTab()) === String(projectId) && ['dashboard','tasks'].includes(window.KarhaRoute?.moduleId)) renderAll();
+      else refreshCurrentFooterPage();
     },
   };
   if(typeof attach === 'function'){
@@ -873,8 +863,8 @@ async function hydrateAllCloudProjects(ownedDocs, sharedDocs){
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       }
     }catch(e){}
-        if(String(getActiveTab()) === String(doc.id) && mainSurface === 'projects') renderAll();
-        else if(mainSurface === 'workspace') refreshCurrentFooterPage();
+        if(String(getActiveTab()) === String(doc.id) && ['dashboard','tasks'].includes(window.KarhaRoute?.moduleId)) renderAll();
+        else refreshCurrentFooterPage();
       }
     }));
   }
@@ -1432,12 +1422,8 @@ function closeNumpad(fromPopState=false){
    در صفحات حسابداری/گزارش/تنظیمات/همکاران و زیرصفحه‌های آن‌ها
    اصلاً در DOM رندر نمی‌شوند؛ بنابراین هیچ نشت محتوایی از صفحه کارها
    به صفحات دیگر امکان‌پذیر نیست. */
-let mainSurface = 'projects';
-
 function enterWorkspaceSurface(){
-  mainSurface = 'workspace';
   if(window.KarhaWorkspaceSurface?.enterWorkspaceSurface){
-    // Module clears content; mainSurface stays legacy-owned for render gates
     const content = document.getElementById('content');
     if(content) content.replaceChildren();
     return;
@@ -1447,7 +1433,6 @@ function enterWorkspaceSurface(){
 }
 
 function enterProjectsSurface(){
-  mainSurface = 'projects';
   menuRootMode = null;
   menuRootPage = null;
   if(window.KarhaWorkspaceSurface?.enterProjectsSurface){
@@ -1726,6 +1711,18 @@ function renderAccountingWorkspace(){
   const body=document.getElementById('accountingPageBody');
   if(!body) return;
   body.innerHTML='';
+}
+
+// D6 compatibility view adapter. Route/module/surface selection is owned by
+// AppRouter + projectRouteSurface; legacy only refreshes UI that has not yet
+// been extracted from this file.
+function applyRoutedSurface({moduleId='dashboard',surface=null}={}){
+  menuRootMode = null;
+  menuRootPage = null;
+  workspaceSubpage = surface?.subpage || null;
+  if(moduleId==='people') renderSettingsWorkspace();
+  renderTabs();
+  updateWorkspaceContextBar();
 }
 
 
@@ -2625,60 +2622,28 @@ function refreshCurrentFooterPage(){
 
 function commitActiveContactDraft(){ try{ if(typeof window.__commitContactDraft==='function') window.__commitContactDraft(); }catch(e){} }
 
-document.getElementById('bottomProjectsBtn').onclick=()=>{commitActiveContactDraft();if(getActiveTab()&&getActiveTab()!=='starred')replaceWorkspaceRoute(getActiveTab(),'dashboard');goHomeProjects();};
-
-document.getElementById('bottomReportsBtn').onclick=()=>{
+function navigateFooter(moduleId){
   commitActiveContactDraft();
   leaveMenuRootForFooter();
-  closeBottomPages();
   ensureHomeSelection();
-  if(getActiveTab()) replaceWorkspaceRoute(getActiveTab(),'reports');
-  enterWorkspaceSurface();
-  workspaceSubpage=null;
-  setBottomNavActive('Reports');
-  renderTabs();
-  showOnlyWorkspacePage('reportsPage');
-  renderReportsWorkspace();
-  updateWorkspaceContextBar();
+  const projectId=getCurrentProjectScopeId();
+  if(projectId) window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId});
+}
+
+document.getElementById('bottomProjectsBtn').onclick=()=>navigateFooter('dashboard');
+
+document.getElementById('bottomReportsBtn').onclick=()=>{
+  navigateFooter('reports');
   pushWorkspaceHistory('reports-root');
 };
 
 document.getElementById('bottomAccountingBtn').onclick=()=>{
-  commitActiveContactDraft();
-  leaveMenuRootForFooter();
-  closeBottomPages();
-  ensureHomeSelection();
-  if(getActiveTab()) replaceWorkspaceRoute(getActiveTab(),'accounting');
-  enterWorkspaceSurface();
-  workspaceSubpage=null;
-  setBottomNavActive('Accounting');
-  renderTabs();
-  // صفحه را اول visible کن تا خطای رندر یا Snapshot شبکه هیچ‌وقت صفحه سفید نسازد.
-  showOnlyWorkspacePage('accountingPage');
-  try{
-    renderAccountingWorkspace();
-  }catch(err){
-    console.error('renderAccountingWorkspace failed:', err);
-    const body=document.getElementById('accountingPageBody');
-    if(body) body.innerHTML='<div class="mgmt-empty">خطا در نمایش حسابداری. دوباره وارد شوید.</div>';
-  }
-  updateWorkspaceContextBar();
+  navigateFooter('accounting');
   pushWorkspaceHistory('accounting');
 };
 
 document.getElementById('bottomSettingsBtn').onclick=()=>{
-  commitActiveContactDraft();
-  leaveMenuRootForFooter();
-  closeBottomPages();
-  ensureHomeSelection();
-  if(getActiveTab()) replaceWorkspaceRoute(getActiveTab(),'people');
-  enterWorkspaceSurface();
-  workspaceSubpage=null;
-  setBottomNavActive('Settings');
-  renderTabs();
-  showOnlyWorkspacePage('settingsPage');
-  renderSettingsWorkspace();
-  updateWorkspaceContextBar();
+  navigateFooter('people');
   pushWorkspaceHistory('settings-root');
 };
 
@@ -2713,15 +2678,7 @@ function openDrawer(){
 function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('hidden'); }
 window.addEventListener('karha:drawer-open', openDrawer);
 window.addEventListener('karha:workspace-route-synced', event=>{
-  const routeProjectId=event.detail?.projectId;
-  if(routeProjectId && String(getActiveTab())!==String(routeProjectId)){
-    setActiveProject(routeProjectId,{updateRoute:false,render:false,moduleId:event.detail?.moduleId||'dashboard'});
-    if(event.detail?.moduleId==='dashboard') renderAll();
-  }
   renderDrawerProjectList();
-  if(event.detail?.moduleId==='contracts' && event.detail?.projectId){
-    openContractsPage(event.detail.projectId,{updateRoute:false,pushHistory:false});
-  }
   updateWorkspaceContextBar();
 });
 
@@ -3248,19 +3205,13 @@ window.KarhaApp?.taskRuntime?.configure({
   }
 });
 const routedProjectId = getProjectIdFromRoute();
-const routedModuleId = String(location.hash || '').match(/^#\/?projects?\/[^/?&#]+\/([^/?&#]+)/i)?.[1] || 'dashboard';
 if(routedProjectId && findProject(routedProjectId)){
-  setActiveTab(routedProjectId);
-  if(routedModuleId!=='contracts') replaceWorkspaceRoute(routedProjectId, 'dashboard');
+  // Router.start() restores this exact project/module after Legacy loads.
 }else if(getActiveTab() && getActiveTab() !== 'starred' && findProject(getActiveTab())){
-  replaceWorkspaceRoute(getActiveTab(), 'dashboard');
+  window.KarhaApp?.projectWorkspace?.selectProject?.(getActiveTab(),{moduleId:'dashboard',replace:true});
 }else{
   setActiveTab(null);
 }
-if(routedProjectId && routedModuleId==='contracts'){
-  enterWorkspaceSurface(); workspaceSubpage='contracts'; setBottomNavActive('Reports');
-  showOnlyWorkspacePage('contractsPage'); updateWorkspaceContextBar();
-}else renderAll();
 
 // قراردادها: صفحه قالب‌ها و فرم مستقل قالب قرارداد
 (function(){
@@ -3312,8 +3263,9 @@ window.KarhaLegacy = Object.freeze({
     return setActiveProject(projectId,{updateRoute:false,render:false});
   },
   selectProject(projectId, { moduleId = 'dashboard' } = {}){
-    return setActiveProject(projectId,{updateRoute:true,render:true,moduleId});
+    return window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId}) || false;
   },
+  applyRoutedSurface,
   getProjectsList(){
     return projectsVisibleForAuth(Array.isArray(data?.projects) ? data.projects : []);
   },
@@ -3385,4 +3337,3 @@ window.KarhaLegacy = Object.freeze({
   contactFormRuntime: __formRTs.contactFormRuntime || null
 });
 }
-

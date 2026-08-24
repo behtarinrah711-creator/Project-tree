@@ -76,6 +76,10 @@ export class AppRouter{
     const allowed = !rawProject || isProjectVisibleForSession(rawProject, session);
     const projectId = allowed ? route.projectId : null;
     projectContext.setProjectId(projectId);
+    if(projectId && window.KarhaAppData && window.KarhaAppData.getActiveTab?.() !== projectId){
+      window.KarhaAppData.setActiveTab(projectId);
+      window.KarhaAppData.persistLocal?.();
+    }
     // Phase 5: condemned deep links → dashboard of the same project (not global home).
     let moduleId = route.moduleId;
     if(isCondemnedRoute(moduleId)){

@@ -144,7 +144,8 @@ export function startCloudProjectRecovery({windowRef=window,projectContext,route
           const recovered=docs.map(doc=>projectFromCloudDoc(doc,user,existingById.get(String(doc.id))));
           mergeRecoveredProjects(live,recovered);
 
-          const activeId=legacy?.getActiveProjectId?.() || null;
+          const activeId=windowRef.KarhaAppData?.getActiveTab?.()
+            || legacy?.getActiveProjectId?.() || null;
           const contextId=projectContext?.getProjectId?.() || null;
           const preferred=chooseRecoveredProjectId(live,{
             activeProjectId:activeId,
@@ -153,11 +154,16 @@ export function startCloudProjectRecovery({windowRef=window,projectContext,route
           });
 
           // If the legacy snapshot race erased the active project, route through
-          // the normal selection lifecycle so activeTab, Context, Router and UI
+          // the modular selection lifecycle so activeTab, Context, Router and UI
           // are restored together. Otherwise keep the user's current project.
           const activeStillExists=activeId && live.some(project=>String(project.id)===String(activeId) && !project.trashed && !project.archived);
           if(preferred && !activeStillExists){
-            legacy?.selectProject?.(preferred,{moduleId:'dashboard'});
+            const selected=windowRef.KarhaApp?.projectWorkspace?.selectProject?.(preferred,{moduleId:'dashboard',replace:true});
+            if(!selected){
+              windowRef.KarhaAppData?.setActiveTab?.(preferred);
+              projectContext?.setProjectId?.(preferred);
+              router?.navigate?.(preferred,'dashboard',{replace:true});
+            }
           }else if(preferred && !projectContext?.getProjectId?.()){
             projectContext?.setProjectId?.(preferred);
             router?.navigate?.(preferred,'dashboard',{replace:true});

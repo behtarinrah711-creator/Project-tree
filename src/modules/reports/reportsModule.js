@@ -63,11 +63,8 @@ export const reportsModule = {
     `;
 
     row.addEventListener('click', () => {
-      if(typeof window.KarhaLegacy?.openContractsPage === 'function'){
-        window.KarhaLegacy.openContractsPage(activeProjectId);
-      }else{
+      if(!window.KarhaApp?.projectWorkspace?.selectProject?.(activeProjectId,{moduleId:'contracts'}))
         goToProjectModule(activeProjectId, 'contracts');
-      }
     });
 
     wrap.appendChild(row);
