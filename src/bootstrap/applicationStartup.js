@@ -109,6 +109,16 @@ export async function startApplication({
   }
   // Phase 8.2: UI primitives own toast/confirm/numpad/jalali (no new DOM ownership in legacy).
   installUiPrimitives({ windowRef, documentRef: windowRef.document });
+  // Compatibility bridge used by the migrated real contract form. UI primitives
+  // remain the sole owner of Jalali picker rendering/state/history behavior.
+  if(typeof windowRef.KarhaLegacy?.openJalaliPicker !== 'function'){
+    windowRef.KarhaLegacy = Object.freeze({
+      ...(windowRef.KarhaLegacy || {}),
+      openJalaliPicker(currentValue, onPick, options){
+        return windowRef.KarhaUI?.openJalaliPicker?.(currentValue, onPick, options);
+      },
+    });
+  }
   installProfileStore({ windowRef });
   installProfileView({ windowRef, documentRef: windowRef.document });
   installWorkspaceHistory({ windowRef });
