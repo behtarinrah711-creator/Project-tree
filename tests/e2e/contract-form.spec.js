@@ -54,13 +54,13 @@ async function openRealContractForm(page, errors) {
   await expect(page.locator('#contractAddBtn')).toBeVisible();
   await page.locator('#contractAddBtn').click();
   await expect(page.locator('#contractFormPage')).toBeVisible();
-  await expect(page.locator('#contractFormBody .form-template')).toBeVisible();
+  await expect(page.locator('#contractFormBody > .form-template:has(.ft-label:text-is("شماره قرارداد"))')).toBeVisible();
 }
 
 async function openEmptyContractFromList(page) {
   await page.locator('#contractAddBtn').click();
   await expect(page.locator('#contractFormPage')).toBeVisible();
-  await expect(page.locator('#contractFormBody .form-template')).toBeVisible();
+  await expect(page.locator('#contractFormBody > .form-template:has(.ft-label:text-is("شماره قرارداد"))')).toBeVisible();
 }
 
 async function waitForSearchHistoryToSettle(page) {
