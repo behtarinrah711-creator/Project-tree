@@ -1423,23 +1423,13 @@ function closeNumpad(fromPopState=false){
    اصلاً در DOM رندر نمی‌شوند؛ بنابراین هیچ نشت محتوایی از صفحه کارها
    به صفحات دیگر امکان‌پذیر نیست. */
 function enterWorkspaceSurface(){
-  if(window.KarhaWorkspaceSurface?.enterWorkspaceSurface){
-    const content = document.getElementById('content');
-    if(content) content.replaceChildren();
-    return;
-  }
-  const content = document.getElementById('content');
-  if(content) content.replaceChildren();
+  return window.KarhaWorkspaceChrome?.enterWorkspaceSurface?.();
 }
 
 function enterProjectsSurface(){
   menuRootMode = null;
   menuRootPage = null;
-  if(window.KarhaWorkspaceSurface?.enterProjectsSurface){
-    renderAll();
-    return;
-  }
-  renderAll();
+  return window.KarhaWorkspaceChrome?.enterProjectsSurface?.();
 }
 
 function renderAll(){
@@ -1482,193 +1472,32 @@ document.getElementById('modeToggle').onclick = ()=>{
 };
 
 
-function syncWorkspacePageTop(){
-  const topbar = document.getElementById('topbar');
-  const context = document.getElementById('workspaceProjectContext');
-  if(!topbar) return;
-  const topbarHeight = Math.ceil(topbar.getBoundingClientRect().height);
-  const contextVisible = !!context && !context.hidden && context.classList.contains('subpage-context');
-  const contextHeight = contextVisible ? Math.ceil(context.getBoundingClientRect().height) : 0;
-  document.documentElement.style.setProperty('--workspace-page-top', (topbarHeight + contextHeight) + 'px');
-}
-window.addEventListener('resize', syncWorkspacePageTop);
-window.addEventListener('orientationchange', ()=>setTimeout(syncWorkspacePageTop,50));
-
-function updateWorkspaceContextBar(){
-  const context = document.getElementById('workspaceProjectContext');
-  const contextName = document.getElementById('workspaceProjectName');
-  const backBtn = document.getElementById('workspaceContextBack');
-  const actionBtn = document.getElementById('workspaceContextAction');
-  const topbar = document.getElementById('topbar');
-  const topbarTitle = document.getElementById('topbarTitle');
-  const topbarMain = topbarTitle?.querySelector('.app-title-main');
-  const topbarProject = document.getElementById('topbarProjectName');
-  if(!context || !contextName) return;
-
-  const activeBtn = document.querySelector('.bottom-nav-item.active');
-  const key = activeBtn?.id?.replace(/^bottom/,'').replace(/Btn$/,'') || 'Projects';
-  const profileVisible = !document.getElementById('profilePage')?.classList.contains('hidden');
-  const managementVisible = !document.getElementById('projectsPage')?.classList.contains('hidden');
-  const isWorkspace = key !== 'Projects' || profileVisible || managementVisible;
-
-  // صفحات منوی کناری مستقل از هوم پروژه‌ها هستند؛ فعال بودن «پروژه‌ها» در فوتر
-  // فقط نشان می‌دهد این صفحات متعلق به بخش پروژه‌ها هستند، نه اینکه خود هوم پروژه‌ها هستند.
-  if(menuRootMode){
-    const menuTitles = {
-      profile: 'ثبت مشخصات',
-      projects: 'مدیریت پروژه‌ها',
-    };
-    if(topbar) topbar.classList.add('workspace-context');
-    if(topbarMain) topbarMain.textContent = menuTitles[menuRootMode] || '';
-    if(topbarProject) topbarProject.textContent = '';
-    contextName.textContent = '';
-    context.hidden = true;
-    context.classList.remove('subpage-context');
-    if(backBtn) backBtn.hidden = true;
-    if(actionBtn) actionBtn.hidden = true;
-    if(topbar) topbar.classList.add('root-workspace-context');
-    syncWorkspacePageTop();
-    return;
-  }
-
-  if(profileVisible){
-    if(topbar) topbar.classList.add('workspace-context');
-    if(topbarMain) topbarMain.textContent = 'ثبت مشخصات';
-    if(topbarProject) topbarProject.textContent = '';
-    contextName.textContent = '';
-    context.hidden = true;
-    context.classList.remove('subpage-context');
-    if(backBtn) backBtn.hidden = true;
-    if(actionBtn) actionBtn.hidden = true;
-    if(topbar) topbar.classList.add('root-workspace-context');
-    syncWorkspacePageTop();
-    return;
-  }
-
-  if(managementVisible){
-    if(topbar) topbar.classList.add('workspace-context');
-    if(topbarMain) topbarMain.textContent = 'مدیریت پروژه‌ها';
-    if(topbarProject) topbarProject.textContent = '';
-    contextName.textContent = '';
-    context.hidden = true;
-    context.classList.remove('subpage-context');
-    if(backBtn) backBtn.hidden = true;
-    if(actionBtn) actionBtn.hidden = true;
-    if(topbar) topbar.classList.add('root-workspace-context');
-    syncWorkspacePageTop();
-    return;
-  }
-
-  // در سطح اصلی هر تب فوتر، عنوان همان بخش در هدر اصلی قرار می‌گیرد.
-  // نوار سبز فقط در صورتی وجود دارد که واقعاً وارد یک زیرمجموعه شده باشیم.
-  let sectionTitle = '';
-  if(key === 'Reports') sectionTitle = 'گزارش';
-  else if(key === 'Accounting') sectionTitle = 'حسابداری';
-  else if(key === 'Settings') sectionTitle = 'تنظیمات';
-  else if(key === 'Projects' && workspaceSubpage === 'archive') sectionTitle = 'آرشیو شده ها';
-
-  if(topbarMain){
-    topbarMain.textContent = isWorkspace ? sectionTitle : 'کارها';
-  }
-
-  const p = data && getActiveTab() !== 'starred' ? findProject(getActiveTab()) : null;
-  if(topbarProject){
-    topbarProject.textContent = isWorkspace && p ? ('(پروژه ' + p.name + ')') : '';
-  }
-
-  if(!isWorkspace){
-    contextName.textContent = '';
-    context.hidden = true;
-    context.classList.remove('subpage-context');
-    if(topbar) topbar.classList.remove('root-workspace-context');
-    if(backBtn) backBtn.hidden = true;
-    if(actionBtn) actionBtn.hidden = true;
-    syncWorkspacePageTop();
-    return;
-  }
-
-  // زیرصفحه‌های داخلی نوار استاندارد خودشان را دارند؛ نوار سراسری اینجا نباید دوباره نمایش داده شود.
-  let subTitle = '';
-  const hasOwnInnerSectionBar = ['statusList','statusForm','collab','projectTrash','contractTemplates','contractTemplateForm','statusTest','contracts','contractForm'].includes(workspaceSubpage);
-  if(!hasOwnInnerSectionBar){
-    if(key === 'Accounting' && (workspaceSubpage === 'statusList' || workspaceSubpage === 'statusForm')) subTitle = 'صورت وضعیت';
-    else if(key === 'Settings' && workspaceSubpage === 'collab') subTitle = 'همکاران پروژه';
-  }
-
-  // نوار سبز فقط برای زیرمجموعه‌ها فعال است؛ در خودِ سه تب فوتر کاملاً حذف می‌شود.
-  const showSubpageBar = isWorkspace && !!subTitle;
-  // صفحه اصلی تب: خط طوسی زیر هدر. زیرصفحه: نوار سبز و بدون خط اضافی.
-  if(topbar) topbar.classList.toggle('root-workspace-context', isWorkspace && !showSubpageBar);
-  context.hidden = !showSubpageBar;
-  context.classList.toggle('subpage-context', showSubpageBar);
-  context.setAttribute('aria-hidden', showSubpageBar ? 'false' : 'true');
-  contextName.textContent = subTitle;
-
-  if(backBtn){
-    backBtn.hidden = false;
-    backBtn.onclick = ()=>{
-      if(workspaceSubpage === 'statusForm'){ closeStatusForm(); return; }
-      if(workspaceSubpage === 'statusList'){ closeStatusList(); return; }
-      if(workspaceSubpage === 'contractTemplates'){ closeContractTemplatesPage(); return; }
-      if(workspaceSubpage === 'statusTest'){ closeStatusTestPage(); return; }
-      if(workspaceSubpage === 'contractTemplateForm'){ requestCloseContractTemplateForm(); return; }
-      if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
-      if(workspaceSubpage === 'contractForm'){ requestCloseContractForm(); return; }
-      if(workspaceSubpage === 'contracts'){ closeContractsPage(); return; }
-      if(workspaceSubpage === 'archive'){ goHomeProjects(); return; }
-      goHomeProjects();
-    };
-  }
-
-  if(actionBtn){
-    // فقط لیست صورت وضعیت‌ها و همکاران پروژه امکان ایجاد مورد جدید دارند.
-    // در فرم ویرایش صورت وضعیت عمداً دکمه + وجود ندارد.
-    const hasSubpageAction = !hasOwnInnerSectionBar && (workspaceSubpage === 'contracts');
-    actionBtn.hidden = !hasSubpageAction;
-    actionBtn.title = 'ایجاد قرارداد';
-    actionBtn.setAttribute('aria-label', actionBtn.title);
-    actionBtn.onclick = ()=>{
-      if(workspaceSubpage === 'statusList'){ openStatusForm(null); return; }
-      if(workspaceSubpage === 'contracts'){ openContractForm(null); return; }
-      if(workspaceSubpage === 'collab'){
-        showToast('اشتراک‌گذاری حذف شده است');
-        return;
-      }
-    };
-  }
-  syncWorkspacePageTop();
-}
-
-function setBottomNavActive(key){
-  // چهار گزینه فوتر همیشه فعال/قابل استفاده‌اند. صفحات منوی کناری زیرمجموعه بخش پروژه‌ها هستند،
-  // بنابراین در آنها فقط «پروژه‌ها» فعال می‌ماند؛ فوتر خاموش نمی‌شود.
-  if(menuRootMode) key='Projects';
-  document.querySelectorAll('.bottom-nav-item').forEach(b=>b.classList.remove('active'));
-  const el = document.getElementById('bottom' + key + 'Btn');
-  if(el) el.classList.add('active');
-
-  const isWorkspace = key !== 'Projects';
-  const topbar = document.getElementById('topbar');
-  const topbarProject = document.getElementById('topbarProjectName');
-  const tabbar = document.getElementById('tabbar');
-
-  // صفحات داخلی: پروژه در عنوان هدر نمایش داده می‌شود و نوار پروژه‌ها حذف است.
-  if(topbar) topbar.classList.toggle('workspace-context', isWorkspace);
-
-  if(tabbar) tabbar.setAttribute('aria-hidden', isWorkspace ? 'true' : 'false');
-  updateWorkspaceContextBar();
-
-  const nav=document.getElementById('bottomNav');
-  if(nav) nav.classList.remove('starred-disabled');
-}
-function showOnlyWorkspacePage(pageId){
-  if(window.KarhaWorkspaceSurface?.showOnlyWorkspacePage)
-    return window.KarhaWorkspaceSurface.showOnlyWorkspacePage(pageId);
-}
+function syncWorkspacePageTop(){ return window.KarhaWorkspaceChrome?.syncWorkspacePageTop?.(); }
+function updateWorkspaceContextBar(){ return window.KarhaWorkspaceChrome?.updateWorkspaceContextBar?.(); }
+function setBottomNavActive(key){ return window.KarhaWorkspaceChrome?.setBottomNavActive?.(key); }
+function showOnlyWorkspacePage(pageId){ return window.KarhaWorkspaceChrome?.showOnlyWorkspacePage?.(pageId); }
 function closeBottomPages(){
   workspaceSubpage=null;
-  if(window.KarhaWorkspaceSurface?.closeBottomPages)
-    return window.KarhaWorkspaceSurface.closeBottomPages();
+  return window.KarhaWorkspaceChrome?.closeBottomPages?.();
+}
+
+function handleWorkspaceContextBack(){
+  if(workspaceSubpage === 'statusForm'){ closeStatusForm(); return; }
+  if(workspaceSubpage === 'statusList'){ closeStatusList(); return; }
+  if(workspaceSubpage === 'contractTemplates'){ closeContractTemplatesPage(); return; }
+  if(workspaceSubpage === 'statusTest'){ closeStatusTestPage(); return; }
+  if(workspaceSubpage === 'contractTemplateForm'){ requestCloseContractTemplateForm(); return; }
+  if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
+  if(workspaceSubpage === 'contractForm'){ requestCloseContractForm(); return; }
+  if(workspaceSubpage === 'contracts'){ closeContractsPage(); return; }
+  if(workspaceSubpage === 'archive'){ goHomeProjects(); return; }
+  goHomeProjects();
+}
+
+function handleWorkspaceContextAction(){
+  if(workspaceSubpage === 'statusList'){ openStatusForm(null); return; }
+  if(workspaceSubpage === 'contracts'){ openContractForm(null); return; }
+  if(workspaceSubpage === 'collab') showToast('اشتراک‌گذاری حذف شده است');
 }
 
 function ensureHomeSelection(){
@@ -2629,26 +2458,6 @@ function navigateFooter(moduleId){
   if(projectId) window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId});
 }
 
-document.getElementById('bottomProjectsBtn').onclick=()=>navigateFooter('dashboard');
-
-document.getElementById('bottomReportsBtn').onclick=()=>{
-  navigateFooter('reports');
-  pushWorkspaceHistory('reports-root');
-};
-
-document.getElementById('bottomAccountingBtn').onclick=()=>{
-  navigateFooter('accounting');
-  pushWorkspaceHistory('accounting');
-};
-
-document.getElementById('bottomSettingsBtn').onclick=()=>{
-  navigateFooter('people');
-  pushWorkspaceHistory('settings-root');
-};
-
-document.getElementById('closeReportsPage').onclick=()=>goHomeProjects();
-document.getElementById('closeAccountingPage').onclick=()=>goHomeProjects();
-document.getElementById('closeSettingsPage').onclick=()=>goHomeProjects();
 document.getElementById('closeProjectTrashPage').onclick=()=>{
   workspaceSubpage=null;
   showOnlyWorkspacePage('settingsPage');
@@ -2670,16 +2479,8 @@ const {renderProjectView,refreshProjectPartial,renderInlineAddRow,renderTaskBloc
   buildStarredGroup,openTaskDetail,openSubDetail,closeSheet,renderSheet}=taskUI;
 
 /* ---------- side drawer (menu) ---------- */
-function openDrawer(){
-  document.getElementById('drawerOverlay').classList.remove('hidden');
-  renderDrawerProjectList();
-}
-function closeDrawer(){ document.getElementById('drawerOverlay').classList.add('hidden'); }
-window.addEventListener('karha:drawer-open', openDrawer);
-window.addEventListener('karha:workspace-route-synced', event=>{
-  renderDrawerProjectList();
-  updateWorkspaceContextBar();
-});
+function openDrawer(){ return window.KarhaWorkspaceChrome?.openDrawer?.(); }
+function closeDrawer(){ return window.KarhaWorkspaceChrome?.closeDrawer?.(); }
 
 /* ---------- confirm dialog (Phase 8.2: owned by src/ui/confirm.js via KarhaUI) ---------- */
 let confirmCallback = null;
@@ -3252,6 +3053,16 @@ window.KarhaLegacy = Object.freeze({
     return window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId}) || false;
   },
   applyRoutedSurface,
+  getWorkspaceChromeState(){
+    const project=getCurrentProject();
+    return { menuRootMode, workspaceSubpage, project: project ? { id:project.id, name:project.name } : null };
+  },
+  navigateFooter,
+  renderDrawerProjectList,
+  clearWorkspaceSubpage(){ workspaceSubpage=null; },
+  clearMenuRoot(){ menuRootMode=null; menuRootPage=null; },
+  handleWorkspaceContextBack,
+  handleWorkspaceContextAction,
   getProjectsList(){
     return projectsVisibleForAuth(Array.isArray(data?.projects) ? data.projects : []);
   },
