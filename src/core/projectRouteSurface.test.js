@@ -49,10 +49,11 @@ test('dashboard route exposes project surface after navigating from an internal 
   assert.equal(h.tabbar.attrs['aria-hidden'],'false');
 });
 
-test('non-dashboard routes keep their internal shell visible',()=>{
+test('contracts route exposes its canonical internal shell',()=>{
   const h=createHarness();
   installProjectRouteSurfaceSync(h);
   h.listeners.get('karha:workspace-route-synced')({detail:{projectId:'B',moduleId:'contracts'}});
-  assert.equal(h.ids.get('reportsPage').classList.contains('hidden'),false);
+  assert.equal(h.ids.get('reportsPage').classList.contains('hidden'),true);
+  assert.equal(h.ids.get('contractsPage').classList.contains('hidden'),false);
   assert.equal(h.ids.get('bottomReportsBtn').classList.contains('active'),true);
 });

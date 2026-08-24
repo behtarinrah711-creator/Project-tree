@@ -2,6 +2,7 @@ import { projectContext } from './projectContext.js';
 import { projectRepository } from '../data/projectRepository.js';
 import { getSession } from './session.js';
 import { isProjectVisibleForSession, projectsVisibleForSession } from './projectVisibility.js';
+import { appRouter } from './router.js';
 
 function normalizeProject(project){
   if(!project) return null;
@@ -27,17 +28,18 @@ export function getActiveProject(){
   return getProject(projectContext.getProjectId());
 }
 
-export function selectProject(projectId, { moduleId = 'dashboard' } = {}){
+export function selectProject(projectId, { moduleId = 'dashboard', replace = false, closeDrawer = false } = {}){
   const project = getProject(projectId);
   if(!project) return false;
-
-  const legacy = window.KarhaLegacy;
-  if(typeof legacy?.selectProject === 'function'){
-    return legacy.selectProject(project.id, { moduleId });
-  }
-
+  // D6: selection and routing are one modular transaction. AppDataStore is the
+  // sole activeTab write path; projectContext is synchronized by AppRouter.
+  window.KarhaAppData?.setActiveTab?.(project.id);
+  window.KarhaAppData?.persistLocal?.();
   projectContext.setProjectId(project.id);
-  const route = `#/projects/${encodeURIComponent(project.id)}/${encodeURIComponent(moduleId)}`;
-  if(window.location.hash !== route) window.location.hash = route;
-  return true;
+  const router = window.KarhaApp?.router || appRouter;
+  const navigated = router.navigate(project.id, moduleId, { replace });
+  if(navigated && closeDrawer){
+    window.document?.getElementById?.('drawerOverlay')?.classList?.add?.('hidden');
+  }
+  return navigated;
 }
