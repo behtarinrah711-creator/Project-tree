@@ -42,13 +42,20 @@ function helper(name, ...args) {
   return legacy(name, ...args);
 }
 
+function contractShell(name, ...args) {
+  if (typeof window !== 'undefined' && typeof window.KarhaContractShell?.[name] === 'function') {
+    return window.KarhaContractShell[name](...args);
+  }
+  return helper(name, ...args);
+}
+
 function currentProject() {
   return activeProject(activeProjectId);
 }
 
 function openFormShell(projectId) {
-  const opened = helper('openRealContractFormShell', projectId);
-  if (opened === false) return false;
+  const opened = contractShell('openRealContractFormShell', projectId);
+  if (opened !== true) return false;
   if (!formHistoryOwned) {
     helper('pushWorkspaceHistory', 'contractForm');
     formHistoryOwned = true;
@@ -57,7 +64,7 @@ function openFormShell(projectId) {
 }
 
 function closeFormShell(fromPopState = false) {
-  helper('closeRealContractFormShell', fromPopState);
+  contractShell('closeRealContractFormShell', fromPopState);
   if (formHistoryOwned) {
     helper('suppressWorkspaceBack');
     try { history.back(); } catch {}
