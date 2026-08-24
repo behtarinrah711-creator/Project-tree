@@ -21,8 +21,6 @@ export function registerFormRuntimes(deps = {}){
     },
     persistActivities(projectId){
       const project = d.findProject?.(projectId);
-      const stored = window.KarhaApp?.projectRepository?.find(projectId);
-      if(project && stored) project.activityTemplates = Array.isArray(stored.activityTemplates) ? stored.activityTemplates : [];
       if(project) d.markDirty?.(project.id);
       d.persist?.({ local:false });
     },
@@ -46,8 +44,6 @@ export function registerFormRuntimes(deps = {}){
     closeContactsToSettings: d.closeContactsToSettings,
     persistContacts(projectId){
       const project = d.findProject?.(projectId);
-      const stored = window.KarhaApp?.projectRepository?.find(projectId);
-      if(project && stored) project.contacts = Array.isArray(stored.contacts) ? stored.contacts : [];
       if(project) d.markDirty?.(project.id);
       d.persist?.({ local:false });
     },

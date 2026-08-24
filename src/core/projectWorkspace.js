@@ -12,53 +12,14 @@ function normalizeProject(project){
   };
 }
 
-/**
- * Phase 4.3 — repository-first read.
- * After applyCloudSnapshot updates the repository, UI reads repository first.
- * Live legacy is fallback for projects not yet written to the store.
- */
-function liveProject(projectId){
-  try{
-    return window.KarhaLegacy?.getProject?.(projectId) || null;
-  }catch{
-    return null;
-  }
-}
-
-function liveList(){
-  try{
-    const list = window.KarhaLegacy?.getProjectsList?.();
-    return Array.isArray(list) ? list : null;
-  }catch{
-    return null;
-  }
-}
-
 export function listProjects(){
   const session = getSession();
-  const fromRepo = projectRepository.getProjectsList();
-  const fromLive = liveList();
-  // Repository is source of truth; merge in live-only dirty projects by id
-  const byId = new Map();
-  (fromRepo || []).forEach(p => {
-    if(p) byId.set(String(p.id ?? p.projectId), p);
-  });
-  (fromLive || []).forEach(p => {
-    if(!p) return;
-    const key = String(p.id ?? p.projectId);
-    if(!byId.has(key)) byId.set(key, p);
-    // Prefer live only when repository missing fields after incomplete hydrate —
-    // if both exist, prefer repository (updated by applyCloudSnapshot).
-  });
-  return projectsVisibleForSession(Array.from(byId.values()), session).map(normalizeProject);
+  return projectsVisibleForSession(projectRepository.getProjectsList(), session).map(normalizeProject);
 }
 
 export function getProject(projectId = projectContext.getProjectId()){
   if(!projectId) return null;
-  const fromRepo = normalizeProject(projectRepository.getActiveProject(projectId));
-  const fromLive = normalizeProject(liveProject(projectId));
-  // Prefer repository when present (post-applyCloudSnapshot). Fall back to live.
-  const project = fromRepo || fromLive;
+  const project = normalizeProject(projectRepository.getActiveProject(projectId));
   return isProjectVisibleForSession(project, getSession()) ? project : null;
 }
 

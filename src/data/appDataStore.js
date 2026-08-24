@@ -83,6 +83,12 @@ export function createAppDataStore({
   }
 
   function getProjects(){ return snapshot.projects; }
+  /** D3: replace the canonical runtime project collection. */
+  function setProjects(projects){
+    if(!Array.isArray(projects)) throw new TypeError('projects must be an array');
+    snapshot.projects = projects;
+    return snapshot.projects;
+  }
   function getActiveTab(){ return snapshot.activeTab; }
   function getViewMode(){ return snapshot.viewMode; }
   function getStarredOrder(){ return snapshot.starredOrder; }
@@ -108,6 +114,7 @@ export function createAppDataStore({
     loadFromStorage,
     persistLocal,
     getProjects,
+    setProjects,
     getActiveTab,
     setActiveTab,
     getViewMode,

@@ -19,8 +19,15 @@ function readKey(storage, key){
 }
 
 export class ProjectRepository{
-  constructor(storage = localStorageAdapter){
+  constructor(storage = localStorageAdapter, appDataStore = null){
     this.storage = storage;
+    this.appDataStore = appDataStore;
+  }
+
+  runtimeStore(){
+    if(this.appDataStore?.getProjects) return this.appDataStore;
+    const store = globalThis.window?.KarhaAppData || globalThis.KarhaAppData;
+    return store?.getProjects ? store : null;
   }
 
   /**
@@ -28,6 +35,8 @@ export class ProjectRepository{
    * or migrating the legacy storage key.
    */
   all(){
+    const store = this.runtimeStore();
+    if(store) return store.getProjects();
     for(const key of LEGACY_KEYS){
       const projects = normalizeProjects(readKey(this.storage, key));
       if(projects.length) return projects;
@@ -63,6 +72,19 @@ export class ProjectRepository{
    */
   saveProjectsList(projects){
     if(!Array.isArray(projects)) throw new TypeError('projects must be an array');
+
+    const store = this.runtimeStore();
+    if(store){
+      // D3 design A: repository callers share AppDataStore's sole runtime list;
+      // localStorage is only the serialized persistence boundary.
+      const canonical = store.setProjects ? store.setProjects(projects) : projects;
+      if(!store.setProjects){
+        const snapshot = store.getSnapshot?.();
+        if(snapshot) snapshot.projects = projects;
+      }
+      store.persistLocal?.();
+      return canonical;
+    }
 
     const raw = readKey(this.storage, PRIMARY_KEY);
 

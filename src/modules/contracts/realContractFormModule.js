@@ -27,9 +27,7 @@ function activeProject(projectId = null) {
 
   if (!id) return null;
 
-  return projectRepository.getActiveProject(id)
-    || legacy('findProject', id)
-    || null;
+  return projectRepository.getActiveProject(id);
 }
 
 function legacy(name, ...args) {

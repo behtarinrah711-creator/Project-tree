@@ -1,5 +1,6 @@
 import { ProjectRepository } from './projectRepository.js';
 import { localStorageAdapter } from './storageAdapter.js';
+import { createAppDataStore } from './appDataStore.js';
 
 // Static and behavior tests for the project repository API.
 const requiredMethods = [
@@ -98,5 +99,28 @@ export function assertProjectRepositoryReadsLegacyKeys(){
     throw new Error('Repository no longer reads legacy storage keys');
   }
 
+  return true;
+}
+
+export function assertProjectRepositoryUsesCanonicalRuntimeProjects(){
+  const storage = createMemoryStorage({
+    'gtasks-clone-v2': JSON.stringify({ projects: [{ id:'stale', name:'Stored' }] }),
+  });
+  const store = createAppDataStore({ storage });
+  store.replaceSnapshot({ projects:[{ id:'live', name:'Canonical' }], activeTab:'live' });
+  const repository = new ProjectRepository(storage, store);
+
+  if(repository.find('live') !== store.getProjects()[0] || repository.find('stale')){
+    throw new Error('Repository runtime reads did not use AppDataStore projects');
+  }
+
+  repository.updateProject('live', project => ({ ...project, name:'Updated' }));
+  if(store.getProjects()[0]?.name !== 'Updated'){
+    throw new Error('Repository update did not update the canonical projects snapshot');
+  }
+  const persisted = JSON.parse(storage.getItem('gtasks-clone-v2'));
+  if(persisted.projects[0]?.name !== 'Updated' || persisted.activeTab !== 'live'){
+    throw new Error('Canonical project update did not use AppDataStore persistence');
+  }
   return true;
 }

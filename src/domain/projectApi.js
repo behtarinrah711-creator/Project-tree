@@ -35,17 +35,6 @@ function canWriteProject(project){
 }
 
 function publishLive(projectId){
-  const stored = projectRepository.find(projectId);
-  const live = typeof window !== 'undefined' ? window.KarhaLegacy?.getProject?.(projectId) : null;
-  if(live && stored){
-    Object.assign(live, {
-      name: stored.name,
-      trashed: stored.trashed,
-      archived: stored.archived,
-      deletedAt: stored.deletedAt,
-      deletedType: stored.deletedType,
-    });
-  }
   if(typeof window !== 'undefined'){
     if(projectId) adapterMarkDirty(projectId);
     adapterPersist({ local:false });
@@ -100,10 +89,6 @@ export const projectApi = {
     const list = projectRepository.getProjectsList();
     list.push(project);
     projectRepository.saveProjectsList(list);
-    const liveList = typeof window !== 'undefined' ? window.KarhaLegacy?.getProjectsList?.() : null;
-    if(Array.isArray(liveList) && !liveList.some(item => String(item.id) === String(project.id))){
-      liveList.push(project);
-    }
     publishLive(project.id);
     return allow({ project });
   },

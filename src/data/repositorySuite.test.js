@@ -3,6 +3,7 @@ import {
   assertProjectRepositoryStorageBoundary,
   assertProjectRepositoryUsesLocalStorageAdapter,
   assertProjectRepositoryReadsLegacyKeys,
+  assertProjectRepositoryUsesCanonicalRuntimeProjects,
 } from './projectRepository.contract.test.js';
 import {
   assertProjectItemRepositoryContract,
@@ -28,6 +29,7 @@ const repositoryChecks = {
   'ProjectRepository storage boundary': assertProjectRepositoryStorageBoundary,
   'ProjectRepository browser adapter': assertProjectRepositoryUsesLocalStorageAdapter,
   'ProjectRepository legacy keys': assertProjectRepositoryReadsLegacyKeys,
+  'ProjectRepository canonical runtime projects': assertProjectRepositoryUsesCanonicalRuntimeProjects,
   'ProjectItemRepository contract': assertProjectItemRepositoryContract,
   'ProjectItemRepository behavior': assertProjectItemRepositoryBehavior,
   'ProjectItemRepository legacy keys': assertProjectItemRepositoryLegacyKeyCompatibility,

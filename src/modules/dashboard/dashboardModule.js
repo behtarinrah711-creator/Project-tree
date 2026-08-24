@@ -10,8 +10,7 @@ function getProjectId(explicitProjectId=null){
 function getProject(projectId=null){
   const id=getProjectId(projectId);
   if(!id) return null;
-  const liveProject=window?.KarhaLegacy?.getProject?.(id);
-  return liveProject || projectRepository.getActiveProject(id);
+  return projectRepository.getActiveProject(id);
 }
 function legacy(name,...args){
   if(typeof window?.KarhaLegacy?.[name]==='function') return window.KarhaLegacy[name](...args);
@@ -49,10 +48,7 @@ export const dashboardModule={
     content.appendChild(summary);
   }
 
-  // The legacy/cloud runtime owns the live project object.  Reading the
-  // repository again here can return the previous localStorage snapshot while
-  // a cloud hydration or debounced save is still in flight, which made an
-  // otherwise healthy project appear to have no tasks.
+  // Repository runtime reads delegate to AppDataStore's canonical project object.
   const projectTasks = Array.isArray(p.tasks) ? p.tasks : projectItemRepository.list(p.id);
   const visibleTasks = projectTasks.filter(t => !legacy("isPendingDeleted",'task', p.id, t.id) && !t.trashed);
   const active = visibleTasks.filter(t=>!t.done);
