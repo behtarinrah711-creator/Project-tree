@@ -7,14 +7,14 @@ import { getProjectRouteSurface, installProjectRouteSurfaceSync } from '../core/
 function element(id, initial=[]){
   const classes=new Set(initial);
   return {
-    id, hidden:false, textContent:'', attrs:{}, onclick:null,
+    id, hidden:false, textContent:'', attrs:{}, onclick:null, childNodes:[],
     classList:{
       add:value=>classes.add(value), remove:value=>classes.delete(value), contains:value=>classes.has(value),
       toggle(value,force){if(force)classes.add(value);else classes.delete(value);},
     },
     setAttribute(name,value){this.attrs[name]=value;},
     getBoundingClientRect(){return {height:id==='topbar'?50:20};},
-    replaceChildren(){this.cleared=true;},
+    replaceChildren(...children){this.childNodes=children;this.cleared=true;},
     querySelector(selector){return selector==='.app-title-main'?this.main:null;},
   };
 }
@@ -48,8 +48,38 @@ function harness(){
     renderDrawerProjectList:()=>calls.push(['drawer']),
     clearWorkspaceSubpage:()=>{state={...state,workspaceSubpage:null};},
   });
-  return {ids,footers,events,calls,chrome,get state(){return state;},set state(value){state=value;}};
+  return {ids,footers,events,calls,chrome,windowRef,documentRef,get state(){return state;},set state(value){state=value;}};
 }
+
+test('route presentation preserves mounted dashboard content while switching page shells',()=>{
+  const h=harness();
+  assert.equal(installProjectRouteSurfaceSync({windowRef:h.windowRef,documentRef:h.documentRef}),true);
+  const syncRoute=moduleId=>h.events.get('karha:workspace-route-synced')({detail:{projectId:'A',moduleId}});
+  const content=h.ids.get('content');
+  const mountedDashboard={textContent:'sentinel task for project A'};
+  content.replaceChildren(mountedDashboard);
+  content.cleared=false;
+
+  syncRoute('dashboard');
+  assert.deepEqual(content.childNodes,[mountedDashboard]);
+  assert.equal(content.cleared,false);
+  assert.equal(h.ids.get('bottomProjectsBtn').classList.contains('active'),true);
+
+  syncRoute('reports');
+  assert.equal(h.ids.get('reportsPage').classList.contains('hidden'),false);
+  syncRoute('people');
+  assert.equal(h.ids.get('reportsPage').classList.contains('hidden'),true);
+  assert.equal(h.ids.get('settingsPage').classList.contains('hidden'),false);
+
+  const remountedDashboard={textContent:'sentinel task for project A after returning'};
+  content.replaceChildren(remountedDashboard);
+  content.cleared=false;
+  syncRoute('dashboard');
+  assert.deepEqual(content.childNodes,[remountedDashboard]);
+  assert.equal(content.cleared,false);
+  assert.equal(h.ids.get('settingsPage').classList.contains('hidden'),true);
+  assert.equal(h.ids.get('bottomProjectsBtn').classList.contains('active'),true);
+});
 
 test('footer binding delegates navigation and routed surfaces own active state and visibility',()=>{
   const h=harness();

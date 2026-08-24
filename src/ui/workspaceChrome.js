@@ -162,7 +162,8 @@ export function installWorkspaceChrome({
   }
 
   function applyRoute(moduleId, surface){
-    showOnlyWorkspacePage(surface?.pageId || null);
+    if(surface?.pageId) showOnlyWorkspacePage(surface.pageId);
+    else hideAllWorkspacePages();
     setBottomNavActive(surface?.footer || 'Projects');
     renderDrawerProjectList();
     updateWorkspaceContextBar();
