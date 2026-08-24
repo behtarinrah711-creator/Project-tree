@@ -1,6 +1,7 @@
 import { projectContext } from '../../core/projectContext.js';
 import { contactApi } from '../../domain/contactApi.js';
 import { localStorageAdapter } from '../../data/storageAdapter.js';
+import { enterContactFormShell, leaveContactFormShell } from './contactFormBridge.js';
 
 const CONTACT_DRAFT_KEY='gtasks-contact-draft-v1';
 const runtime=new Proxy({}, { get(_target,key){ return window.KarhaLegacy?.contactFormRuntime?.[key]; } });
@@ -49,12 +50,7 @@ export function openContactForm(contact=null,{activityId=null}={}){
   const header=page?.querySelector('.inner-section-bar');
   const h2=header?.querySelector('h2');
   const addBtn=document.getElementById('contactAddBtn');
-  if(!body||!page) return;
-  if(h2) h2.textContent=isEdit?'ویرایش مخاطب':'ثبت مخاطب';
-  page.classList.add('contact-form-mode');
-  runtime.setInternalFormMode(true);
-  if(addBtn) addBtn.hidden=true;
-  body.innerHTML='';
+  if(!enterContactFormShell({page,body,title:h2,addButton:addBtn,isEdit,setFormMode:runtime.setInternalFormMode})) return;
 
   const wrap=document.createElement('div'); wrap.className='contacts-page-form form-template';
 
@@ -228,10 +224,7 @@ export function openContactForm(contact=null,{activityId=null}={}){
     window.removeEventListener('beforeunload',contactBeforeUnload);
     if(window.__commitContactDraft===commitDraftNow) window.__commitContactDraft=null; if(window.__contactBackGuard===backToList) window.__contactBackGuard=null;
     cleanupContactActivityPicker();
-    page.classList.remove('contact-form-mode');
-    runtime.setInternalFormMode(false);
-    if(h2)h2.textContent='مخاطبین';
-    if(addBtn)addBtn.hidden=false;
+    leaveContactFormShell({page,title:h2,addButton:addBtn,setFormMode:runtime.setInternalFormMode});
   };
   const contactBeforeUnload=(e)=>{
     // هنگام Refresh نمی‌توانیم پنجره سه‌گزینه‌ای سفارشی مرورگر بسازیم؛ فقط هشدار می‌دهیم که اطلاعات ذخیره نشده است.
@@ -359,4 +352,11 @@ export function openContactForm(contact=null,{activityId=null}={}){
     c.firstName=firstName;c.lastName=lastName;c.fatherName=get('fatherName');c.name=[firstName,lastName].filter(Boolean).join(' ');c.nationalId=nat==='ایرانی'?toEnglishDigits(nationalId):'';c.address=get('address');c.postalCode=toEnglishDigits(get('postalCode'));c.phones=phoneVals;c.phone=phoneVals[0]||'';c.type=typeVal;c.activities=selectedActivityId?[selectedActivityId]:[];c.bankAccounts=bankVals;c.cards=bankVals.map(x=>x.card).filter(Boolean);c.ibans=bankVals.map(x=>x.iban).filter(Boolean);c.accounts=bankVals.map(x=>x.account).filter(Boolean);
     if(!contactApi.save(projectId, c).ok) return; clearContactDraft(c.id); contactSavedSuccessfully=true; backToList();
   };
+}
+
+export function resetContactFormShell(){
+  const page=document.getElementById('contactsPage');
+  const title=page?.querySelector('.inner-section-bar h2');
+  const addButton=document.getElementById('contactAddBtn');
+  leaveContactFormShell({page,title,addButton,setFormMode:runtime.setInternalFormMode});
 }

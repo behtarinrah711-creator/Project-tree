@@ -2,7 +2,7 @@ import { projectContext } from '../../core/projectContext.js';
 import { projectRepository } from '../../data/projectRepository.js';
 import { contactApi } from '../../domain/contactApi.js';
 import { activityApi } from '../../domain/activityApi.js';
-import { openContactForm } from './contactFormModule.js';
+import { openContactForm, resetContactFormShell } from './contactFormModule.js';
 
 const PAGE_SIZE = 50;
 
@@ -100,6 +100,7 @@ export const peopleModule = {
   title:'کارکنان و پیمانکاران',
   route:'people',
   openContactForm,
+  resetContactFormShell,
 
   mount({projectId} = {}){
     this.render(projectId);
