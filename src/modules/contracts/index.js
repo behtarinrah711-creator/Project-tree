@@ -27,6 +27,7 @@ export { realContractDomain };
 if (typeof window !== 'undefined') window.KarhaRealContracts = realContractDomain;
 
 export { realContractFormModule };
+if (typeof window !== 'undefined') window.KarhaRealContractForm = realContractFormModule;
 
 export { contractPickers };
 if (typeof window !== 'undefined') window.KarhaContractPickers = contractPickers;

@@ -58,6 +58,8 @@ export const contractsModule={
     const p=project(id);
     const body=document.getElementById('contractsPageBody');
     if(!body)return;
+    const add=document.getElementById('contractAddBtn');
+    if(add) add.onclick=()=>legacy('openContractForm',null);
     body.innerHTML='';
     if(!p){
       body.innerHTML='<div class="contract-empty">ابتدا یک پروژه را انتخاب کنید.</div>';

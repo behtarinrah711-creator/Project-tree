@@ -20,8 +20,16 @@ let formHistoryOwned = false;
 const REAL_CONTRACT_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
 
 function activeProject(projectId = null) {
-  const id = projectId || projectContext.getProjectId?.() || projectContext.getActiveProjectId?.();
-  return id ? projectRepository.getActiveProject(id) : null;
+  const id =
+    projectId ||
+    projectContext.getProjectId?.() ||
+    projectContext.getActiveProjectId?.();
+
+  if (!id) return null;
+
+  return projectRepository.getActiveProject(id)
+    || legacy('findProject', id)
+    || null;
 }
 
 function legacy(name, ...args) {
@@ -34,13 +42,20 @@ function helper(name, ...args) {
   return legacy(name, ...args);
 }
 
+function contractShell(name, ...args) {
+  if (typeof window !== 'undefined' && typeof window.KarhaContractShell?.[name] === 'function') {
+    return window.KarhaContractShell[name](...args);
+  }
+  return helper(name, ...args);
+}
+
 function currentProject() {
   return activeProject(activeProjectId);
 }
 
 function openFormShell(projectId) {
-  const opened = helper('openRealContractFormShell', projectId);
-  if (opened === false) return false;
+  const opened = contractShell('openRealContractFormShell', projectId);
+  if (opened !== true) return false;
   if (!formHistoryOwned) {
     helper('pushWorkspaceHistory', 'contractForm');
     formHistoryOwned = true;
@@ -49,7 +64,7 @@ function openFormShell(projectId) {
 }
 
 function closeFormShell(fromPopState = false) {
-  helper('closeRealContractFormShell', fromPopState);
+  contractShell('closeRealContractFormShell', fromPopState);
   if (formHistoryOwned) {
     helper('suppressWorkspaceBack');
     try { history.back(); } catch {}
@@ -477,6 +492,10 @@ function renderContractForm() {
   }, { placeholder: 'انتخاب' });
 
   paymentStagesModule.renderPaymentStages(body, state, {
+    dirty: () => { dirty = true; },
+    toEnglishDigits: value => helper('toEnglishDigits', value),
+    toPersianDigits: value => helper('toPersianDigits', value),
+    openNumpadGeneric: (value, onCommit, opts) => helper('openNumpadGeneric', value, onCommit, opts),
     onDirty: () => { dirty = true; },
     onNumpad: (value, onCommit, opts) => helper('openNumpadGeneric', value, onCommit, opts),
     onRender: () => renderContractForm()
