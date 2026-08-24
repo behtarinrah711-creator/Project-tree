@@ -5,6 +5,8 @@ import { projectRepository } from '../data/projectRepository.js';
 import { projectModules } from '../modules/index.js';
 import { listProjects, getProject, getActiveProject, selectProject } from '../core/projectWorkspace.js';
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
+import { createProjectTrashView } from '../modules/trash/projectTrashView.js';
+import { createProjectManagementView } from '../modules/projects/projectManagementView.js';
 import { loadLegacyRuntime } from './legacyBootstrap.js';
 import { installAppDataStore } from '../data/appDataStore.js';
 import { installHtmlEscape } from '../core/htmlEscape.js';
@@ -64,6 +66,8 @@ export async function startApplication({
     projectContext,
     projectRepository,
     taskRuntime: taskRuntimeModule,
+    createProjectTrashView,
+    createProjectManagementView,
     reconcileDrawerProjectList,
     projectWorkspace: Object.freeze({ listProjects, getProject, getActiveProject, selectProject }),
     getSession,

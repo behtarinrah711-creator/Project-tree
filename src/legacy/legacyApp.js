@@ -489,9 +489,8 @@ function renderDrawerProjectList(){
 }
 function openGlobalTrashFromDrawer(){
   closeDrawer();
-  managementProjectTab='deleted';
   openProjectsPage();
-  managementProjectTab='deleted';
+  projectManagementView.setTab('deleted');
   renderManagementPage();
 }
 function deleteProject(pid){
@@ -2242,20 +2241,6 @@ function renderItemActivities(item,pid,body){
   body.appendChild(field);
 }
 
-function collectAllTrashedRecords(){
-  const out=[];
-  (data.projects||[]).forEach(p=>{
-    if(p && p.trashed) out.push({type:'project',id:p.id,record:p,projectId:p.id,deletedAt:p.deletedAt||0});
-    (p.tasks||[]).forEach(t=>{
-      if(t && t.trashed) out.push({type:'task',id:t.id,record:t,projectId:p.id,projectName:p.name,deletedAt:t.deletedAt||0});
-      walkItems(t.subtasks,(item,parent)=>{
-        if(item && item.trashed) out.push({type:'subtask',id:item.id,record:item,projectId:p.id,projectName:p.name,parentId:parent?parent.id:t.id,rootTaskId:t.id,deletedAt:item.deletedAt||0});
-      });
-    });
-  });
-  return out.sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
-}
-
 function permanentlyDeleteGlobalRecord(entry){
   if(!entry || !entry.record) return false;
   if(entry.type==='contact' || entry.type==='activity'){
@@ -2301,111 +2286,11 @@ function restoreGlobalRecord(entry){
   return false;
 }
 
-function getTrashSourceLabel(type){
-  switch(type){
-    case 'contact': return 'مخاطبین';
-    case 'activity': return 'فعالیت‌ها';
-    case 'project': return 'پروژه‌ها';
-    case 'task':
-    case 'subtask': return 'آیتم‌های پروژه';
-    default: return 'سایر';
-  }
-}
-
-function addTrashSourceBadge(container, type){
-  const badge=document.createElement('div');
-  badge.className='trash-source-badge';
-  badge.textContent='بخش: '+getTrashSourceLabel(type);
-  container.insertBefore(badge, container.firstChild);
-  return badge;
-}
-
-function appendTrashActions(actions,entry){
-  const restore=document.createElement('button'); restore.type='button'; restore.className='restore-btn'; restore.textContent='بازگردانی';
-  restore.onclick=()=>{ if(restoreGlobalRecord(entry)){ persist(); renderProjectTrashPage(); renderAll(); renderContactsPage(); renderProjectActivitiesPage(); showToast('بازگردانده شد'); } };
-  const perm=document.createElement('button'); perm.type='button'; perm.className='perm-del-btn'; perm.textContent='حذف همیشگی';
-  perm.onclick=()=>openConfirm('این مورد برای همیشه حذف شود؟ این عملیات قابل بازگردانی نیست.',async()=>{
-    const ok=await permanentlyDeleteGlobalRecord(entry);
-    if(ok){ persist(); renderProjectTrashPage(); renderAll(); renderContactsPage(); renderProjectActivitiesPage(); showToast('برای همیشه حذف شد'); }
-  },'حذف همیشگی');
-  actions.append(restore,perm);
-}
-
-function collectProjectTrashedRecords(projectId){
-  const out=[];
-  const p=findProject(projectId);
-  if(!p) return out;
-  (p.tasks||[]).forEach(t=>{
-    if(t && t.trashed) out.push({type:'task',id:t.id,record:t,projectId:p.id,projectName:p.name,deletedAt:t.deletedAt||0});
-    walkItems(t.subtasks,(item,parent)=>{
-      if(item && item.trashed) out.push({type:'subtask',id:item.id,record:item,projectId:p.id,projectName:p.name,parentId:parent?parent.id:t.id,rootTaskId:t.id,deletedAt:item.deletedAt||0});
-    });
-  });
-  // مخاطب و فعالیت ذاتاً داخل Workspace همین پروژه هستند؛ سطل فقط همین Scope را می‌بیند.
-  getContacts(p).forEach(c=>{
-    if(c && c.trashed) out.push({type:'contact',id:c.id,record:c,projectId,projectName:p.name,deletedAt:c.deletedAt||0});
-  });
-  getActivityTemplates(p).forEach(a=>{
-    if(a && a.trashed) out.push({type:'activity',id:a.id,record:a,projectId,projectName:p.name,deletedAt:a.deletedAt||0});
-  });
-  return out.sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
-}
-
-function renderProjectTrashItem(entry,list){
-  if(entry.type==='task'||entry.type==='subtask'){ taskUI.renderTrashItem(entry,list); return; }
-  const r=entry.record;
-  const wrap=document.createElement('div');
-  wrap.className='trash-task-wrap project-trash-record';
-  addTrashSourceBadge(wrap,entry.type);
-
-  // مخاطب و فعالیت باید همان ظاهر رکورد اصلی خودشان را حفظ کنند و فقط عملیات حذف‌شده‌ها به همان ردیف اضافه شود.
-  if(entry.type==='contact'){
-    const row=document.createElement('div'); row.className='contact-row trash-native-row';
-    const main=document.createElement('div'); main.className='contact-main';
-    const displayName=[r.type,r.firstName,r.lastName].filter(Boolean).join(' ').trim() || r.name || 'مخاطب جدید';
-    const name=document.createElement('div'); name.className='contact-name'; name.textContent=displayName;
-    const activityText=(Array.isArray(r.activities)?r.activities:[]).map(id=>{const a=findActivityTemplate(id);return a&&!a.trashed?a.name:'';}).filter(Boolean).join('، ');
-    const activityLine=document.createElement('div'); activityLine.className='contact-activities'; activityLine.textContent=activityText||'بدون فعالیت';
-    main.append(name,activityLine);
-    const actions=document.createElement('div'); actions.className='contact-actions project-trash-inline-actions'; appendTrashActions(actions,entry);
-    row.append(main,actions); wrap.appendChild(row); list.appendChild(wrap); return;
-  }
-  if(entry.type==='activity'){
-    const row=document.createElement('div'); row.className='activity-row trash-native-row';
-    const name=document.createElement('div'); name.className='activity-name'; name.textContent=r.name||'فعالیت';
-    const actions=document.createElement('div'); actions.className='activity-actions project-trash-inline-actions'; appendTrashActions(actions,entry);
-    row.append(name,actions); wrap.appendChild(row); list.appendChild(wrap); return;
-  }
-
-}
-
-function renderProjectTrashPage(){
-  const body=document.getElementById('projectTrashPageBody'); if(!body) return;
-  const projectId=(getActiveTab() && getActiveTab()!=='starred') ? getActiveTab() : null;
-  const items=projectId ? collectProjectTrashedRecords(projectId) : [];
-  body.innerHTML='';
-
-  const clearWrap=document.createElement('div'); clearWrap.className='project-trash-clear-wrap inner-action-card inner-action-card--danger';
-  const clear=document.createElement('button'); clear.type='button'; clear.className='perm-del-btn project-trash-clear'; clear.textContent='حذف همه';
-  clear.onclick=async()=>{
-    if(clear.dataset.confirmed!=='1'){clear.dataset.confirmed='1';clear.textContent='برای حذف همه دوباره بزنید';setTimeout(()=>{if(clear.isConnected&&clear.dataset.confirmed==='1'){clear.dataset.confirmed='0';clear.textContent='حذف همه';}},3000);return;}
-    clear.dataset.confirmed='0';
-    for(const entry of items.slice()) await permanentlyDeleteGlobalRecord(entry);
-    persist(); renderProjectTrashPage(); renderAll(); showToast('همه موارد این پروژه برای همیشه حذف شدند');
-  };
-  clearWrap.appendChild(clear); body.appendChild(clearWrap);
-
-  if(!projectId){
-    const e=document.createElement('div'); e.className='project-trash-empty'; e.textContent='پروژه‌ای برای نمایش حذف‌شده‌ها انتخاب نشده است.'; body.appendChild(e); return;
-  }
-  if(!items.length){ const e=document.createElement('div'); e.className='project-trash-empty'; e.textContent='مورد حذف‌شده‌ای در این پروژه وجود ندارد.'; body.appendChild(e); return; }
-
-  const list=document.createElement('div'); list.className='project-trash-list';
-  const search=createWorkspaceSearch('جستجو در حذف‌شده‌ها…',q=>{Array.from(list.children).forEach(row=>row.hidden=!workspaceTextMatch(row.dataset.searchText,q));});
-  body.appendChild(search.wrap);
-  items.forEach(entry=>renderProjectTrashItem(entry,list));
-  body.appendChild(list);
-}
+let projectTrashView=null;
+function addTrashSourceBadge(container,type){ return projectTrashView?.addSourceBadge(container,type); }
+function appendTrashActions(actions,entry){ return projectTrashView?.appendActions(actions,entry); }
+function collectProjectTrashedRecords(projectId){ return projectTrashView?.collect(projectId)||[]; }
+function renderProjectTrashPage(){ return projectTrashView?.render(); }
 
 function openProjectTrashPage(){
   closeBottomPages(); enterWorkspaceSurface(); ensureHomeSelection(); workspaceSubpage='projectTrash';
@@ -2473,10 +2358,18 @@ const taskUI = window.KarhaApp.taskRuntime.createUI({
   svgCheck, svgStar, itemChildren, findNestedItem, findProject, findTask, findSub, walkItems,
   toggleTaskDone, toggleSubDone, toggleTaskStar, toggleSubStar, removeFromStarredOrder,
   openConfirm, showToast, renderAll, refreshStarredPartial, softDelete, renderItemActivities,
-  isFloatingConfirmUser, focusInlineAdd, persist, markDirty, openNumpadGeneric, addTrashSourceBadge, appendTrashActions
+  isFloatingConfirmUser, persist, markDirty, openNumpadGeneric, addTrashSourceBadge, appendTrashActions
 });
 const {renderProjectView,refreshProjectPartial,renderInlineAddRow,renderTaskBlock,renderStarredView,
   buildStarredGroup,openTaskDetail,openSubDetail,closeSheet,renderSheet}=taskUI;
+projectTrashView=window.KarhaApp.createProjectTrashView({
+  document,setTimeout,getActiveProjectId:()=>{ const id=getActiveTab(); return id&&id!=='starred'?id:null; },
+  findProject,walkItems,getContacts,getActivityTemplates,findActivityTemplate,taskView:taskUI,
+  restoreRecord:restoreGlobalRecord,permanentlyDeleteRecord:permanentlyDeleteGlobalRecord,
+  persist,refreshWorkspace:renderAll,refreshContacts:renderContactsPage,
+  refreshActivities:renderProjectActivitiesPage,showToast,openConfirm,
+  createWorkspaceSearch,workspaceTextMatch
+});
 
 /* ---------- side drawer (menu) ---------- */
 function openDrawer(){ return window.KarhaWorkspaceChrome?.openDrawer?.(); }
@@ -2533,8 +2426,6 @@ document.getElementById('drawerAddProjectBtn').onclick = ()=>{ closeDrawer(); op
 document.getElementById('drawerGlobalTrashBtn').onclick = openGlobalTrashFromDrawer;
 document.getElementById('closeProjectsPage').onclick = ()=>{ closeMenuRootPage(false); };
 
-let managementProjectTab = 'all';
-
 async function permanentlyDeleteProject(p){
   if(!p) return false;
 
@@ -2586,205 +2477,22 @@ async function permanentlyDeleteProject(p){
   return true;
 }
 
-function renderManagementPage(){
-  const body = document.getElementById('projectsPageBody');
-  if(!body) return;
-  body.innerHTML = '';
-
-  const visible = projectsVisibleForAuth(data.projects || []);
-  const active = visible.filter(p => !p.trashed && !p.archived && !isPendingDeleted('project',p.id));
-  const archived = visible.filter(p => p.archived && !p.trashed && !isPendingDeleted('project',p.id));
-  const deleted = visible.filter(p => p.trashed || isPendingDeleted('project',p.id));
-  const allCount = active.length + archived.length + deleted.length;
-
-  const tabs=document.createElement('div');
-  tabs.className='mgmt-project-tabs';
-  const tabDefs=[['all','نمایش همه',allCount],['archived','آرشیو شده ها',archived.length],['deleted','حذف شده ها',deleted.length]];
-  tabDefs.forEach(([key,label,count])=>{
-    const b=document.createElement('button');
-    b.type='button';
-    b.className='mgmt-project-tab'+(managementProjectTab===key?' active':'');
-    const text=document.createElement('span'); text.textContent=label;
-    const badge=document.createElement('span'); badge.className='mgmt-project-tab-count'; badge.textContent=count;
-    b.appendChild(text); b.appendChild(badge);
-    b.onclick=()=>{ managementProjectTab=key; renderManagementPage(); };
-    tabs.appendChild(b);
-  });
-  body.appendChild(tabs);
-
-  function makeRow(p, mode){
-    const row=document.createElement('div'); row.className='mgmt-row'; row.dataset.dragId=p.id;
-    const grip=document.createElement('span');
-    grip.className='drag-grip';
-    grip.innerHTML=svgGrip();
-    grip.setAttribute('aria-label','جابجایی پروژه');
-    grip.onpointerdown=(e)=>{
-      e.stopPropagation(); e.preventDefault();
-      const wrap=row.parentElement;
-      if(wrap) startProjectMgmtDrag(e,p.id,row,wrap,mode);
-    };
-    row.appendChild(grip);
-    const name=document.createElement('div'); name.className='mgmt-name'; name.textContent=p.name; row.appendChild(name);
-    const undone=(p.tasks||[]).filter(t=>!t.done&&!t.trashed&&!isPendingDeleted('task',p.id,t.id)).length;
-    if(undone && mode==='active'){ const count=document.createElement('span'); count.className='mgmt-count'; count.textContent=undone; row.appendChild(count); }
-    const actions=document.createElement('div'); actions.className='mgmt-actions';
-
-    if(mode==='active'){
-      const editBtn=document.createElement('button'); editBtn.className='mgmt-icon-btn blue'; editBtn.title='ویرایش نام'; editBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5l2 2L5 13H3v-2L11.5 2.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
-      editBtn.onclick=()=>openMiniPrompt('ویرایش نام پروژه',p.name,val=>{
-        if(!val||!val.trim()) return;
-        if(!window.KarhaApp?.projectApi?.rename?.(p.id,val.trim())?.ok) return;
-        cloudRenameProject(findProject(p.id)||p);
-        renderManagementPage(); renderAll();
-      }); actions.appendChild(editBtn);
-
-      const archBtn=document.createElement('button'); archBtn.className='mgmt-icon-btn'; archBtn.title='آرشیو'; archBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 6h14v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6zM2 4h16v2H2V4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
-      archBtn.onclick=()=>{
-        window.KarhaApp?.projectApi?.archive?.(p.id,true);
-        if(getActiveTab()===p.id)setActiveTab('starred');
-        cloudSyncProjectStatus(findProject(p.id)||p);
-        // مهم: در همان تب فعلی بمان؛ فقط محتوا و شمارنده‌ها تازه شوند.
-        renderManagementPage(); renderAll(); showToast('پروژه آرشیو شد');
-      }; actions.appendChild(archBtn);
-
-      const pdfBtn=document.createElement('button'); pdfBtn.className='mgmt-icon-btn blue'; pdfBtn.title='خروجی PDF'; pdfBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 2h7l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M12 2v4h4M7 11h6M7 14h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'; pdfBtn.onclick=e=>{e.stopPropagation();openExportPage(p.id);}; actions.appendChild(pdfBtn);
-
-      const delBtn=document.createElement('button'); delBtn.className='mgmt-icon-btn danger'; delBtn.title='حذف'; delBtn.innerHTML=svgTrash();
-      delBtn.onclick=()=>openConfirm('آیا این پروژه حذف شود؟',()=>{
-        softDelete('project',p.id,null,null,'پروژه حذف شد');
-        // softDelete عمداً تب فعلی را تغییر نمی‌دهد.
-        renderManagementPage();
-      },'حذف'); actions.appendChild(delBtn);
-
-    }else if(mode==='archived'){
-      const restore=document.createElement('button'); restore.className='restore-btn'; restore.textContent='بازگردانی';
-      restore.onclick=()=>{
-        window.KarhaApp?.projectApi?.archive?.(p.id,false);
-        cloudSyncProjectStatus(findProject(p.id)||p);
-        renderManagementPage(); renderAll(); showToast('پروژه بازگردانده شد');
-      };
-      actions.appendChild(restore);
-
-      const delBtn=document.createElement('button'); delBtn.className='perm-del-btn'; delBtn.textContent='حذف';
-      delBtn.onclick=()=>openConfirm('آیا این پروژه حذف شود؟',()=>{
-        softDelete('project',p.id,null,null,'پروژه حذف شد');
-        renderManagementPage();
-      },'حذف');
-      actions.appendChild(delBtn);
-
-    }else if(mode==='deleted'){
-      const restore=document.createElement('button'); restore.className='restore-btn'; restore.textContent='بازگردانی';
-      restore.onclick=()=>{
-        if(isPendingDeleted('project',p.id)){
-          undoPendingDelete();
-        }else{
-          p.trashed=false; cloudSyncProjectStatus(p); persist(); renderManagementPage(); renderAll(); showToast('پروژه بازگردانده شد');
-        }
-      }; actions.appendChild(restore);
-
-      const perm=document.createElement('button'); perm.className='perm-del-btn'; perm.textContent='حذف همیشگی';
-      perm.onclick=()=>openConfirm('این پروژه برای همیشه حذف شود؟ این عمل قابل بازگشت نیست.',async()=>{
-        const ok=await permanentlyDeleteProject(p);
-        if(ok){ renderManagementPage(); renderAll(); showToast('پروژه برای همیشه حذف شد'); }
-      },'حذف همیشگی');
-      actions.appendChild(perm);
-    }
-    row.appendChild(actions); return row;
-  }
-
-  function appendSection(title, items, mode){
-    const titleEl=document.createElement('div'); titleEl.className='mgmt-project-section-title'; titleEl.textContent=title; body.appendChild(titleEl);
-    if(!items.length){ const empty=document.createElement('div'); empty.className='mgmt-empty'; empty.textContent=mode==='active'?'پروژه فعالی وجود ندارد.':(mode==='archived'?'پروژه آرشیو شده‌ای وجود ندارد.':'پروژه حذف شده‌ای وجود ندارد.'); body.appendChild(empty); return; }
-    const wrap=document.createElement('div'); wrap.className='mgmt-list-wrap'; items.forEach(p=>wrap.appendChild(makeRow(p,mode))); body.appendChild(wrap);
-  }
-
-  if(managementProjectTab==='all'){
-    appendSection('پروژه‌های فعال',active,'active');
-    appendSection('آرشیو شده ها',archived,'archived');
-    appendSection('حذف شده ها',deleted,'deleted');
-  }else if(managementProjectTab==='archived') appendSection('آرشیو شده ها',archived,'archived');
-  else appendSection('حذف شده ها',deleted,'deleted');
-}
-
+const projectManagementView=window.KarhaApp.createProjectManagementView({
+  document,getData:()=>data,projectsVisibleForAuth,isPendingDeleted,svgGrip,svgTrash,
+  openMiniPrompt,renameProject:(id,name)=>window.KarhaApp?.projectApi?.rename?.(id,name),
+  cloudRenameProject,findProject,archiveProject:(id,value)=>window.KarhaApp?.projectApi?.archive?.(id,value),
+  setActiveTab,getActiveTab,cloudSyncProjectStatus,refreshWorkspace:renderAll,showToast,
+  openExportPage,openConfirm,softDelete,undoPendingDelete,persist,permanentlyDeleteProject
+});
+function renderManagementPage(){ return projectManagementView.render(); }
 function openProjectsPage(){
   menuRootMode='projects';
-  managementProjectTab='all';
-  // مدیریت پروژه‌ها یک سطح مستقل است؛ هوم پروژه‌ها مبنای بازگشت آن است.
-  closeBottomPages();
-  enterWorkspaceSurface();
-  ensureHomeSelection();
-  setBottomNavActive('Projects');
-  pushMenuRootHistory('projects');
-  showOnlyWorkspacePage('projectsPage');
-  updateWorkspaceContextBar();
+  projectManagementView.reset();
+  closeBottomPages(); enterWorkspaceSurface(); ensureHomeSelection(); setBottomNavActive('Projects');
+  pushMenuRootHistory('projects'); showOnlyWorkspacePage('projectsPage'); updateWorkspaceContextBar();
   renderManagementPage();
 }
 
-
-let projDragState = null;
-function startProjectMgmtDrag(e,id,rowEl,containerEl,type){
-  if(!containerEl || e.button===2) return;
-  const siblingEls=Array.from(containerEl.querySelectorAll('.mgmt-row'));
-  projDragState={id,type,siblingEls,hoverEl:null,hoverPos:null,rowEl,pointerId:e.pointerId};
-  rowEl.classList.add('row-dragging');
-  try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
-  document.addEventListener('pointermove',onProjDragMove);
-  document.addEventListener('pointerup',onProjDragEnd,{once:true});
-  document.addEventListener('pointercancel',onProjDragEnd,{once:true});
-}
-function onProjDragMove(e){
-  if(!projDragState) return;
-  const others=projDragState.siblingEls.filter(el=>el!==projDragState.rowEl);
-  let target=null,pos=null;
-  for(const el of others){
-    const r=el.getBoundingClientRect();
-    if(e.clientY < r.top+r.height/2){ target=el;pos='before';break; }
-  }
-  if(!target && others.length){ target=others[others.length-1];pos='after'; }
-  others.forEach(el=>el.classList.remove('drag-over-top','drag-over-bottom'));
-  if(target) target.classList.add(pos==='before'?'drag-over-top':'drag-over-bottom');
-  projDragState.hoverEl=target;
-  projDragState.hoverPos=pos;
-}
-function onProjDragEnd(){
-  if(!projDragState) return;
-  document.removeEventListener('pointermove',onProjDragMove);
-  document.removeEventListener('pointercancel',onProjDragEnd);
-  const st=projDragState;
-  st.rowEl.classList.remove('row-dragging');
-  st.siblingEls.forEach(el=>el.classList.remove('drag-over-top','drag-over-bottom'));
-  projDragState=null;
-
-  const {id,type,hoverEl,hoverPos}=st;
-  if(!hoverEl) return;
-  const targetId=hoverEl.dataset.dragId;
-  if(!targetId || targetId===id) return;
-
-  const ids=data.projects
-    .filter(p=>{
-      if(type==='active') return !p.trashed&&!p.archived&&!isPendingDeleted('project',p.id);
-      if(type==='archived') return p.archived&&!p.trashed&&!isPendingDeleted('project',p.id);
-      if(type==='deleted') return (p.trashed||isPendingDeleted('project',p.id));
-      return false;
-    })
-    .map(p=>p.id);
-
-  const from=ids.indexOf(id), target=ids.indexOf(targetId);
-  if(from<0 || target<0) return;
-  ids.splice(from,1);
-  let to=ids.indexOf(targetId);
-  if(hoverPos==='after') to++;
-  ids.splice(to,0,id);
-
-  const movable=new Set(ids);
-  const byId=new Map(data.projects.filter(p=>movable.has(p.id)).map(p=>[p.id,p]));
-  let n=0;
-  data.projects=data.projects.map(p=>movable.has(p.id)?byId.get(ids[n++]):p);
-
-  persist();
-  renderManagementPage();
-  renderAll();
-}
 
 /* ---------- PDF export page (UI owned by src/modules/export/exportView.js) ---------- */
 const EXPORT_NOTES_KEY = 'karha_export_notes_v1';
