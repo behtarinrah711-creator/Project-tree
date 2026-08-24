@@ -20,8 +20,16 @@ let formHistoryOwned = false;
 const REAL_CONTRACT_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
 
 function activeProject(projectId = null) {
-  const id = projectId || projectContext.getProjectId?.() || projectContext.getActiveProjectId?.();
-  return id ? projectRepository.getActiveProject(id) : null;
+  const id =
+    projectId ||
+    projectContext.getProjectId?.() ||
+    projectContext.getActiveProjectId?.();
+
+  if (!id) return null;
+
+  return projectRepository.getActiveProject(id)
+    || legacy('findProject', id)
+    || null;
 }
 
 function legacy(name, ...args) {
@@ -403,320 +411,264 @@ function renderContractForm() {
   ftTextRow(form, 'محل انعقاد قرارداد', state.contractPlace || '', value => { state.contractPlace = value; }, { placeholder: 'پیش‌فرض: محل پروژه' });
 
   ftSelectRow(form, 'آیتم پروژه', state.projectItemPath || '', () => openContractPicker('projectItem'), { placeholder: 'انتخاب' });
-  ftSelectRow(form, 'کارفرما', state.employerId ? contactDisplayName(findContact(state.employerId)) : '', () => openContractPicker('employer'), { placeholder: 'انتخاب' });
-  ftSelectRow(form, 'پیمانکار', state.contractorId ? contactDisplayName(findContact(state.contractorId)) : '', () => openContractPicker('contractor'), { placeholder: 'انتخاب' });
+  ftSelectRow(form, 'پیمانکار', contactDisplayName(findContact(state.contractorId)), () => openContractPicker('contractor'), { placeholder: 'انتخاب' });
+  ftSelectRow(form, 'کارفرما', contactDisplayName(findContact(state.employerId)), () => openContractPicker('employer'), { placeholder: 'انتخاب' });
 
-  const templates = contractTemplatesDomain.getContractTemplates(project).filter(template => !template.trashed);
-  const matchingTemplates = templates.filter(template => String(template.activityId) === String(state.activityId));
-  if (state.activityId && matchingTemplates.length > 1) {
-    const label = matchingTemplates.find(template => String(template.id) === String(state.templateId))?.title || '';
-    ftSelectRow(form, 'قالب قرارداد', label, () => {
-      contractPickers.openStaticChoicePicker(
-        'انتخاب قالب قرارداد',
-        'قالب‌ها',
-        matchingTemplates.map(template => ({ value: template.id, label: template.title || 'قالب قرارداد' })),
-        state.templateId,
-        id => {
-          state.templateId = id;
-          const template = matchingTemplates.find(item => String(item.id) === String(id));
-          if (template) {
-            state.items = realContractDomain.cloneTemplateIntoContract(template);
-            state.paymentItems = JSON.parse(JSON.stringify(template.paymentItems || []));
-          }
-          dirty = true;
-          renderContractForm();
-        }
-      );
-    }, { placeholder: 'انتخاب' });
-  } else if (state.activityId && matchingTemplates.length === 1 && !state.templateId) {
-    state.templateId = matchingTemplates[0].id;
-    state.items = realContractDomain.cloneTemplateIntoContract(matchingTemplates[0]);
-    state.paymentItems = JSON.parse(JSON.stringify(matchingTemplates[0].paymentItems || []));
+  ftTextRow(form, 'عنوان قرارداد', state.title || '', value => { state.title = value; }, { placeholder: 'عنوان قرارداد' });
+  ftTextRow(form, 'موضوع قرارداد', state.subject || '', value => { state.subject = value; }, { placeholder: 'موضوع قرارداد' });
+
+  ftNumberRow(form, 'مبلغ قرارداد', state.amount || '', value => { state.amount = value; }, { suffix: 'تومان' });
+
+  const durationDays = Number(state.durationDays || 0);
+  ftNumberRow(form, 'مدت قرارداد', durationDays ? String(durationDays) : '', value => {
+    state.durationDays = value ? Number(value) : '';
+  }, { suffix: 'روز', group: false, maxLen: 5 });
+
+  const startDate = state.startDate || '';
+  ftDateRow(form, 'تاریخ شروع', startDate, value => { state.startDate = value; }, { maxToday: false });
+
+  const endDate = startDate && durationDays
+    ? (helper('addJalaliDays', startDate, durationDays) || '')
+    : '';
+  if (endDate) {
+    ftCalcRow(form, 'تاریخ پایان: ' + (helper('formatJalaliDisplay', endDate) || endDate));
   }
 
-  ftDateRow(form, 'تاریخ شروع قرارداد', state.startDate || '', value => { state.startDate = value; });
-  ftDateRow(form, 'تاریخ پایان قرارداد', state.endDate || '', value => { state.endDate = value; });
-  ftNumberRow(form, 'مبلغ کل قرارداد', state.amount, value => {
-    const normalized = helper('toEnglishDigits', String(value)) ?? value;
-    state.amount = String(normalized).replace(/[^\d]/g, '');
-  }, { suffix: 'تومان', maxLen: 16, group: true, placeholder: 'وارد کنید' });
-  ftNumberRow(form, 'درصد حسن انجام کار', state.retentionPercent, value => {
-    const normalized = helper('toEnglishDigits', String(value)) ?? value;
-    state.retentionPercent = String(normalized).replace(/[^\d]/g, '');
-  }, { prefix: '٪', maxLen: 3, group: false, placeholder: 'وارد کنید' });
+  const advancePercent = Number(state.advancePercent || 0);
+  ftNumberRow(form, 'پیش‌پرداخت', advancePercent ? String(advancePercent) : '', value => {
+    state.advancePercent = value ? Number(value) : '';
+  }, { suffix: '٪', group: false, maxLen: 3 });
 
-  const retentionAmount = (Number(state.amount) || 0) * (Number(state.retentionPercent) || 0) / 100;
-  const netAmount = Math.max(0, (Number(state.amount) || 0) - retentionAmount);
-  state.retentionAmount = String(Math.round(retentionAmount || 0));
-  state.amountAfterRetention = String(Math.round(netAmount || 0));
-  ftCalcRow(form, 'مبلغ حسن انجام کار: ' + (retentionAmount ? (helper('formatCost', retentionAmount) ?? retentionAmount) : '۰') + ' تومان');
-  ftCalcRow(form, 'مبلغ قرارداد پس از کسر حسن انجام کار: ' + (netAmount ? (helper('formatCost', netAmount) ?? netAmount) : '۰') + ' تومان');
-
-  const basisOptions = [
-    { value: 'پایان قرارداد', label: 'تاریخ پایان قرارداد' },
-    { value: 'تحویل موقت', label: 'تحویل موقت' },
-    { value: 'تحویل قطعی', label: 'تحویل قطعی' },
-    { value: 'تسویه نهایی', label: 'تسویه نهایی' }
-  ];
-  ftSelectRow(form, 'مبنای شروع مدت نگهداری حسن انجام کار', state.retentionBasis || '', () => {
-    contractPickers.openStaticChoicePicker('مبنای شروع نگهداری', 'گزینه‌ها', basisOptions, state.retentionBasis, value => {
-      state.retentionBasis = value;
-      dirty = true;
-      renderContractForm();
-    });
-  }, { placeholder: 'انتخاب' });
-
-  const durationOptions = ['یک هفته', 'دو هفته', 'سه هفته', 'چهار هفته', 'یک ماه', 'یک ماه و نیم', 'دو ماه', 'دو ماه و نیم', 'سه ماه', 'چهار ماه', 'پنج ماه', 'شش ماه']
-    .map(value => ({ value, label: value }));
-  ftSelectRow(form, 'مدت نگهداری حسن انجام کار', state.retentionDuration || '', () => {
-    contractPickers.openStaticChoicePicker('مدت نگهداری', 'مدت‌ها', durationOptions, state.retentionDuration, value => {
-      state.retentionDuration = value;
-      dirty = true;
-      renderContractForm();
-    });
-  }, { placeholder: 'انتخاب' });
-
-  paymentStagesModule.renderPaymentStages(body, state, {
-    onDirty: () => { dirty = true; },
-    onNumpad: (value, onCommit, opts) => helper('openNumpadGeneric', value, onCommit, opts),
-    onRender: () => renderContractForm()
-  });
-
-  const clausesHeading = document.createElement('div');
-  clausesHeading.className = 'real-contract-section contract-clause-heading';
-  clausesHeading.textContent = 'مواد قرارداد';
-  body.appendChild(clausesHeading);
-
-  if (!state.items.length) {
-    const note = document.createElement('div');
-    note.className = 'contract-form-note';
-    note.textContent = state.activityId
-      ? 'برای این فعالیت هنوز قالب قراردادی ثبت نشده است.'
-      : 'پس از انتخاب فعالیت، مواد قرارداد از قالب آن خوانده می‌شوند.';
-    body.appendChild(note);
-  } else {
-    realContractDomain.renumberRealContractItems(state.items);
-    const items = document.createElement('div');
-    items.className = 'real-contract-items';
-    state.items.forEach((item, index) => items.appendChild(renderRealContractItem(item, state.items, index, false)));
-    items.appendChild(renderContractRootInlineAddRow());
-    body.appendChild(items);
+  const amount = Number(state.amount || 0);
+  if (amount && advancePercent) {
+    const advance = Math.round(amount * advancePercent / 100);
+    ftCalcRow(form, 'مبلغ پیش‌پرداخت: ' + (helper('formatCost', advance) || advance) + ' تومان');
   }
 
-  const previewHeading = document.createElement('div');
-  previewHeading.className = 'real-contract-section';
-  previewHeading.textContent = 'پیش‌نمایش متن قرارداد';
-  body.appendChild(previewHeading);
+  const stagesSection = document.createElement('div');
+  stagesSection.className = 'real-contract-section';
+  const stagesTitle = document.createElement('div');
+  stagesTitle.className = 'real-contract-section-title';
+  stagesTitle.textContent = 'مراحل پرداخت';
+  stagesSection.appendChild(stagesTitle);
+  stagesSection.appendChild(paymentStagesModule.renderPaymentStages(state, {
+    onChange: () => { dirty = true; },
+    formatCost: value => helper('formatCost', value) || value,
+    toPersianDigits: value => helper('toPersianDigits', value) || value
+  }));
+  form.appendChild(stagesSection);
 
-  const escape = value => helper('escapeHtml', String(value || '')) ?? String(value || '');
-  const blank = value => escape(value).trim() || '................................................';
-  const persian = value => helper('toPersianDigits', String(value ?? '')) ?? String(value ?? '');
-
-  let clausesHtml = '';
-  state.items.forEach((item, index) => {
-    clausesHtml += '<div class="doc-clause"><b>' + persian(index + 1) + '.</b> ' + escape(item.text || '........................................................');
-    (item.children || []).forEach((child, childIndex) => {
-      clausesHtml += '<div class="doc-child"><b>' + persian(`${index + 1}-${childIndex + 1}`) + '.</b> ' + escape(child.text || '........................................................') + '</div>';
-    });
-    clausesHtml += '</div>';
+  const itemsSection = document.createElement('div');
+  itemsSection.className = 'real-contract-section';
+  const itemsTitle = document.createElement('div');
+  itemsTitle.className = 'real-contract-section-title';
+  itemsTitle.textContent = 'مواد قرارداد';
+  itemsSection.appendChild(itemsTitle);
+  (state.items || []).forEach((item, index) => {
+    itemsSection.appendChild(renderRealContractItem(item, state.items, index, false));
   });
+  itemsSection.appendChild(renderContractRootInlineAddRow());
+  form.appendChild(itemsSection);
 
-  let paymentHtml = '';
-  (state.paymentStages || []).forEach((stage, index) => {
-    const progress = stage.progress || '۰';
-    const paymentPercent = stage.paymentPercent || '۰';
-    paymentHtml += '<div><b>' + persian(index + 1) + '.</b> پس از ' + persian(progress) + '٪ پیشرفت، ' + persian(paymentPercent) + '٪ از مبلغ قرارداد پرداخت می‌شود' + (stage.description ? ' — ' + escape(stage.description) : '') + '</div>';
-  });
+  const notes = document.createElement('textarea');
+  notes.className = 'ft-input';
+  notes.placeholder = 'توضیحات';
+  notes.value = state.notes || '';
+  notes.oninput = () => { state.notes = notes.value; dirty = true; };
+  form.appendChild(notes);
 
-  const formattedAmount = state.amount ? (helper('formatCost', state.amount) ?? state.amount) : '................................';
-  const formattedRetention = helper('formatCost', retentionAmount) ?? retentionAmount;
-  const preview = document.createElement('div');
-  preview.className = 'contract-doc-preview';
-  preview.innerHTML = '<div class="doc-title">' + escape('قرارداد ' + activityName) + '</div>' +
-    '<div class="doc-meta">' +
-      '<div>شماره قرارداد: <span class="doc-line">' + blank(state.contractNo) + '</span></div>' +
-      '<div>تاریخ تنظیم: <span class="doc-line">' + blank(helper('formatJalaliDisplay', state.contractDate)) + '</span></div>' +
-      '<div>تاریخ شروع: <span class="doc-line">' + blank(helper('formatJalaliDisplay', state.startDate)) + '</span></div>' +
-      '<div>تاریخ پایان: <span class="doc-line">' + blank(helper('formatJalaliDisplay', state.endDate)) + '</span></div>' +
-      '<div>محل انعقاد: <span class="doc-line">' + blank(state.contractPlace) + '</span></div>' +
-    '</div>' +
-    '<div class="doc-parties">' +
-      '<div class="party"><span class="doc-party-label">این قرارداد فی‌مابین کارفرما:</span> ' + blank(state.employerName) + '</div>' +
-      '<div class="party"><span class="doc-party-label">و پیمانکار:</span> ' + blank(state.contractorName) + '</div>' +
-      '<div class="party">موضوع فعالیت: ' + blank(activityName) + '</div>' +
-      '<div class="party">آیتم پروژه: ' + blank(state.projectItemPath || '') + '</div>' +
-      '<div class="party">مبلغ کل قرارداد: ' + formattedAmount + ' تومان</div>' +
-      '<div class="party">حسن انجام کار: ٪' + persian(state.retentionPercent || '۰') + '، معادل ' + formattedRetention + ' تومان</div>' +
-      '<div class="party">مبنای شروع نگهداری حسن انجام کار: ' + blank(state.retentionBasis) + '</div>' +
-      '<div class="party">مدت نگهداری: ' + blank(state.retentionDuration) + '</div>' +
-    '</div>' +
-    '<div class="doc-clauses">' + (clausesHtml || '<div class="doc-clause">........................................................</div>') + '</div>' +
-    '<div class="doc-payment"><b>شرایط پرداخت</b>' + (paymentHtml || '<div>........................................................</div>') + '</div>' +
-    '<div class="doc-signatures"><div class="signature-box">امضا و اثر انگشت کارفرما<br>................................</div><div class="signature-box">امضا و اثر انگشت پیمانکار<br>................................</div></div>';
-  body.appendChild(preview);
-
-  const actions = document.getElementById('contractFormActions');
-  if (actions) {
-    actions.innerHTML = '';
-    const bar = document.createElement('div');
-    bar.className = 'real-contract-savebar';
-
-    const save = document.createElement('button');
-    save.className = 'if-save';
-    save.textContent = 'ذخیره';
-    save.onclick = () => realContractFormModule.save(activeProjectId, false);
-
-    const draft = document.createElement('button');
-    draft.className = 'if-draft';
-    draft.textContent = 'پیش‌نویس';
-    draft.onclick = () => saveDraft();
-
-    const cancel = document.createElement('button');
-    cancel.className = 'if-cancel';
-    cancel.textContent = 'انصراف';
-    cancel.onclick = () => realContractFormModule.close();
-
-    bar.append(save, draft, cancel);
-    actions.appendChild(bar);
-  }
-
-  const raf = helper('requestAnimationFrame', () => {
-    try { scrollHost.scrollTop = savedScroll; } catch {}
-  });
-  if (raf === undefined && typeof window !== 'undefined') {
-    window.requestAnimationFrame?.(() => {
-      try { scrollHost.scrollTop = savedScroll; } catch {}
-    });
-  }
-  setTimeout(() => {
-    try { scrollHost.scrollTop = savedScroll; } catch {}
-  }, 0);
-
+  scrollHost.scrollTop = savedScroll;
   return true;
 }
 
-function saveDraft() {
+function makeDefaultState(project) {
+  const today = helper('todayJalaliStr') || '';
+  return realContractDomain.makeRealContract({
+    id: null,
+    contractNo: '',
+    contractDate: today,
+    contractPlace: project?.location || project?.address || '',
+    projectItemId: '',
+    projectItemPath: '',
+    contractorId: '',
+    employerId: '',
+    title: '',
+    subject: '',
+    amount: '',
+    durationDays: '',
+    startDate: '',
+    advancePercent: '',
+    paymentStages: [],
+    items: [],
+    notes: ''
+  });
+}
+
+function readDraft(projectId) {
   try {
-    localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state));
-    dirty = false;
-    helper('showToast', 'پیش‌نویس ذخیره شد');
-    state = null;
-    editingId = null;
-    inlineAddState = null;
-    activeProjectId = null;
-    closeFormShell(false);
+    const raw = localStorageAdapter.get(REAL_CONTRACT_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || String(parsed.projectId) !== String(projectId) || !parsed.state) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(projectId) {
+  try {
+    localStorageAdapter.set(REAL_CONTRACT_DRAFT_KEY, JSON.stringify({ projectId, state }));
     return true;
   } catch {
-    helper('showToast', 'پیش‌نویس ذخیره نشد');
     return false;
   }
 }
 
-export const realContractFormModule = {
-  commitContractInlineAdd,
-  focusInlineAdd,
+function clearDraft() {
+  try { localStorageAdapter.remove(REAL_CONTRACT_DRAFT_KEY); } catch {}
+}
 
-  open(id = null, projectId = null) {
-    const project = activeProject(projectId);
-    if (!project) return false;
+function hasMeaningfulState() {
+  if (!state) return false;
+  return !!(
+    state.projectItemId || state.projectItemPath || state.contractorId || state.employerId ||
+    state.title || state.subject || state.amount || state.durationDays || state.startDate ||
+    state.advancePercent || state.notes || (state.paymentStages || []).length || (state.items || []).length
+  );
+}
 
-    activeProjectId = project.id;
-    if (!openFormShell(project.id)) {
+function open(id = null, projectId = null) {
+  const project = activeProject(projectId);
+  if (!project) return false;
+
+  activeProjectId = project.id;
+  if (!openFormShell(project.id)) {
+    activeProjectId = null;
+    return false;
+  }
+
+  editingId = id || null;
+  inlineAddState = null;
+  dirty = false;
+
+  if (editingId) {
+    const existing = realContractDomain.findRealContract(project, editingId);
+    if (!existing) {
+      closeFormShell(false);
       activeProjectId = null;
       return false;
     }
+    state = realContractDomain.cloneRealContract(existing);
+  } else {
+    const draft = readDraft(project.id);
+    state = draft?.state ? realContractDomain.cloneRealContract(draft.state) : makeDefaultState(project);
+  }
 
-    editingId = id || null;
-    state = realContractDomain.makeRealContractDraft(
-      id ? realContractDomain.findProjectContract(id, project) : null,
-      helper('todayJalaliStr')
-    );
-    dirty = false;
-    inlineAddState = null;
+  const title = document.getElementById('contractFormTitle');
+  if (title) title.textContent = editingId ? 'ویرایش قرارداد' : 'قرارداد جدید';
+  renderContractForm();
+  helper('setContractFormSession', {
+    editingId,
+    projectId: project.id,
+    baseline: realContractDomain.cloneRealContract(state),
+    dirty: false,
+    draftExists: !editingId && !!readDraft(project.id)
+  });
+  return true;
+}
 
-    const title = document.getElementById('contractFormTitle');
-    if (title) title.textContent = id ? 'ویرایش قرارداد' : 'قرارداد جدید';
+function close(fromPopState = false) {
+  state = null;
+  dirty = false;
+  editingId = null;
+  inlineAddState = null;
+  activeProjectId = null;
+  helper('clearContractFormSession');
+  closeFormShell(fromPopState);
+  return true;
+}
 
-    return renderContractForm();
-  },
+function save() {
+  const project = currentProject();
+  if (!project || !state) return false;
+  const saved = saveRealContract(project, state, { editingId });
+  if (!saved) return false;
+  helper('markDirty', project.id);
+  helper('persist');
+  clearDraft();
+  dirty = false;
+  helper('setContractFormSession', {
+    editingId: saved.id,
+    projectId: project.id,
+    baseline: realContractDomain.cloneRealContract(saved),
+    dirty: false,
+    draftExists: false
+  });
+  close(false);
+  helper('renderContracts');
+  return saved;
+}
 
-  render() {
-    return !!state && renderContractForm();
-  },
-
-  save(projectId = null, silent = false) {
-    const project = activeProject(projectId || activeProjectId);
-    if (!project || !state) return false;
-
-    const result = saveRealContract(project.id, state, {
-      showToast: message => helper('showToast', message),
-      todayJalaliStr: () => helper('todayJalaliStr'),
-      findActivityTemplate: (id, current) => helper('findActivityTemplate', id, current),
-      syncContractPartyData: (draft, current) => realContractDomain.syncContractPartyData(draft, current),
-      toEnglishDigits: value => helper('toEnglishDigits', value)
-    });
-
-    if (!result.ok) return false;
-    state = result.contract;
-    dirty = false;
-    this.close(false);
-    if (!silent) helper('showToast', 'قرارداد ذخیره شد');
+function requestClose() {
+  const session = helper('getContractFormSession');
+  const dirtyNow = dirty || !!session?.dirty;
+  if (!dirtyNow && !hasMeaningfulState()) {
+    close(true);
     return true;
-  },
+  }
 
-  requestClose(fromPopState = false) {
-    // The browser already consumed the form entry before dispatching popstate.
-    if (fromPopState) formHistoryOwned = false;
-    if (!dirty) return this.close(fromPopState);
+  const choice = helper('showIncompleteFormExitChoice', {
+    editing: !!editingId,
+    canDraft: !editingId,
+    hasDraft: !editingId && !!readDraft(activeProjectId),
+    onStay: () => {
+      if (!formHistoryOwned) {
+        helper('pushWorkspaceHistory', 'contractForm');
+        formHistoryOwned = true;
+      }
+    },
+    onExitWithoutSave: () => {
+      if (!editingId) clearDraft();
+      close(false);
+    },
+    onSaveDraft: () => {
+      if (!editingId) writeDraft(activeProjectId);
+      close(false);
+    }
+  });
+  return choice !== false;
+}
 
-    const restoreHistory = () => {
-      if (!fromPopState || formHistoryOwned) return;
-      helper('pushWorkspaceHistory', 'contractForm');
-      formHistoryOwned = true;
-    };
+function isOpen() {
+  const page = document.getElementById('contractFormPage');
+  return !!page && !page.classList.contains('hidden');
+}
 
-    const showExitChoice = (opts) => {
-      const fn =
-        (typeof window !== 'undefined' && window.KarhaUI?.showIncompleteFormExitChoice) ||
-        (typeof window !== 'undefined' && window.showIncompleteFormExitChoice) ||
-        (typeof window !== 'undefined' && window.KarhaLegacy?.showIncompleteFormExitChoice);
-      if (typeof fn === 'function') return fn(opts);
-      return helper('showIncompleteFormExitChoice', opts);
-    };
+function isDirty() {
+  return dirty || !!helper('getContractFormSession')?.dirty;
+}
 
-    showExitChoice({
-      onYes: () => {
-        try { localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state)); } catch {}
-        dirty = false;
-        // Consume the restored form-owned entry when the decision closes the form.
-        this.close(false);
-      },
-      onNo: () => this.close(false),
-      onStay: restoreHistory
-    });
-    // Back consumed the form entry. Restore one so Stay keeps a single form entry.
-    restoreHistory();
-    return false;
-  },
+function markDirty() {
+  dirty = true;
+  const session = helper('getContractFormSession');
+  if (session) helper('setContractFormSession', { ...session, dirty: true });
+}
 
-  saveDraft,
+function getState() {
+  return state;
+}
 
-  close(fromPopState = false) {
-    state = null;
-    dirty = false;
-    editingId = null;
-    inlineAddState = null;
-    activeProjectId = null;
-    closeFormShell(fromPopState);
-    return true;
-  },
-
-  getState() { return state; },
-  isDirty() { return dirty; },
-  setDirty(value = true) { dirty = !!value; },
-  setState(value) { state = value; }
-};
-
-export default realContractFormModule;
+export const realContractFormModule = Object.freeze({
+  open,
+  close,
+  save,
+  requestClose,
+  isOpen,
+  isDirty,
+  markDirty,
+  getState,
+  render: renderContractForm
+});
 
 if (typeof window !== 'undefined') window.KarhaRealContractForm = realContractFormModule;
