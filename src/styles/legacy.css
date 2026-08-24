@@ -246,8 +246,6 @@ html[data-theme="dark"]{
   .bottom-nav-item svg{width:20px;height:20px;flex:none;}
   .bottom-nav-item span{font-size:11px;line-height:1.2;white-space:nowrap;}
   .bottom-nav-item.active{color:var(--green);font-weight:600;}
-  .bottom-nav.starred-disabled .bottom-nav-item:not(#bottomProjectsBtn){color:#c9cdd2 !important;opacity:.55;pointer-events:none;cursor:default;}
-  .bottom-nav.starred-disabled .bottom-nav-item:not(#bottomProjectsBtn) svg{opacity:.65;}
   .workspace-option-list{display:flex;flex-direction:column;background:var(--surface);}
   .workspace-option{width:100%;min-height:62px;border:0;border-bottom:1px solid var(--divider);background:var(--surface);color:var(--text);font:inherit;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 18px;text-align:right;cursor:pointer;}
   .workspace-option:active{background:var(--divider);}
@@ -751,23 +749,6 @@ html[data-theme="dark"]{
   .confirm-overlay.hidden{display:none;}
   .confirm-box{background:var(--surface);border-radius:14px;padding:20px;width:100%;max-width:320px;}
   .confirm-box p{margin:0 0 16px;font-size:15px;line-height:1.6;text-align:right;}
-  .collab-section-title{
-    font-size:12px;font-weight:700;color:var(--text-dim);padding:14px 16px 6px;
-    text-transform:none;letter-spacing:0;
-  }
-  .collab-block{padding:12px 16px;border-bottom:1px solid var(--divider);background:var(--surface);}
-  .collab-block h3{margin:0 0 6px;font-size:14px;font-weight:700;}
-  .collab-meta{font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6;}
-  .collab-role{
-    display:inline-block;font-size:11px;font-weight:700;border-radius:6px;
-    padding:2px 8px;margin-inline-start:6px;vertical-align:middle;
-  }
-  .collab-role.admin{background:var(--green-soft);color:var(--green);}
-  .collab-role.member{background:var(--support);color:#00075D;}
-  .collab-email-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--divider);direction:ltr;}
-  .collab-email-row:last-child{border-bottom:none;}
-  .collab-email-row span{font-size:13px;color:var(--text-dim);}
-  .collab-email-row .collab-person-tag{font-size:11px;color:var(--text-dim);direction:rtl;}
   .perm-del-btn{flex-shrink:0;font-family:inherit;font-size:12px;font-weight:700;color:var(--danger);background:var(--danger-soft);border:none;border-radius:8px;padding:7px 10px;cursor:pointer;}
 
   .export-toolbar{
@@ -961,11 +942,7 @@ html[data-theme="dark"]{
 
 
   #projectTrashPage .page-body{padding:0 16px 24px;}
-  #collabPage .page-body{padding:0 16px 40px;}
-  #collabPage .inner-action-card{margin-top:14px;}
-
-  /* اقدامات شاخص زیرصفحه‌ها: یک الگوی ثابت برای دکمه‌هایی مثل
-     «همگام سازی همکاران» و «حذف همه به صورت همیشگی». */
+  /* اقدامات شاخص زیرصفحه‌ها: الگوی دکمه‌هایی مثل «حذف همه به صورت همیشگی». */
   .inner-action-card{
     width:100%;
     height:66px;

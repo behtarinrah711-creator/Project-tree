@@ -1742,7 +1742,6 @@ function renderSettingsWorkspace(){
   body.innerHTML='';
   if(!p){ body.innerHTML='<div class="mgmt-empty">برای نمایش تنظیمات، یک پروژه را انتخاب کنید.</div>'; return; }
   const wrap=document.createElement('div'); wrap.className='workspace-option-list';
-  /* همکاران پروژه: UI حذف‌شده در فاز ۵+؛ openCollabPage فقط برای سازگاری باقی مانده */
   const contactRow=document.createElement('button'); contactRow.type='button'; contactRow.className='workspace-option';
   contactRow.innerHTML='<span class="workspace-option-main"><span class="workspace-option-title">مخاطبین</span></span><span class="workspace-option-arrow">›</span>';
   contactRow.onclick=()=>openContactsPage(); wrap.appendChild(contactRow);
@@ -3015,18 +3014,6 @@ async function generateProjectJpeg(){
   if(window.KarhaExportView?.generateProjectJpeg) return window.KarhaExportView.generateProjectJpeg();
 }
 
-/* ---------- collaborations / share removed ---------- */
-function openCollabPage(){ try{ showToast('همکاری در این نسخه حذف شده است'); }catch(e){} }
-function closeCollabPage(){ workspaceSubpage=null; }
-function renderCollabPage(){}
-function openShareForm(){ try{ showToast('اشتراک‌گذاری در این نسخه حذف شده است'); }catch(e){} }
-function submitShareForm(){}
-function closeShareForm(){}
-function requestCloseShareForm(){}
-function openShareDialog(){}
-function closeShareDialog(){}
-function removeShare(){}
-
 /* ---------- PWA service worker registration ---------- */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
@@ -3042,7 +3029,6 @@ if('serviceWorker' in navigator){
     }
   });
 }
-
 
 /* ==================== Status/Letter removed (Phase Final Sweep) ==================== */
 /* Active product path deleted. Firestore historical data is NOT wiped. */
