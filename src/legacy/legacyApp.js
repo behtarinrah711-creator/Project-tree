@@ -205,9 +205,12 @@ function loadData(){
   persist();
 }
 
-let dirtyProjectIds = new Set();
-function markDirty(pid){ if(pid) dirtyProjectIds.add(pid); }
-let pendingCloudWrites = new Set();
+// D4: KarhaAppData owns both runtime synchronization guards. These stable Set
+// references keep the extracted sync contexts compatible without a second
+// container that could diverge from the canonical state.
+const dirtyProjectIds = window.KarhaAppData.getDirtyProjectIds();
+function markDirty(pid){ window.KarhaAppData.markProjectDirty(pid); }
+const pendingCloudWrites = window.KarhaAppData.getPendingCloudWrites();
 
 function persist(options){
   const writeLocal = !options || options.local !== false;
@@ -233,7 +236,7 @@ function persist(options){
         if(p) cloudSyncProjectFull(p);
       });
     }
-    dirtyProjectIds.clear();
+    window.KarhaAppData.clearProjectDirty();
   }, 120);
 }
 
