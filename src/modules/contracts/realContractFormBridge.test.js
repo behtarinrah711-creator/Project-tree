@@ -27,12 +27,12 @@ describe('KarhaRealContractForm global bridge', () => {
     );
   });
 
-  it('uses the consumed contract-form transition as the Back authority', () => {
-    const src = readFileSync(join(dir, 'realContractFormModule.js'), 'utf8');
-    const requestClose = src.match(/requestClose\(fromPopState = false, transition = null\) \{([\s\S]*?)\n  \},\n\n  saveDraft/)?.[1] || '';
-    assert.match(requestClose, /restoreConsumedForm\?\.\(transition\)/, 'Stay must restore the consumed canonical contract-form entry');
-    assert.match(requestClose, /transition\?\.consumed/, 'requestClose must inspect the explicit consumed transition');
-    assert.match(requestClose, /transition\?\.layer\?\.key\s*===\s*'contract-form'/, 'only a consumed contract-form transition may be restored');
-    assert.doesNotMatch(requestClose, /formOwned\?\.\(\)/, 'Back handling must not infer ownership after the controller already popped the form layer');
+  it('keeps a consumed contract-form entry consumed during synchronous Back dispatch', () => {
+    const src = readFileSync(join(dir, 'contractHistoryController.js'), 'utf8');
+    assert.match(src, /let formPopDispatchDepth=0/, 'Contract history must track only the transient pop-dispatch boundary');
+    assert.match(src, /if\(consumed\) formPopDispatchDepth\+\+/, 'a consumed contract-form pop must enter the dispatch guard');
+    assert.match(src, /if\(formPopDispatchDepth>0\) return false/, 'eager form re-entry during onPop must be rejected');
+    assert.match(src, /restoreConsumedForm\(transition\)/, 'explicit consumed-entry restoration remains available for Stay');
+    assert.match(src, /isConsumedFormTransition\(transition\)/, 'restoration remains restricted to canonical consumed contract-form transitions');
   });
 });
