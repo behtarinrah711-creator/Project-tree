@@ -11,12 +11,10 @@ export function groupWithCommas(digits){
   return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 export function formatCost(n){
-  if(n === null || n === undefined || n === '') return '';
-  const num = Number(String(n).replace(/[^\d.-]/g, ''));
-  if(!Number.isFinite(num)) return '';
-  return toPersianDigits(groupWithCommas(String(Math.round(Math.abs(num))))) + (num < 0 ? '-' : '');
+  if(n === null || n === undefined || n === '' || Number.isNaN(Number(n))) return toPersianDigits('0');
+  return toPersianDigits(groupWithCommas(String(Math.round(Number(n)))));
 }
 export function formatCostDisplay(n){
-  const s = formatCost(n);
-  return s ? (s + ' تومان') : '';
+  if(n === null || n === undefined || n === '' || Number.isNaN(Number(n))) return '';
+  return toPersianDigits(groupWithCommas(String(Math.round(Math.abs(Number(n)))))) + ' تومان';
 }
