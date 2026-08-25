@@ -67,13 +67,19 @@
       const targetIndex=target ? layers.findIndex(layer=>layer.id===target.id) : -1;
       while(layers.length-1>targetIndex){
         const layer=layers.pop();
-        registration(layer.key)?.onPop?.(layer.payload);
+        const transition=Object.freeze({
+          type:'pop',
+          consumed:true,
+          layer:{...layer},
+          target:target ? {...target} : null,
+        });
+        registration(layer.key)?.onPop?.(layer.payload,transition);
       }
       if(target && targetIndex<0){
         const handlers=registration(target.key);
         if(handlers){
           layers.push({...target});
-          handlers.onRestore?.(target.payload);
+          handlers.onRestore?.(target.payload,Object.freeze({type:'restore',consumed:false,layer:{...target}}));
         }
       }
     }finally{
