@@ -69,7 +69,7 @@ export function installContractFormExitBridge({windowRef = window} = {}){
     return opened;
   };
 
-  form.requestClose = function(fromPopState = false){
+  form.requestClose = function(fromPopState = false, transition = null){
     const doc = windowRef.document;
     const childOpen = id => {
       const el = doc?.getElementById?.(id);
@@ -84,7 +84,7 @@ export function installContractFormExitBridge({windowRef = window} = {}){
     const changed = sessionDirty || flagDirty;
     if(changed) originalSetDirty(true);
 
-    const result = originalRequestClose(fromPopState);
+    const result = originalRequestClose(fromPopState, transition);
     if(editing && changed && result === false){
       patchEditPrompt({windowRef, form});
     }

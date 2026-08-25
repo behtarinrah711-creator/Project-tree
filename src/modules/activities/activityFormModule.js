@@ -3,7 +3,7 @@ import { activityApi } from '../../domain/activityApi.js';
 
 const runtime=new Proxy({}, {get(_target,key){return window.KarhaApp?.getActivityFormRuntime?.()?.[key] ?? window.KarhaLegacy?.activityFormRuntime?.[key];}});
 
-const state={dirty:false,historyPushed:false,projectId:null,activityId:null};
+const state={dirty:false,projectId:null,activityId:null};
 
 function getProjectId(){
   return projectContext.getProjectId?.()
@@ -20,7 +20,6 @@ function beginForm(activityId=null){
   state.activityId=activityId;
   runtime.enterActivityForm?.();
   runtime.pushWorkspaceHistory?.('activityForm');
-  state.historyPushed=true;
   return projectId;
 }
 
@@ -90,10 +89,7 @@ export function openActivityEditForm(activity){
 }
 
 export function closeActivityForm(fromPopState=false){
-  if(state.historyPushed){
-    state.historyPushed=false;
-    if(!fromPopState){try{history.back();}catch{}}
-  }
+  window.KarhaChildHistory?.consume('activityForm',{fromPopState});
   runtime.leaveActivityForm?.();
   state.dirty=false;
   state.projectId=null;

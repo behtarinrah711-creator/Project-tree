@@ -35,18 +35,6 @@ export function installBackGestureGuard({windowRef = window, documentRef = windo
 
   windowRef.KarhaBackGestureGuard = api;
 
-  // Capture runs before legacy bubble listeners. Browser windows expose
-  // addEventListener; lightweight startup-test mocks may not. The guard still
-  // provides its API in those environments and simply skips listener binding.
-  if(typeof windowRef?.addEventListener === 'function'){
-    windowRef.addEventListener('popstate', () => {
-      const inherited = !!windowRef.__karhaSuppressWorkspaceBackOnce;
-      if(inherited || childOverlayOpen(documentRef) || clock(windowRef) < suppressUntil){
-        api.suppress(180);
-      }
-    }, true);
-  }
-
   return api;
 }
 

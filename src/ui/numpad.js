@@ -4,7 +4,6 @@ import { toEnglishDigits, toPersianDigits, groupWithCommas } from './digits.js';
 let numpadBuffer = '';
 let numpadOnDone = null;
 let numpadOpts = { suffix: ' تومان', maxLen: 13, group: true };
-let numpadHistoryPushed = false;
 let installed = false;
 
 function suppressBack(windowRef){
@@ -25,22 +24,14 @@ export function openNumpadGeneric(initial, onDone, opts, { documentRef = documen
   updateNumpadDisplay({ documentRef });
   const overlay = documentRef.getElementById('numpadOverlay');
   if(overlay) overlay.classList.remove('hidden');
-  if(!numpadHistoryPushed){
-    try{ windowRef.history.pushState({karhaNumpad:true},'', windowRef.location.href); numpadHistoryPushed=true; }catch(e){}
-  }
+  windowRef.KarhaChildHistory?.open('numpad');
 }
 
 export function closeNumpad(fromPopState=false, { documentRef = document, windowRef = window } = {}){
   const overlay = documentRef.getElementById('numpadOverlay');
   if(overlay) overlay.classList.add('hidden');
   numpadOnDone = null;
-  if(numpadHistoryPushed){
-    numpadHistoryPushed=false;
-    if(!fromPopState){
-      suppressBack(windowRef);
-      try{ windowRef.history.back(); }catch(e){}
-    }
-  }
+  windowRef.KarhaChildHistory?.consume('numpad',{fromPopState});
 }
 
 function updateNumpadDisplay({ documentRef = document } = {}){
@@ -95,11 +86,5 @@ export function installNumpadBindings({ documentRef, windowRef = globalThis } = 
   overlay.onclick = (e)=>{
     if(e.target && e.target.id === 'numpadOverlay') closeNumpad(false, { documentRef, windowRef });
   };
-  windowRef.addEventListener('popstate', ()=>{
-    const ov = documentRef.getElementById('numpadOverlay');
-    if(!ov || ov.classList.contains('hidden')) return;
-    // Browser already consumed the numpad entry. No suppress token for the next gesture.
-    numpadHistoryPushed=false;
-    closeNumpad(true, { documentRef, windowRef });
-  });
+  windowRef.KarhaChildHistory?.register('numpad',{onPop:()=>closeNumpad(true,{documentRef,windowRef})});
 }

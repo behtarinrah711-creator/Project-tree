@@ -34,7 +34,7 @@ function getContacts(project=getCurrentProject()){
   return project.contacts;
 }
 function findContact(id, project=getCurrentProject()){ return getContacts(project).find(c=>c.id===id)||null; }
-function openContactsPage(){ closeBottomPages(); enterWorkspaceSurface(); workspaceSubpage='contacts'; showOnlyWorkspacePage('contactsPage'); renderContactsPage(); try{history.pushState({workspaceSubpage:'contacts'},'',location.href);}catch(e){} }
+function openContactsPage(){ closeBottomPages(); enterWorkspaceSurface(); workspaceSubpage='contacts'; showOnlyWorkspacePage('contactsPage'); renderContactsPage(); pushWorkspaceHistory('contacts'); }
 function renderContactsPage(){
   const module=window.KarhaApp?.modules?.get('people');
   if(module?.render) module.render(getCurrentProject()?.id);
@@ -53,7 +53,7 @@ function openProjectActivitiesPage(){
   workspaceSubpage='activities';
   showOnlyWorkspacePage('projectActivitiesPage');
   renderProjectActivitiesPage();
-  try{ history.pushState({workspaceSubpage:'activities'},'',location.href); }catch(e){}
+  pushWorkspaceHistory('activities');
 }
 function renderProjectActivitiesPage(){
   const module=window.KarhaApp?.modules?.get('activities');
@@ -357,23 +357,6 @@ function formatLetterNo(){ return ''; }
 function formatLetterNoDisplay(){ return ''; }
 async function generateNextLetterNo(){ return ''; }
 
-/* ---------- root menu history handling ---------- */
-window.addEventListener('popstate', ()=>{
-  if(!menuRootHistoryPushed) return;
-
-  const rootPages = ['profilePage','projectsPage'];
-  const visible = rootPages.find(id => {
-    const el=document.getElementById(id);
-    return el && !el.classList.contains('hidden');
-  });
-  if(!visible) return;
-
-  // این popstate همان Back گوشی/مرورگر است؛ نباید history.back() دیگری بزنیم.
-  menuRootHistoryPushed = false;
-  menuRootPage = null;
-  goHomeProjects();
-});
-
 function returnToSettingsWorkspace(){
   workspaceSubpage=null;
   setBottomNavActive('Settings');
@@ -386,4 +369,3 @@ document.getElementById('closeProjectActivitiesPage').onclick = returnToSettings
 document.getElementById('closeContactsPage').onclick = ()=>{ window.KarhaApp?.modules?.get('people')?.resetContactFormShell?.(); returnToSettingsWorkspace(); };
 document.getElementById('contactAddBtn').onclick = ()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
 document.getElementById('activityAddBtn').onclick = openActivityForm;
-
