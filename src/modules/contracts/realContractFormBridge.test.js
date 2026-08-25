@@ -15,4 +15,15 @@ describe('KarhaRealContractForm global bridge', () => {
       'index.js must assign realContractFormModule to window.KarhaRealContractForm'
     );
   });
+
+  it('routes canonical UI primitives through KarhaUI before legacy fallback', () => {
+    const src = readFileSync(join(dir, 'realContractFormModule.js'), 'utf8');
+    const helper = src.match(/function helper\(name, \.\.\.args\) \{([\s\S]*?)\n\}/)?.[1] || '';
+    assert.match(helper, /window\.KarhaUI\?\.\[name\]/, 'helper must consult KarhaUI');
+    assert.match(helper, /return window\.KarhaUI\[name\]\(\.\.\.args\)/, 'helper must call the canonical KarhaUI primitive');
+    assert.ok(
+      helper.indexOf('window.KarhaUI') < helper.indexOf('legacy(name, ...args)'),
+      'KarhaUI must be preferred before the compatibility fallback'
+    );
+  });
 });
