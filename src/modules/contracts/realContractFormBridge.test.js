@@ -26,4 +26,13 @@ describe('KarhaRealContractForm global bridge', () => {
       'KarhaUI must be preferred before the compatibility fallback'
     );
   });
+
+  it('uses the consumed contract-form transition as the Back authority', () => {
+    const src = readFileSync(join(dir, 'realContractFormModule.js'), 'utf8');
+    const requestClose = src.match(/requestClose\(fromPopState = false, transition = null\) \{([\s\S]*?)\n  \},\n\n  saveDraft/)?.[1] || '';
+    assert.match(requestClose, /restoreConsumedForm\?\.\(transition\)/, 'Stay must restore the consumed canonical contract-form entry');
+    assert.match(requestClose, /transition\?\.consumed/, 'requestClose must inspect the explicit consumed transition');
+    assert.match(requestClose, /transition\?\.layer\?\.key\s*===\s*'contract-form'/, 'only a consumed contract-form transition may be restored');
+    assert.doesNotMatch(requestClose, /formOwned\?\.\(\)/, 'Back handling must not infer ownership after the controller already popped the form layer');
+  });
 });
