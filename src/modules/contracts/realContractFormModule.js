@@ -36,6 +36,9 @@ function legacy(name, ...args) {
 }
 
 function helper(name, ...args) {
+  if (typeof window !== 'undefined' && typeof window.KarhaUI?.[name] === 'function') {
+    return window.KarhaUI[name](...args);
+  }
   return legacy(name, ...args);
 }
 
