@@ -1,9 +1,13 @@
 export const APPLICATION_RUNTIME_URLS = Object.freeze([
   new URL('../core/applicationFoundation.js', import.meta.url).href,
+  new URL('../core/childHistoryController.js', import.meta.url).href,
+  new URL('../modules/contracts/contractHistoryController.js', import.meta.url).href,
+  new URL('../ui/workspaceFormPresentation.js', import.meta.url).href,
   new URL('../ui/workspacePresentationRuntime.js', import.meta.url).href,
+  new URL('../modules/contracts/searchTemplateModule.js', import.meta.url).href,
+  new URL('../modules/contracts/contractFormLifecycle.js', import.meta.url).href,
   new URL('../modules/contracts/contractCompatibility.js', import.meta.url).href,
   new URL('../modules/runtime/featureComposition.js', import.meta.url).href,
-  new URL('../core/childHistoryController.js', import.meta.url).href,
   new URL('./applicationRuntime.js', import.meta.url).href,
 ]);
 

@@ -16,7 +16,6 @@ let activeProjectId = null;
 // True only while the current browser entry is owned by this mounted form.
 // A popstate consumes that entry before requestClose runs, so this is ownership
 // of the real stack entry rather than merely a record that open once pushed.
-let formHistoryOwned = false;
 const REAL_CONTRACT_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
 
 function activeProject(projectId = null) {
@@ -54,20 +53,13 @@ function currentProject() {
 function openFormShell(projectId) {
   const opened = contractShell('openRealContractFormShell', projectId);
   if (opened !== true) return false;
-  if (!formHistoryOwned) {
-    helper('pushWorkspaceHistory', 'contractForm');
-    formHistoryOwned = true;
-  }
+  window.KarhaContractHistory?.enterForm();
   return true;
 }
 
 function closeFormShell(fromPopState = false) {
   contractShell('closeRealContractFormShell', fromPopState);
-  if (formHistoryOwned) {
-    helper('suppressWorkspaceBack');
-    try { history.back(); } catch {}
-  }
-  formHistoryOwned = false;
+  window.KarhaContractHistory?.leaveForm(fromPopState);
 }
 
 function ftCreateRoot(parent) {
@@ -683,13 +675,12 @@ export const realContractFormModule = {
 
   requestClose(fromPopState = false) {
     // The browser already consumed the form entry before dispatching popstate.
-    if (fromPopState) formHistoryOwned = false;
+    const formHistoryOwned = window.KarhaContractHistory?.formOwned?.() ?? false;
     if (!dirty) return this.close(fromPopState);
 
     const restoreHistory = () => {
       if (!fromPopState || formHistoryOwned) return;
-      helper('pushWorkspaceHistory', 'contractForm');
-      formHistoryOwned = true;
+      window.KarhaContractHistory?.enterForm();
     };
 
     const showExitChoice = (opts) => {

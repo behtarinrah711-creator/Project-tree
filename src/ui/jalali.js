@@ -58,7 +58,6 @@ export function formatJalaliDisplay(str){
 }
 
 const jalaliPick = { y:1400, m:1, d:1, onPick:null, maxDate:null };
-let jalaliPickerHistoryPushed=false;
 let installed = false;
 
 function suppressBack(windowRef){
@@ -87,21 +86,13 @@ export function openJalaliPicker(current, onPick, opts={}, { documentRef = docum
   const pop = documentRef.getElementById('jalaliPop');
   if(pop) pop.classList.remove('hidden');
   renderJalaliPicker({ documentRef });
-  if(!jalaliPickerHistoryPushed){
-    try{ windowRef.history.pushState({karhaJalaliPicker:true},'', windowRef.location.href); jalaliPickerHistoryPushed=true; }catch(e){}
-  }
+  windowRef.KarhaChildHistory?.open('jalali-picker');
 }
 
 export function closeJalaliPicker(fromPopState=false, { documentRef = document, windowRef = window } = {}){
   const pop = documentRef.getElementById('jalaliPop');
   if(pop) pop.classList.add('hidden');
-  if(jalaliPickerHistoryPushed){
-    jalaliPickerHistoryPushed=false;
-    if(!fromPopState){
-      suppressBack(windowRef);
-      try{ windowRef.history.back(); }catch(e){}
-    }
-  }
+  windowRef.KarhaChildHistory?.consume('jalali-picker',{fromPopState});
 }
 
 function renderJalaliPicker({ documentRef = document, windowRef = window } = {}){
@@ -177,12 +168,5 @@ export function installJalaliBindings({ documentRef, windowRef = globalThis } = 
   if(!pop) return;
   installed = true;
   pop.onclick = (e)=>{ if(e.target && e.target.id==='jalaliPop') closeJalaliPicker(false, { documentRef, windowRef }); };
-  windowRef.addEventListener('popstate', ()=>{
-    const p = documentRef.getElementById('jalaliPop');
-    if(!p || p.classList.contains('hidden')) return;
-    // Browser already consumed the jalali history entry. Do NOT suppress and do NOT
-    // history.back() again — a leftover suppress would steal the form's next Back.
-    jalaliPickerHistoryPushed=false;
-    closeJalaliPicker(true, { documentRef, windowRef });
-  });
+  windowRef.KarhaChildHistory?.register('jalali-picker',{onPop:()=>closeJalaliPicker(true,{documentRef,windowRef})});
 }
