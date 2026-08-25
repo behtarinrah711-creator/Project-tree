@@ -49,6 +49,13 @@ describe('appDataStore D1', () => {
     assert.equal(again.getActiveTab(), 'x');
   });
 
+  it('reports storage presence without exposing storage to runtime callers', () => {
+    const s = createAppDataStore({ storage: memoryStorage(), schemaVersion: 8 });
+    assert.equal(s.hasStoredSnapshot(), false);
+    s.persistLocal();
+    assert.equal(s.hasStoredSnapshot(), true);
+  });
+
   it('owns the sole runtime dirty and pending cloud-write state without serializing it', () => {
     const storage = memoryStorage();
     const s = createAppDataStore({ storage, schemaVersion: 8 });

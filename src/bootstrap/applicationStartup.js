@@ -52,6 +52,15 @@ import { installExportView } from '../modules/export/exportView.js';
 import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
 import { installFirebaseRuntime } from '../firebase/firebaseRuntime.js';
 import { createCloudRuntime } from '../cloud/cloudRuntime.js';
+import { runDataMigrations, normalizeProjectScopedData } from '../data/migrations/index.js';
+import * as projectFactories from '../data/projectFactories.js';
+import * as taskTree from '../domain/taskTree.js';
+import { normalizeEmail, isFloatingConfirmUser } from '../config/featurePolicy.js';
+import * as formatting from '../ui/digits.js';
+import { taskIcons } from '../ui/taskIcons.js';
+import * as projectRecordReferences from '../domain/projectRecordReferences.js';
+import { installApplicationTheme } from '../core/applicationTheme.js';
+import { createFoundationCloudRuntime } from '../cloud/foundationCloudComposition.js';
 
 /** Start the modular API, then the classic application runtime, then routing. */
 export async function startApplication({
@@ -62,6 +71,7 @@ export async function startApplication({
   loadRuntime = loadApplicationRuntime,
 } = {}){
   exposeKarhaLegacyInstaller({ windowRef });
+  installApplicationTheme({windowRef,documentRef:windowRef.document});
   modules.forEach(moduleDefinition => registry.register(moduleDefinition));
 
   const application = Object.freeze({
@@ -107,6 +117,17 @@ export async function startApplication({
     showToast: uiShowToast,
     shellSurface: Object.freeze({ showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS }),
     createCloudRuntime,
+    foundation: Object.freeze({
+      runDataMigrations,
+      normalizeProjectScopedData,
+      projectFactories: Object.freeze({ ...projectFactories }),
+      taskTree: Object.freeze({ ...taskTree }),
+      featurePolicy: Object.freeze({ normalizeEmail, isFloatingConfirmUser }),
+      formatting: Object.freeze({ ...formatting }),
+      taskIcons,
+      projectRecordReferences: Object.freeze({ ...projectRecordReferences }),
+      createCloudRuntime: createFoundationCloudRuntime,
+    }),
   });
   windowRef.KarhaApp = application;
 

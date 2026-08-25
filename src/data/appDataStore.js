@@ -76,6 +76,11 @@ export function createAppDataStore({
     return snapshot;
   }
 
+  function hasStoredSnapshot(){
+    if(!storage) return false;
+    try { return storage.getItem(storageKey) != null; } catch(e) { return false; }
+  }
+
   function persistLocal(){
     if(!storage) return false;
     try{
@@ -136,6 +141,7 @@ export function createAppDataStore({
     replaceSnapshot,
     resetToDefault,
     loadFromStorage,
+    hasStoredSnapshot,
     persistLocal,
     getProjects,
     setProjects,
