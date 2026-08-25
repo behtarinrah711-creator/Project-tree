@@ -111,10 +111,7 @@ function closeBottomPages(){
 }
 
 function handleWorkspaceContextBack(){
-  if(workspaceSubpage === 'statusForm'){ closeStatusForm(); return; }
-  if(workspaceSubpage === 'statusList'){ closeStatusList(); return; }
   if(workspaceSubpage === 'contractTemplates'){ closeContractTemplatesPage(); return; }
-  if(workspaceSubpage === 'statusTest'){ closeStatusTestPage(); return; }
   if(workspaceSubpage === 'contractTemplateForm'){ requestCloseContractTemplateForm(); return; }
   if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
   if(workspaceSubpage === 'contractForm'){ requestCloseContractForm(); return; }
@@ -124,7 +121,6 @@ function handleWorkspaceContextBack(){
 }
 
 function handleWorkspaceContextAction(){
-  if(workspaceSubpage === 'statusList'){ openStatusForm(null); return; }
   if(workspaceSubpage === 'contracts'){ openContractForm(null); return; }
   if(workspaceSubpage === 'collab') showToast('اشتراک‌گذاری حذف شده است');
 }

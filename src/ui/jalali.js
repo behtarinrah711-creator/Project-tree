@@ -62,8 +62,8 @@ let installed = false;
 
 function suppressBack(windowRef){
   try{
-    if(typeof windowRef.KarhaLegacy?.suppressWorkspaceBack === 'function'){
-      windowRef.KarhaLegacy.suppressWorkspaceBack();
+    if(typeof windowRef.KarhaBackGestureGuard?.suppress === 'function'){
+      windowRef.KarhaBackGestureGuard.suppress();
     } else {
       windowRef.__karhaSuppressWorkspaceBackOnce = true;
     }

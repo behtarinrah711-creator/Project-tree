@@ -32,7 +32,7 @@ if(routedProjectId && findProject(routedProjectId)){
 // while individual modules are migrated out of this file.
 
 function installLegacyCompatibilityBoundary(){
-var __formRTs = window.KarhaApp?.registerFormRuntimes?.({
+window.KarhaApp?.registerFormRuntimes?.({
   uid: uid,
   getCurrentProjectId: getCurrentProjectScopeId,
   showToast: showToast,
@@ -68,12 +68,6 @@ window.KarhaInstallLegacyFacade({
   svgChevron,
   renderInlineAddRow,
   renderTaskBlock,
-  setActiveProject(projectId){
-    return setActiveProject(projectId,{updateRoute:false,render:false});
-  },
-  selectProject(projectId, { moduleId = 'dashboard' } = {}){
-    return window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId}) || false;
-  },
   applyRoutedSurface,
   getWorkspaceChromeState(){
     const project=getCurrentProject();
@@ -91,26 +85,7 @@ window.KarhaInstallLegacyFacade({
   getProject(projectId){
     return typeof findProject === 'function' ? findProject(projectId) : null;
   },
-  getActiveProjectId(){
-    return typeof getCurrentProjectScopeId === 'function' ? getCurrentProjectScopeId() : null;
-  },
-  getActiveProject(){
-    return typeof getCurrentProject === 'function' ? getCurrentProject() : null;
-  },
-  projectItemRuntime: Object.freeze({
-    persistItems(projectId){
-      const project=findProject(projectId);
-      const stored=window.KarhaApp?.projectRepository?.find(projectId);
-      if(project && stored) project.tasks=Array.isArray(stored.tasks)?stored.tasks:[];
-      if(project) markDirty(project.id);
-      persist({ local:false });
-    }
-  }),
-  openContractsPage,
-  closeContractsPage,
   openContractForm,
-  openRealContractFormShell,
-  closeRealContractFormShell,
   closeSearchTemplate,
   escapeHtml(str){
     if(window.KarhaHtmlEscape && typeof window.KarhaHtmlEscape.escapeHtml === 'function')
@@ -130,10 +105,11 @@ window.KarhaInstallLegacyFacade({
   },
   getContacts,
   openNumpadGeneric,
-  suppressWorkspaceBack(){ markSuppressWorkspaceBack(); },
+  openJalaliPicker(currentValue, onPick, options){
+    return window.KarhaUI?.openJalaliPicker?.(currentValue, onPick, options);
+  },
   canDeleteProjectRecord,
   showRecordDeleteBlocked,
-  findProjectRecordReferences,
   showIncompleteFormExitChoice,
   pushWorkspaceHistory,
   requestAnimationFrame(callback){ return window.requestAnimationFrame(callback); },
@@ -148,11 +124,5 @@ window.KarhaInstallLegacyFacade({
   },
   renumberContractItems,
   goHomeProjects,
-  renderAccountingWorkspace,
-  openActivityForm,
-  openActivityEditForm,
-  requestCloseActivityForm,
-  activityFormRuntime: __formRTs.activityFormRuntime || null,
-  contactFormRuntime: __formRTs.contactFormRuntime || null
 });
 }

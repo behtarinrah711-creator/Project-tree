@@ -53,9 +53,9 @@ export function registerFormRuntimes(deps = {}){
 }
 
 export function getActivityFormRuntime(){
-  return activityFormRuntime || window.KarhaLegacy?.activityFormRuntime || null;
+  return activityFormRuntime;
 }
 
 export function getContactFormRuntime(){
-  return contactFormRuntime || window.KarhaLegacy?.contactFormRuntime || null;
+  return contactFormRuntime;
 }

@@ -16,7 +16,8 @@ test('canonical surfaces install in the required startup order', async () => {
   ].map(token => source.indexOf(token));
   assert.ok(positions.every(position => position >= 0));
   assert.deepEqual([...positions].sort((a,b)=>a-b), positions);
-  assert.match(source, /windowRef\.KarhaLegacy = Object\.freeze/);
+  assert.doesNotMatch(source, /windowRef\.KarhaLegacy\s*=/);
+  assert.match(source, /await loadRuntime\(\)/);
   assert.match(source, /projectWorkspace: Object\.freeze\(\{ listProjects, getProject, getActiveProject, selectProject \}\)/);
 });
 
