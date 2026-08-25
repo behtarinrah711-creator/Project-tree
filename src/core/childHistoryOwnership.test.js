@@ -1,10 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
+import {readFile,readdir} from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 
-test('only Router and childHistoryController install production popstate listeners',()=>{
-  const output=execFileSync('rg',['-l',"addEventListener\\(['\\\"]popstate",'src','--glob','*.js','--glob','!*.test.js'],{encoding:'utf8'}).trim().split('\n').sort();
+const srcRoot=fileURLToPath(new URL('../',import.meta.url));
+
+async function productionJavaScriptFiles(directory=srcRoot){
+  const entries=await readdir(directory,{withFileTypes:true});
+  const files=await Promise.all(entries.map(entry=>{
+    const absolute=path.join(directory,entry.name);
+    if(entry.isDirectory()) return productionJavaScriptFiles(absolute);
+    if(entry.isFile() && entry.name.endsWith('.js') && !entry.name.endsWith('.test.js')) return [absolute];
+    return [];
+  }));
+  return files.flat();
+}
+
+test('only Router and childHistoryController install production popstate listeners',async()=>{
+  const files=await productionJavaScriptFiles();
+  const output=[];
+  for(const file of files){
+    const source=await readFile(file,'utf8');
+    if(/addEventListener\(['"]popstate/.test(source)){
+      output.push(path.relative(path.dirname(srcRoot),file).split(path.sep).join('/'));
+    }
+  }
+  output.sort();
   assert.deepEqual(output,['src/core/childHistoryController.js','src/core/router.js']);
 });
 
