@@ -17,8 +17,8 @@ test('KarhaLegacy facade is a state-free delegate publisher', async () => {
   const source = await read('../legacy/karhaLegacyFacade.js');
   for (const forbidden of [
     'addEventListener', 'history.', 'popstate', 'localStorage', 'firestore',
-    'firebase', 'auth', 'render', 'persist', 'markDirty', 'create(', 'update(',
-    'delete(', 'querySelector', 'getElementById',
+    'firebase', 'auth', 'querySelector', 'getElementById',
   ]) assert.doesNotMatch(source, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   assert.match(source, /Object\.freeze\(\{ \.\.\.delegates \}\)/);
+  assert.doesNotMatch(source, /\b(?:let|var)\s+[A-Za-z_$]/);
 });

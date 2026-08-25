@@ -4,7 +4,7 @@ import { localStorageAdapter } from '../../data/storageAdapter.js';
 import { enterContactFormShell, leaveContactFormShell } from './contactFormBridge.js';
 
 const CONTACT_DRAFT_KEY='gtasks-contact-draft-v1';
-const runtime=new Proxy({}, { get(_target,key){ return window.KarhaLegacy?.contactFormRuntime?.[key]; } });
+const runtime=new Proxy({}, { get(_target,key){ return window.KarhaApp?.getContactFormRuntime?.()?.[key]; } });
 function getProjectId(){ return projectContext.getProjectId?.() || projectContext.getActiveProjectId?.() || runtime.getCurrentProject?.()?.id || null; }
 function getActivities(projectId){ return runtime.getActivities?.(projectId) || []; }
 function findActivity(id){ return getActivities(getProjectId()).find(a=>String(a.id)===String(id)) || null; }

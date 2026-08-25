@@ -1,32 +1,3 @@
-function openContractStatusPage(){
-  // Phase 5: status path removed — stay on project dashboard.
-  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){}
-}
-function openContractStatusPageLegacyDisabled(){
-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractStatus'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('contractStatus'); renderContractStatusPage();
-}
-function closeContractStatusPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
-function renderContractStatusPage(){
-  return window.KarhaContractStatus?.render?.(document.getElementById('contractStatusBody'),getCurrentProject()?.id);
-}
-
-function openContractApprovalPage(){
-  // Phase 5 removed path
-  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){} return;
-
-  closeDrawer(); enterWorkspaceSurface(); workspaceSubpage='contractApproval'; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage(); updateWorkspaceContextBar(); pushWorkspaceHistory('contractApproval'); renderContractApprovalPage();
-}
-function closeContractApprovalPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
-function renderContractApprovalPage(){
-  return window.KarhaContractApproval?.render?.(document.getElementById('contractApprovalBody'),getCurrentProject()?.id);
-}
-
-function openStatusTestPage(){
-  try{ const pid=getCurrentProjectScopeId(); if(pid&&window.KarhaApp?.router) window.KarhaApp.router.navigate(pid,'dashboard',{replace:true}); }catch(e){}
-}
-function closeStatusTestPage(){ workspaceSubpage=null; setBottomNavActive('Accounting'); renderTabs(); showOnlyWorkspacePage('accountingPage'); updateWorkspaceContextBar(); renderAccountingWorkspace(); }
-function renderStatusTestPage(){ /* Status test UI removed */ }
-
 function getCurrentProject(){ const id=getCurrentProjectScopeId(); return id ? findProject(id) : null; }
 function getContacts(project=getCurrentProject()){
   if(!project) return [];
@@ -205,51 +176,13 @@ projectTrashView=window.KarhaApp.createProjectTrashView({
 function openDrawer(){ return window.KarhaWorkspaceChrome?.openDrawer?.(); }
 function closeDrawer(){ return window.KarhaWorkspaceChrome?.closeDrawer?.(); }
 
-/* ---------- confirm dialog (Phase 8.2: owned by src/ui/confirm.js via KarhaUI) ---------- */
-let confirmCallback = null;
+/* ---------- confirm dialog: presentation is owned by KarhaUI ---------- */
 function openConfirm(text, onOk, okLabel){
-  if(window.KarhaUI?.openConfirm) return window.KarhaUI.openConfirm(text, onOk, okLabel);
-  const textEl=document.getElementById('confirmText');
-  const okBtn=document.getElementById('confirmOkBtn');
-  const overlay=document.getElementById('confirmOverlay');
-  if(textEl) textEl.textContent = text;
-  if(okBtn) okBtn.textContent = okLabel || 'تایید';
-  confirmCallback = onOk;
-  if(overlay) overlay.classList.remove('hidden');
-}
-function closeConfirm(){
-  if(window.KarhaUI?.closeConfirm) return window.KarhaUI.closeConfirm();
-  const overlay=document.getElementById('confirmOverlay');
-  if(overlay) overlay.classList.add('hidden');
-  confirmCallback = null;
+  return window.KarhaUI?.openConfirm?.(text, onOk, okLabel);
 }
 /* DOM binds installed by installUiPrimitives — no new ownership here */
 
 /* ---------- project management page ---------- */
-
-/* ---------- user profile (UI owned by src/modules/profile/profileView.js) ---------- */
-const PROFILE_KEY = 'karha_user_profile_v1';
-function loadProfile(){
-  if(window.KarhaProfile?.loadProfile) return window.KarhaProfile.loadProfile();
-  try{ return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') || {}; }catch(e){ return {}; }
-}
-function saveProfile(p){
-  if(window.KarhaProfile?.saveProfile) return window.KarhaProfile.saveProfile(p);
-  try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){ showToast('ذخیره مشخصات ممکن نشد'); }
-}
-function compressSignatureFile(file){
-  if(window.KarhaProfile?.compressSignatureFile) return window.KarhaProfile.compressSignatureFile(file);
-  return Promise.reject(new Error('profile store unavailable'));
-}
-function openProfilePage(){
-  if(window.KarhaProfileView?.openProfilePage) return window.KarhaProfileView.openProfilePage();
-}
-function closeProfilePage(fromPopState=false){
-  if(window.KarhaProfileView?.closeProfilePage) return window.KarhaProfileView.closeProfilePage(fromPopState);
-}
-function renderProfilePage(){
-  if(window.KarhaProfileView?.renderProfilePage) return window.KarhaProfileView.renderProfilePage();
-}
 
 document.getElementById('drawerProjectsBtn').onclick = ()=>{ closeDrawer(); openProjectsPage(); };
 document.getElementById('drawerAddProjectBtn').onclick = ()=>{ closeDrawer(); openCreatePage(); };
@@ -298,32 +231,8 @@ function openProjectsPage(){
 
 
 /* ---------- PDF export page (UI owned by src/modules/export/exportView.js) ---------- */
-const EXPORT_NOTES_KEY = 'karha_export_notes_v1';
-function loadExportNotes(){
-  if(window.KarhaExportNotes?.loadExportNotes) return window.KarhaExportNotes.loadExportNotes();
-  try{ return JSON.parse(localStorage.getItem(EXPORT_NOTES_KEY) || '{}') || {}; }catch(e){ return {}; }
-}
-function saveExportNote(pid, text){
-  if(window.KarhaExportNotes?.saveExportNote) return window.KarhaExportNotes.saveExportNote(pid, text);
-  const all = loadExportNotes();
-  if(text && text.trim()) all[pid] = text; else delete all[pid];
-  try{ localStorage.setItem(EXPORT_NOTES_KEY, JSON.stringify(all)); }catch(e){}
-}
-function getExportNote(pid){
-  if(window.KarhaExportNotes?.getExportNote) return window.KarhaExportNotes.getExportNote(pid);
-  return loadExportNotes()[pid] || '';
-}
 function openExportPage(pid){
   if(window.KarhaExportView?.openExportPage) return window.KarhaExportView.openExportPage(pid);
-}
-function renderExportPage(){
-  if(window.KarhaExportView?.renderExportPage) return window.KarhaExportView.renderExportPage();
-}
-function generateProjectPdf(){
-  if(window.KarhaExportView?.generateProjectPdf) return window.KarhaExportView.generateProjectPdf();
-}
-async function generateProjectJpeg(){
-  if(window.KarhaExportView?.generateProjectJpeg) return window.KarhaExportView.generateProjectJpeg();
 }
 
 /* ---------- PWA service worker registration ---------- */
@@ -341,21 +250,6 @@ if('serviceWorker' in navigator){
     }
   });
 }
-
-/* ==================== Status/Letter removed (Phase Final Sweep) ==================== */
-/* Active product path deleted. Firestore historical data is NOT wiped. */
-function openStatusForm(){ try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){} return false; }
-function closeStatusForm(){ return; }
-function requestCloseStatusForm(){ return; }
-function openStatusList(){ try{ showToast('صورت‌وضعیت در این نسخه حذف شده است'); }catch(e){} }
-function closeStatusList(){ return; }
-function renderStatusList(){ return; }
-function renderStatusForm(){ return; }
-function openStatusExport(){ return; }
-function closeStatusExport(){ return; }
-function formatLetterNo(){ return ''; }
-function formatLetterNoDisplay(){ return ''; }
-async function generateNextLetterNo(){ return ''; }
 
 function returnToSettingsWorkspace(){
   workspaceSubpage=null;

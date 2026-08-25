@@ -1,7 +1,7 @@
 import { projectContext } from '../../core/projectContext.js';
 import { activityApi } from '../../domain/activityApi.js';
 
-const runtime=new Proxy({}, {get(_target,key){return window.KarhaApp?.getActivityFormRuntime?.()?.[key] ?? window.KarhaLegacy?.activityFormRuntime?.[key];}});
+const runtime=new Proxy({}, {get(_target,key){return window.KarhaApp?.getActivityFormRuntime?.()?.[key];}});
 
 const state={dirty:false,projectId:null,activityId:null};
 
