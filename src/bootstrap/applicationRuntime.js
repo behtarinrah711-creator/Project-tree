@@ -97,6 +97,14 @@ window.KarhaInstallLegacyFacade({
   },
   openContractForm,
   closeSearchTemplate,
+  // ContractShellView is intentionally still a compatibility boundary. After
+  // the C4 split these presentation owners are lexical ES-module bindings, not
+  // window globals, so publish the exact shell collaborators it still calls.
+  setInternalFormMode,
+  showOnlyWorkspacePage,
+  setBottomNavActive,
+  renderTabs,
+  updateWorkspaceContextBar,
   escapeHtml(str){
     if(window.KarhaHtmlEscape && typeof window.KarhaHtmlEscape.escapeHtml === 'function')
       return window.KarhaHtmlEscape.escapeHtml(str);
