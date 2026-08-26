@@ -63,12 +63,11 @@ export function installContractShellView({ windowRef = globalThis, documentRef =
   }
 
   function openRealContractFormShell(projectId){
-    // Prefer explicit projectId from realContractFormModule.open. Requiring
-    // getCurrentProject() identity match caused silent false when the project
-    // existed in data/findProject but activeTab/scope lagged after seed + UI nav.
-    const p = (projectId && call(windowRef, 'findProject', projectId))
-      || call(windowRef, 'getCurrentProject');
-    if(!p) return false;
+    // realContractFormModule validates the explicit project before entering the
+    // shell. After the C4 ES-module cutover, findProject/getCurrentProject are
+    // no longer implicit window globals, so re-resolving an already validated
+    // project here can silently reject a valid form open.
+    if(!projectId && !call(windowRef, 'getCurrentProject')) return false;
     call(windowRef, 'closeDrawer');
     try{ windowRef.workspaceSubpage = 'contractForm'; }catch(e){}
     call(windowRef, 'setInternalFormMode', true);
