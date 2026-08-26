@@ -45,3 +45,7 @@ Production `window.Karha*` references are **509 before → 352 after**, counted 
 `index.html` has no inline application event attributes. Existing `.onclick` bindings remain with their presentation owners.
 
 The restored owner graph contains cyclic strongly-connected presentation dependencies inherited from the former shared lexical runtime (Foundation ↔ Workspace presentation ↔ feature composition, with child/Contract adapters). ES-module live bindings make these dependencies explicit and remove evaluation-order lookup, but the cycles are not hidden behind a registry or new global. Further decomposition would change feature ownership and is outside this correction; the browser graph must therefore remain covered by startup/E2E CI.
+
+## CI validation
+
+PR #87 was explicitly retriggered after the validated real-contract-shell hotfix so GitHub Actions can exercise the current C4 head in Chromium.
