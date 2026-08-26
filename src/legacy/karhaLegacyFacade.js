@@ -14,7 +14,7 @@ export const KARHA_LEGACY_SURFACE = Object.freeze([
   'findActivityTemplate', 'formatJalaliDisplay', 'getContacts',
   'openNumpadGeneric', 'openJalaliPicker', 'canDeleteProjectRecord',
   'showRecordDeleteBlocked', 'showIncompleteFormExitChoice',
-  'pushWorkspaceHistory', 'requestAnimationFrame', 'svgGrip', 'svgPlus',
+  'pushWorkspaceHistory', 'svgGrip', 'svgPlus',
   'toEnglishDigits', 'toPersianDigits', 'todayJalaliStr',
   'renumberContractItems', 'goHomeProjects',
 ]);

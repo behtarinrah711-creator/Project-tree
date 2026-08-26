@@ -1,3 +1,13 @@
+/** C4 runtime orchestrator: owner implementations are imported as ES modules. */
+import { canDeleteProjectRecord, data, findProject, formatCost, getActiveTab, getCurrentProjectScopeId, getProjectIdFromRoute, getViewMode, isPendingDeleted, loadData, markDirty, persist, projectCostSum, projectsVisibleForAuth, renderDrawerProjectList, setActiveTab, showRecordDeleteBlocked, showToast, svgChevron, svgPlus, toEnglishDigits, toPersianDigits, uid } from '../core/applicationFoundation.js';
+import { openContractForm, openContractTemplateForm, renumberContractItems, requestCloseContractTemplateForm } from '../modules/contracts/contractCompatibility.js';
+import { openNumpadGeneric, setInternalFormMode, showIncompleteFormExitChoice } from '../ui/workspaceFormPresentation.js';
+import { applyRoutedSurface, goHomeProjects, handleWorkspaceContextAction, handleWorkspaceContextBack, clearMenuRoot, clearWorkspaceSubpage, menuRootMode, menuRootPage, renderAll, renderSettingsWorkspace, renderTabs, setBottomNavActive, showOnlyWorkspacePage, svgGrip, updateWorkspaceContextBar, workspaceSubpage, setWorkspaceSubpage } from '../ui/workspacePresentationRuntime.js';
+import { findActivityTemplate, getActivityTemplates, getContacts, getCurrentProject, navigateFooter, openConfirm, renderProjectActivitiesPage } from '../modules/runtime/featureComposition.js';
+import { pushWorkspaceHistory } from '../core/childHistoryController.js';
+import { closeSearchTemplate } from '../modules/contracts/searchTemplateModule.js';
+
+/* migrated from /tmp/original-runtime.js */
 /* ---------- init ---------- */
 // Install the complete, deliberate module/legacy boundary before the first
 // render. Dashboard and routed module mounts may call it during startup.
@@ -36,8 +46,8 @@ window.KarhaApp?.registerFormRuntimes?.({
   uid: uid,
   getCurrentProjectId: getCurrentProjectScopeId,
   showToast: showToast,
-  enterActivityForm: function(){ setInternalFormMode(true); workspaceSubpage='activityForm'; showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); },
-  leaveActivityForm: function(){ setInternalFormMode(false); document.getElementById('activityFormPage')?.classList.add('hidden'); workspaceSubpage='activities'; showOnlyWorkspacePage('projectActivitiesPage'); renderProjectActivitiesPage(); updateWorkspaceContextBar(); },
+  enterActivityForm: function(){ setInternalFormMode(true); setWorkspaceSubpage('activityForm'); showOnlyWorkspacePage('activityFormPage'); setBottomNavActive('Settings'); renderTabs(); updateWorkspaceContextBar(); },
+  leaveActivityForm: function(){ setInternalFormMode(false); document.getElementById('activityFormPage')?.classList.add('hidden'); setWorkspaceSubpage('activities'); showOnlyWorkspacePage('projectActivitiesPage'); renderProjectActivitiesPage(); updateWorkspaceContextBar(); },
   pushWorkspaceHistory: pushWorkspaceHistory,
   findProject: findProject,
   markDirty: markDirty,
@@ -47,7 +57,7 @@ window.KarhaApp?.registerFormRuntimes?.({
   openNumpadGeneric: openNumpadGeneric,
   setInternalFormMode: setInternalFormMode,
   showIncompleteFormExitChoice: showIncompleteFormExitChoice,
-  closeContactsToSettings: function(){ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); },
+  closeContactsToSettings: function(){ clearWorkspaceSubpage(); renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); },
 }) || {};
 window.KarhaInstallLegacyFacade({
 
@@ -66,8 +76,8 @@ window.KarhaInstallLegacyFacade({
   openConfirm,
   showToast,
   svgChevron,
-  renderInlineAddRow,
-  renderTaskBlock,
+  renderInlineAddRow: (...args) => window.KarhaApp.taskRuntime.view.renderInlineAddRow(...args),
+  renderTaskBlock: (...args) => window.KarhaApp.taskRuntime.view.renderTaskBlock(...args),
   applyRoutedSurface,
   getWorkspaceChromeState(){
     const project=getCurrentProject();
@@ -75,8 +85,8 @@ window.KarhaInstallLegacyFacade({
   },
   navigateFooter,
   renderDrawerProjectList,
-  clearWorkspaceSubpage(){ workspaceSubpage=null; },
-  clearMenuRoot(){ menuRootMode=null; menuRootPage=null; },
+  clearWorkspaceSubpage,
+  clearMenuRoot,
   handleWorkspaceContextBack,
   handleWorkspaceContextAction,
   getProjectsList(){
@@ -112,7 +122,6 @@ window.KarhaInstallLegacyFacade({
   showRecordDeleteBlocked,
   showIncompleteFormExitChoice,
   pushWorkspaceHistory,
-  requestAnimationFrame(callback){ return window.requestAnimationFrame(callback); },
   svgGrip,
   svgPlus,
   toEnglishDigits,

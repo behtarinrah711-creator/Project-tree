@@ -592,10 +592,7 @@ function renderContractForm() {
     actions.appendChild(bar);
   }
 
-  const raf = helper('requestAnimationFrame', () => {
-    try { scrollHost.scrollTop = savedScroll; } catch {}
-  });
-  if (raf === undefined && typeof window !== 'undefined') {
+  if (typeof window !== 'undefined') {
     window.requestAnimationFrame?.(() => {
       try { scrollHost.scrollTop = savedScroll; } catch {}
     });

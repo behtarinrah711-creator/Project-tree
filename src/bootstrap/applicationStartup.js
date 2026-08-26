@@ -7,7 +7,6 @@ import { listProjects, getProject, getActiveProject, selectProject } from '../co
 import { taskRuntimeModule } from '../modules/tasks/taskRuntimeModule.js';
 import { createProjectTrashView } from '../modules/trash/projectTrashView.js';
 import { createProjectManagementView } from '../modules/projects/projectManagementView.js';
-import { loadApplicationRuntime } from './applicationRuntimeLoader.js';
 import { exposeKarhaLegacyInstaller } from '../legacy/karhaLegacyFacade.js';
 import { installAppDataStore } from '../data/appDataStore.js';
 import { installHtmlEscape } from '../core/htmlEscape.js';
@@ -61,14 +60,15 @@ import { taskIcons } from '../ui/taskIcons.js';
 import * as projectRecordReferences from '../domain/projectRecordReferences.js';
 import { installApplicationTheme } from '../core/applicationTheme.js';
 import { createFoundationCloudRuntime } from '../cloud/foundationCloudComposition.js';
+import { installGuestFirebaseFallback } from '../firebase/guestFirebaseFallback.js';
 
-/** Start the modular API, then the classic application runtime, then routing. */
+/** Start the modular API, then the runtime module, then routing. */
 export async function startApplication({
   windowRef = window,
   registry = moduleRegistry,
   modules = projectModules,
   router = appRouter,
-  loadRuntime = loadApplicationRuntime,
+  loadRuntime = () => import('./applicationRuntime.js'),
 } = {}){
   exposeKarhaLegacyInstaller({ windowRef });
   installApplicationTheme({windowRef,documentRef:windowRef.document});
@@ -133,6 +133,7 @@ export async function startApplication({
 
   // D1: AppDataStore must exist before classic loadData() runs.
   installAppDataStore({ windowRef, schemaVersion: 8 });
+  installGuestFirebaseFallback(windowRef);
   installFirebaseRuntime({windowRef});
   installHtmlEscape({ windowRef });
   await loadRuntime();

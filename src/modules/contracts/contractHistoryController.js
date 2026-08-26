@@ -39,3 +39,5 @@
     formOwned(){return !!history?.isOpen('contract-form');}
   });
 })();
+
+export {  };

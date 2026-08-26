@@ -1,3 +1,5 @@
+import { getCurrentProject } from '../runtime/featureComposition.js';
+import { getCurrentProjectScopeId } from '../../core/applicationFoundation.js';
 /* Classic-runtime compatibility facade. Implementations live in owned Contract modules. */
 function getContractTemplates(project){return window.KarhaContractTemplates?.getContractTemplates(project)||[];}
 function getProjectContracts(project=getCurrentProject()){return project?.id?(window.KarhaRealContracts?.getProjectContracts?.(project.id)||[]):[];}
@@ -34,3 +36,5 @@ function requestCloseContractForm(fromPopState=false){return window.KarhaRealCon
 function markSuppressWorkspaceBack(){return window.KarhaBackGestureGuard?.suppress?.();}
 function shouldSuppressWorkspaceBack(){return window.KarhaBackGestureGuard?.isSuppressed?.()||false;}
 window.KarhaSearchTemplateHooks=Object.assign({},window.KarhaSearchTemplateHooks||{},{suppressBack:markSuppressWorkspaceBack});
+
+export { getContractTemplates, getProjectContracts, findContractTemplate, findProjectContract, makeContractItem, getDefaultContractTemplateItems, normalizeContractTemplate, renumberContractItems, contractTemplateHasContent, makeContractTemplateDraft, makeContractTemplateDraftClean, getContractTemplateDraftKey, contractItemDepthFromPath, moveContractItem, startContractPointerDrag, attachContractDrag, openContractTemplatesPage, closeContractTemplatesPage, openContractTemplateForm, closeContractTemplateForm, requestCloseContractTemplateForm, renderContractTemplateFormClean, renderContractTemplateForm, saveContractTemplateClean, openContractsPage, closeContractsPage, renderContractsPage, openRealContractFormShell, closeRealContractFormShell, openContractForm, closeContractForm, requestCloseContractForm, markSuppressWorkspaceBack, shouldSuppressWorkspaceBack };

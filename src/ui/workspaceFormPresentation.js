@@ -1,3 +1,5 @@
+import { closeMenuRootPage } from './workspacePresentationRuntime.js';
+import { addProject } from '../core/applicationFoundation.js';
 /* Generic workspace forms/dialogs. History is delegated to KarhaChildHistory. */
 /* ---------- generic mini prompt dialog (replaces window.prompt) ---------- */
 let miniPromptCallback = null;
@@ -180,3 +182,5 @@ function closeNumpad(fromPopState=false){
   if(window.KarhaUI?.closeNumpad) return window.KarhaUI.closeNumpad(fromPopState);
 }
 /* DOM binds + popstate installed by installUiPrimitives */
+
+export { miniPromptCallback, miniPromptMode, updateCreateProjectPageUI, isFormEmptyValue, formHasAnyUserInput, setInternalFormMode, showIncompleteFormExitChoice, formRequiredComplete, openCreatePage, closeCreatePage, openMiniPrompt, closeMiniPrompt, submitMiniPrompt, openNumpadGeneric, closeNumpad };

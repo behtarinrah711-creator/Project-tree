@@ -6,11 +6,12 @@ const read = relative => readFile(new URL(relative, import.meta.url), 'utf8');
 
 test('L6 removes the classic legacy implementation and all startup references', async () => {
   await assert.rejects(access(new URL('../legacy/legacyApp.js', import.meta.url)));
+  await assert.rejects(access(new URL('./applicationRuntimeLoader.js', import.meta.url)));
   const startup = await read('./applicationStartup.js');
-  const loader = await read('./applicationRuntimeLoader.js');
   const html = await read('../../index.html');
-  assert.doesNotMatch(startup + loader + html, /legacyApp\.js/);
-  assert.match(loader, /applicationRuntime\.js/);
+  assert.doesNotMatch(startup + html, /legacyApp\.js|applicationRuntimeLoader/);
+  assert.match(startup, /import\('\.\/applicationRuntime\.js'\)/);
+  assert.match(html, /<script type="module" src="src\/bootstrap\/app\.js"><\/script>/);
 });
 
 test('KarhaLegacy facade is a state-free delegate publisher', async () => {
