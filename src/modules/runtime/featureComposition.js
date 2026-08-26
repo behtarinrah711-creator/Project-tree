@@ -11,7 +11,6 @@ function renderContactsPage(){
   if(module?.render) module.render(getCurrentProject()?.id);
 }
 
-
 function getActivityTemplates(project=getCurrentProject()){
   if(!project) return [];
   normalizeProjectScopedData(project);
@@ -19,9 +18,7 @@ function getActivityTemplates(project=getCurrentProject()){
 }
 function findActivityTemplate(id, project=getCurrentProject()){ return getActivityTemplates(project).find(a=>a.id===id) || null; }
 function openProjectActivitiesPage(){
-  closeBottomPages();
-  enterWorkspaceSurface();
-  workspaceSubpage='activities';
+  closeBottomPages(); enterWorkspaceSurface(); workspaceSubpage='activities';
   showOnlyWorkspacePage('projectActivitiesPage');
   renderProjectActivitiesPage();
   pushWorkspaceHistory('activities');
@@ -30,17 +27,9 @@ function renderProjectActivitiesPage(){
   const module=window.KarhaApp?.modules?.get('activities');
   if(module?.render) module.render(getCurrentProject()?.id);
 }
-
-function openActivityEditForm(activity){
-  return window.KarhaApp?.modules?.get('activities')?.openActivityEditForm(activity);
-}
-
-function openActivityForm(){
-  return window.KarhaApp?.modules?.get('activities')?.openActivityForm();
-}
-function requestCloseActivityForm(fromPopState=false){
-  return window.KarhaApp?.modules?.get('activities')?.requestCloseActivityForm(fromPopState);
-}
+function openActivityEditForm(activity){ return window.KarhaApp?.modules?.get('activities')?.openActivityEditForm(activity); }
+function openActivityForm(){ return window.KarhaApp?.modules?.get('activities')?.openActivityForm(); }
+function requestCloseActivityForm(fromPopState=false){ return window.KarhaApp?.modules?.get('activities')?.requestCloseActivityForm(fromPopState); }
 
 function permanentlyDeleteGlobalRecord(entry){
   if(!entry || !entry.record) return false;
@@ -55,12 +44,8 @@ function permanentlyDeleteGlobalRecord(entry){
   if(entry.type==='activity'){
     const p=findProject(entry.projectId); if(!p) return false; p.activityTemplates=getActivityTemplates(p).filter(x=>x.id!==entry.id); markDirty(p.id); return true;
   }
-  if(entry.type==='task'){
-    return !!window.KarhaApp?.taskRuntime?.permanentDelete(entry.projectId,entry.id);
-  }
-  if(entry.type==='subtask'){
-    return !!window.KarhaApp?.taskRuntime?.permanentDelete(entry.projectId,entry.rootTaskId||entry.parentId,entry.id);
-  }
+  if(entry.type==='task') return !!window.KarhaApp?.taskRuntime?.permanentDelete(entry.projectId,entry.id);
+  if(entry.type==='subtask') return !!window.KarhaApp?.taskRuntime?.permanentDelete(entry.projectId,entry.rootTaskId||entry.parentId,entry.id);
   return false;
 }
 
@@ -78,12 +63,8 @@ function restoreGlobalRecord(entry){
     const p=findProject(entry.projectId); const a=findActivityTemplate(entry.id,p); if(!a) return false;
     a.trashed=false; delete a.deletedAt; delete a.deletedType; markDirty(p.id); return true;
   }
-  if(entry.type==='task'){
-    return !!window.KarhaApp?.taskRuntime?.restore(entry.projectId,entry.id);
-  }
-  if(entry.type==='subtask'){
-    return !!window.KarhaApp?.taskRuntime?.restore(entry.projectId,entry.rootTaskId||entry.parentId,entry.id);
-  }
+  if(entry.type==='task') return !!window.KarhaApp?.taskRuntime?.restore(entry.projectId,entry.id);
+  if(entry.type==='subtask') return !!window.KarhaApp?.taskRuntime?.restore(entry.projectId,entry.rootTaskId||entry.parentId,entry.id);
   return false;
 }
 
@@ -92,7 +73,6 @@ function addTrashSourceBadge(container,type){ return projectTrashView?.addSource
 function appendTrashActions(actions,entry){ return projectTrashView?.appendActions(actions,entry); }
 function collectProjectTrashedRecords(projectId){ return projectTrashView?.collect(projectId)||[]; }
 function renderProjectTrashPage(){ return projectTrashView?.render(); }
-
 function openProjectTrashPage(){
   closeBottomPages(); enterWorkspaceSurface(); ensureHomeSelection(); workspaceSubpage='projectTrash';
   setBottomNavActive('Settings'); showOnlyWorkspacePage('projectTrashPage'); renderProjectTrashPage(); updateWorkspaceContextBar();
@@ -106,55 +86,38 @@ function refreshCurrentFooterPage(){
   }
   renderTabs();
   if(active.id==='bottomReportsBtn'){
-    workspaceSubpage=null;
-    showOnlyWorkspacePage('reportsPage');
-    renderReportsWorkspace();
-    updateWorkspaceContextBar();
-    return;
+    workspaceSubpage=null; showOnlyWorkspacePage('reportsPage'); renderReportsWorkspace(); updateWorkspaceContextBar(); return;
   }
   if(active.id==='bottomAccountingBtn'){
-    workspaceSubpage=null;
-    showOnlyWorkspacePage('accountingPage');
-    renderAccountingWorkspace();
-    updateWorkspaceContextBar();
-    return;
+    workspaceSubpage=null; showOnlyWorkspacePage('accountingPage'); renderAccountingWorkspace(); updateWorkspaceContextBar(); return;
   }
   if(active.id==='bottomSettingsBtn'){
     if(workspaceSubpage==='projectTrash'){
-      showOnlyWorkspacePage('projectTrashPage');
-      renderProjectTrashPage();
+      showOnlyWorkspacePage('projectTrashPage'); renderProjectTrashPage();
     } else {
-      workspaceSubpage=null;
-      showOnlyWorkspacePage('settingsPage');
-      renderSettingsWorkspace();
+      workspaceSubpage=null; showOnlyWorkspacePage('settingsPage'); renderSettingsWorkspace();
     }
-    updateWorkspaceContextBar();
-    return;
+    updateWorkspaceContextBar(); return;
   }
   renderAll();
 }
 
 function commitActiveContactDraft(){ try{ if(typeof window.__commitContactDraft==='function') window.__commitContactDraft(); }catch(e){} }
-
 function navigateFooter(moduleId){
-  commitActiveContactDraft();
-  leaveMenuRootForFooter();
-  ensureHomeSelection();
+  commitActiveContactDraft(); leaveMenuRootForFooter(); ensureHomeSelection();
   const projectId=getCurrentProjectScopeId();
   if(projectId) window.KarhaApp?.projectWorkspace?.selectProject?.(projectId,{moduleId});
 }
 
-document.getElementById('closeProjectTrashPage').onclick=()=>{
-  workspaceSubpage=null;
-  showOnlyWorkspacePage('settingsPage');
-  setBottomNavActive('Settings');
-  renderTabs();
-  renderSettingsWorkspace();
-  updateWorkspaceContextBar();
+const browserDocument=globalThis.document;
+const closeProjectTrashPage=browserDocument?.getElementById('closeProjectTrashPage');
+if(closeProjectTrashPage) closeProjectTrashPage.onclick=()=>{
+  workspaceSubpage=null; showOnlyWorkspacePage('settingsPage'); setBottomNavActive('Settings');
+  renderTabs(); renderSettingsWorkspace(); updateWorkspaceContextBar();
 };
 
 const taskUI = window.KarhaApp.taskRuntime.createUI({
-  getData:()=>data, document, requestAnimationFrame, setTimeout, isPendingDeleted, elFromHtml,
+  getData:()=>data, document:browserDocument, requestAnimationFrame:globalThis.requestAnimationFrame, setTimeout, isPendingDeleted, elFromHtml,
   formatCost, formatCostDisplay, projectCostSum, taskCostSum, svgPlus, svgGrip, svgChevron, svgTrash,
   svgCheck, svgStar, itemChildren, findNestedItem, findProject, findTask, findSub, walkItems,
   toggleTaskDone, toggleSubDone, toggleTaskStar, toggleSubStar, removeFromStarredOrder,
@@ -164,7 +127,7 @@ const taskUI = window.KarhaApp.taskRuntime.createUI({
 const {renderProjectView,refreshProjectPartial,renderInlineAddRow,renderTaskBlock,renderStarredView,
   buildStarredGroup,openTaskDetail,openSubDetail,closeSheet,renderSheet}=taskUI;
 projectTrashView=window.KarhaApp.createProjectTrashView({
-  document,setTimeout,getActiveProjectId:()=>{ const id=getActiveTab(); return id&&id!=='starred'?id:null; },
+  document:browserDocument,setTimeout,getActiveProjectId:()=>{ const id=getActiveTab(); return id&&id!=='starred'?id:null; },
   findProject,walkItems,getContacts,getActivityTemplates,findActivityTemplate,taskView:taskUI,
   restoreRecord:restoreGlobalRecord,permanentlyDeleteRecord:permanentlyDeleteGlobalRecord,
   persist,refreshWorkspace:renderAll,refreshContacts:renderContactsPage,
@@ -172,49 +135,37 @@ projectTrashView=window.KarhaApp.createProjectTrashView({
   createWorkspaceSearch,workspaceTextMatch
 });
 
-/* ---------- side drawer (menu) ---------- */
 function openDrawer(){ return window.KarhaWorkspaceChrome?.openDrawer?.(); }
 function closeDrawer(){ return window.KarhaWorkspaceChrome?.closeDrawer?.(); }
+function openConfirm(text, onOk, okLabel){ return window.KarhaUI?.openConfirm?.(text, onOk, okLabel); }
 
-/* ---------- confirm dialog: presentation is owned by KarhaUI ---------- */
-function openConfirm(text, onOk, okLabel){
-  return window.KarhaUI?.openConfirm?.(text, onOk, okLabel);
-}
-/* DOM binds installed by installUiPrimitives — no new ownership here */
-
-/* ---------- project management page ---------- */
-
-document.getElementById('drawerProjectsBtn').onclick = ()=>{ closeDrawer(); openProjectsPage(); };
-document.getElementById('drawerAddProjectBtn').onclick = ()=>{ closeDrawer(); openCreatePage(); };
-document.getElementById('drawerGlobalTrashBtn').onclick = openGlobalTrashFromDrawer;
-document.getElementById('closeProjectsPage').onclick = ()=>{ closeMenuRootPage(false); };
+const drawerProjectsBtn=browserDocument?.getElementById('drawerProjectsBtn');
+if(drawerProjectsBtn) drawerProjectsBtn.onclick=()=>{ closeDrawer(); openProjectsPage(); };
+const drawerAddProjectBtn=browserDocument?.getElementById('drawerAddProjectBtn');
+if(drawerAddProjectBtn) drawerAddProjectBtn.onclick=()=>{ closeDrawer(); openCreatePage(); };
+const drawerGlobalTrashBtn=browserDocument?.getElementById('drawerGlobalTrashBtn');
+if(drawerGlobalTrashBtn) drawerGlobalTrashBtn.onclick=openGlobalTrashFromDrawer;
+const closeProjectsPage=browserDocument?.getElementById('closeProjectsPage');
+if(closeProjectsPage) closeProjectsPage.onclick=()=>{ closeMenuRootPage(false); };
 
 async function permanentlyDeleteProject(p){
   if(!p) return false;
-
-  // If the project is currently pending soft-delete, cancel that pending timer first.
   if(pendingDelete && pendingDelete.type==='project' && pendingDelete.pid===p.id){
-    clearTimeout(pendingDelete.timeoutId);
-    pendingDelete=null;
-    hideUndoToast();
+    clearTimeout(pendingDelete.timeoutId); pendingDelete=null; hideUndoToast();
   }
-
   try{await cloudRuntime.lifecycle.permanentlyDelete(p);}catch(e){
-      console.warn('permanent project delete failed',e);
-      showToast('حذف همیشگی پروژه روی سرور انجام نشد');
-      return false;
+    console.warn('permanent project delete failed',e); showToast('حذف همیشگی پروژه روی سرور انجام نشد'); return false;
   }
   data.projects=data.projects.filter(x=>x.id!==p.id);
   if(getActiveTab()===p.id){
     const next=data.projects.find(x=>!x.trashed&&!x.archived) || data.projects.find(x=>!x.trashed) || data.projects.find(x=>!x.archived);
     setActiveTab(next ? next.id : 'starred');
   }
-  persist();
-  return true;
+  persist(); return true;
 }
 
 const projectManagementView=window.KarhaApp.createProjectManagementView({
-  document,getData:()=>data,projectsVisibleForAuth,isPendingDeleted,svgGrip,svgTrash,
+  document:browserDocument,getData:()=>data,projectsVisibleForAuth,isPendingDeleted,svgGrip,svgTrash,
   openMiniPrompt,renameProject:(id,name)=>window.KarhaApp?.projectApi?.rename?.(id,name),
   cloudRenameProject,findProject,archiveProject:(id,value)=>window.KarhaApp?.projectApi?.archive?.(id,value),
   setActiveTab,getActiveTab,cloudSyncProjectStatus,refreshWorkspace:renderAll,showToast,
@@ -222,21 +173,14 @@ const projectManagementView=window.KarhaApp.createProjectManagementView({
 });
 function renderManagementPage(){ return projectManagementView.render(); }
 function openProjectsPage(){
-  menuRootMode='projects';
-  projectManagementView.reset();
+  menuRootMode='projects'; projectManagementView.reset();
   closeBottomPages(); enterWorkspaceSurface(); ensureHomeSelection(); setBottomNavActive('Projects');
-  pushMenuRootHistory('projects'); showOnlyWorkspacePage('projectsPage'); updateWorkspaceContextBar();
-  renderManagementPage();
+  pushMenuRootHistory('projects'); showOnlyWorkspacePage('projectsPage'); updateWorkspaceContextBar(); renderManagementPage();
 }
 
+function openExportPage(pid){ if(window.KarhaExportView?.openExportPage) return window.KarhaExportView.openExportPage(pid); }
 
-/* ---------- PDF export page (UI owned by src/modules/export/exportView.js) ---------- */
-function openExportPage(pid){
-  if(window.KarhaExportView?.openExportPage) return window.KarhaExportView.openExportPage(pid);
-}
-
-/* ---------- PWA service worker registration ---------- */
-if('serviceWorker' in navigator){
+if(typeof navigator!=='undefined' && 'serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
       try{ reg.update(); }catch(e){}
@@ -244,22 +188,19 @@ if('serviceWorker' in navigator){
     }).catch(()=>{});
   });
   navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-    if(!window.__swReloaded155){
-      window.__swReloaded155=true;
-      location.reload();
-    }
+    if(!window.__swReloaded155){ window.__swReloaded155=true; location.reload(); }
   });
 }
 
 function returnToSettingsWorkspace(){
-  workspaceSubpage=null;
-  setBottomNavActive('Settings');
-  renderTabs();
-  showOnlyWorkspacePage('settingsPage');
-  renderSettingsWorkspace();
-  updateWorkspaceContextBar();
+  workspaceSubpage=null; setBottomNavActive('Settings'); renderTabs(); showOnlyWorkspacePage('settingsPage');
+  renderSettingsWorkspace(); updateWorkspaceContextBar();
 }
-document.getElementById('closeProjectActivitiesPage').onclick = returnToSettingsWorkspace;
-document.getElementById('closeContactsPage').onclick = ()=>{ window.KarhaApp?.modules?.get('people')?.resetContactFormShell?.(); returnToSettingsWorkspace(); };
-document.getElementById('contactAddBtn').onclick = ()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
-document.getElementById('activityAddBtn').onclick = openActivityForm;
+const closeProjectActivitiesPage=browserDocument?.getElementById('closeProjectActivitiesPage');
+if(closeProjectActivitiesPage) closeProjectActivitiesPage.onclick=returnToSettingsWorkspace;
+const closeContactsPage=browserDocument?.getElementById('closeContactsPage');
+if(closeContactsPage) closeContactsPage.onclick=()=>{ window.KarhaApp?.modules?.get('people')?.resetContactFormShell?.(); returnToSettingsWorkspace(); };
+const contactAddBtn=browserDocument?.getElementById('contactAddBtn');
+if(contactAddBtn) contactAddBtn.onclick=()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
+const activityAddBtn=browserDocument?.getElementById('activityAddBtn');
+if(activityAddBtn) activityAddBtn.onclick=openActivityForm;
