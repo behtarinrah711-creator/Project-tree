@@ -126,7 +126,7 @@ export function openContactForm(contact=null,{activityId=null}={}){
   ['ایرانی','غیر ایرانی'].forEach(v=>{const lab=document.createElement('label');lab.className='contact-radio';const r=document.createElement('input');r.type='radio';r.name='contactNationality';r.value=v;r.checked=c.nationalityType===v;const sp=document.createElement('span');sp.textContent=v;lab.append(r,sp);natRow.appendChild(lab);});
   natSection.appendChild(natRow); wrap.appendChild(natSection);
 
-  const foreignBox=document.createElement('div'); foreignBox.className='contact-section'; foreignBox.style.display='none'; foreignBox.style.flexDirection='column'; foreignBox.style.gap='10px';
+  const foreignBox=document.createElement('div'); foreignBox.className='contact-section contact-foreign-fields hidden';
   foreignBox.append(makeInput('تابعیت',c.nationality,'nationality'));
   foreignBox.append(makeInput('شماره اتباع',c.foreignId,'foreignId',{numeric:true,maxLen:20}));
   const foreignUpload=document.createElement('div'); foreignUpload.className='contact-upload';
@@ -150,7 +150,7 @@ export function openContactForm(contact=null,{activityId=null}={}){
 
   const phoneSec=document.createElement('div'); phoneSec.className='contact-section repeat-section';
   const phoneHead=document.createElement('div'); phoneHead.className='repeat-head'; const phoneTitle=document.createElement('div'); phoneTitle.className='repeat-title'; phoneTitle.textContent='شماره تماس'; const phoneAdd=document.createElement('button'); phoneAdd.type='button'; phoneAdd.className='repeat-add'; phoneAdd.textContent='+'; phoneHead.append(phoneTitle,phoneAdd); phoneSec.appendChild(phoneHead);
-  const phoneRows=document.createElement('div'); phoneRows.style.cssText='display:flex;flex-direction:column;gap:8px'; phoneSec.appendChild(phoneRows); wrap.appendChild(phoneSec);
+  const phoneRows=document.createElement('div'); phoneRows.className='contact-repeat-rows'; phoneSec.appendChild(phoneRows); wrap.appendChild(phoneSec);
   const addPhone=(value='')=>{const r=document.createElement('div');r.className='repeat-row';const i=document.createElement('input');i.className='contact-input numeric-field contact-phone-input';i.readOnly=true;i.inputMode='none';i.value=value;i.placeholder='شماره موبایل';i.addEventListener('click',()=>runtime.openNumpadGeneric(i.value,v=>{i.value=v;saveContactDraft();},{suffix:'',prefix:'',maxLen:15,group:false}));const rm=document.createElement('button');rm.type='button';rm.className='repeat-remove';rm.textContent='حذف';rm.onclick=()=>{r.remove();saveContactDraft();};r.append(i,rm);phoneRows.appendChild(r);};
   (c.phones||[]).filter(Boolean).forEach(addPhone); if(!phoneRows.children.length) addPhone(''); phoneAdd.onclick=()=>{addPhone('');saveContactDraft();};
   wrap.append(makeSelect('نوع مخاطب',c.type,'type',['کارفرما','کارگر','راننده','فروشنده','پیمانکار','مهندس','ناظر']));
@@ -159,18 +159,15 @@ export function openContactForm(contact=null,{activityId=null}={}){
   let selectedActivityId = Array.isArray(c.activities) && c.activities.length ? String(c.activities[0]) : '';
   const actSec=document.createElement('div');
   actSec.className='contact-section contact-field ft-row ft-tap';
-  actSec.style.cssText='display:flex;align-items:center;direction:rtl;width:100%;min-height:54px;padding:12px 0;border-bottom:1px solid #e6e8eb;cursor:pointer;gap:12px;background:#fff;box-sizing:border-box;';
   const actLab=document.createElement('div');
   actLab.className='ft-label';
   actLab.textContent='فعالیت:';
-  actLab.style.cssText='flex:0 0 auto;font-size:14px;font-weight:500;color:#3c4043;';
   const actVal=document.createElement('div');
   actVal.className='ft-value';
-  actVal.style.cssText='flex:1;min-width:0;font-size:14px;text-align:left;';
   const syncActVal=()=>{
     const a=selectedActivityId?findActivity(selectedActivityId):null;
     actVal.textContent=a?(a.name||a.title||'—'):'انتخاب';
-    actVal.style.color=a?'#202124':'#9aa0a6';
+    actVal.classList.toggle('ft-placeholder', !a);
   };
   syncActVal();
   actSec.append(actLab, actVal);
@@ -206,7 +203,7 @@ export function openContactForm(contact=null,{activityId=null}={}){
   const renderSelected=()=>syncActVal();
 
 
-  const bankSec=document.createElement('div'); bankSec.className='contact-section'; const bankHead=document.createElement('div'); bankHead.className='repeat-head'; const bankTitle=document.createElement('div'); bankTitle.className='contact-section-title'; bankTitle.style.margin='0'; bankTitle.textContent='اطلاعات حساب'; const bankAdd=document.createElement('button'); bankAdd.type='button'; bankAdd.className='repeat-add'; bankAdd.textContent='+'; bankHead.append(bankTitle,bankAdd); bankSec.appendChild(bankHead); const bankList=document.createElement('div'); bankList.className='bank-list'; bankSec.appendChild(bankList); wrap.appendChild(bankSec);
+  const bankSec=document.createElement('div'); bankSec.className='contact-section'; const bankHead=document.createElement('div'); bankHead.className='repeat-head'; const bankTitle=document.createElement('div'); bankTitle.className='contact-section-title contact-section-title-inline'; bankTitle.textContent='اطلاعات حساب'; const bankAdd=document.createElement('button'); bankAdd.type='button'; bankAdd.className='repeat-add'; bankAdd.textContent='+'; bankHead.append(bankTitle,bankAdd); bankSec.appendChild(bankHead); const bankList=document.createElement('div'); bankList.className='bank-list'; bankSec.appendChild(bankList); wrap.appendChild(bankSec);
   const addBank=(b={})=>{const entry=document.createElement('div');entry.className='bank-entry';const entryHead=document.createElement('div');entryHead.className='bank-entry-head';const entryTitle=document.createElement('div');entryTitle.className='bank-entry-title';entryTitle.textContent='اطلاعات حساب جدید';const rm=document.createElement('button');rm.type='button';rm.className='bank-remove';rm.textContent='حذف';rm.onclick=()=>{entry.remove();saveContactDraft();};entryHead.append(entryTitle,rm);entry.appendChild(entryHead);entry.appendChild(makeInput('به نام',b.ownerName||[c.firstName,c.lastName].filter(Boolean).join(' '),'ownerName'));entry.appendChild(makeInput('بانک',b.bankName,'bankName'));entry.appendChild(makeInput('شماره کارت',b.card,'card',{numeric:true,maxLen:19}));entry.appendChild(makeInput('شماره شبا',b.iban,'iban',{numeric:true,maxLen:26}));entry.appendChild(makeInput('شماره حساب',b.account,'account',{numeric:true,maxLen:24}));bankList.appendChild(entry);};
   (c.bankAccounts||[]).forEach(addBank); if(!bankList.children.length) addBank({ownerName:[c.firstName,c.lastName].filter(Boolean).join(' ')}); bankAdd.onclick=()=>{addBank({ownerName:[c.firstName,c.lastName].filter(Boolean).join(' ')});saveContactDraft();};
 
@@ -217,7 +214,7 @@ export function openContactForm(contact=null,{activityId=null}={}){
   const readImages=(input,target,grid)=>{Array.from(input.files||[]).forEach(f=>{const reader=new FileReader();reader.onload=()=>{target.push(reader.result);renderImages(grid,target);saveContactDraft();};reader.readAsDataURL(f);});input.value='';};
   foreignFile.addEventListener('change',()=>readImages(foreignFile,c.foreignIdImages,foreignGrid)); iranFile.addEventListener('change',()=>readImages(iranFile,c.iranianDocumentImages,iranGrid));
 
-  const toggleNationality=()=>{const nat=natRow.querySelector('input:checked')?.value||'ایرانی';foreignBox.style.display=nat==='غیر ایرانی'?'flex':'none';nationalField.style.display=nat==='ایرانی'?'flex':'none';iranianDocs.style.display=nat==='ایرانی'?'block':'none';};
+  const toggleNationality=()=>{const iranian=(natRow.querySelector('input:checked')?.value||'ایرانی')==='ایرانی';foreignBox.classList.toggle('hidden',iranian);nationalField.classList.toggle('hidden',!iranian);iranianDocs.classList.toggle('hidden',!iranian);};
   natRow.querySelectorAll('input').forEach(r=>r.addEventListener('change',toggleNationality)); toggleNationality();
   const cleanupContactForm=()=>{
     clearTimeout(draftTimer);

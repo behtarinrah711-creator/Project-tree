@@ -168,7 +168,7 @@ function openSearchTemplate(opts){
   const titleEl=document.getElementById('searchTemplateTitle');
   if(titleEl) titleEl.textContent=searchTemplateState.title;
   const fab=document.getElementById('searchTemplateFab');
-  if(fab) fab.style.display=searchTemplateState.showAdd?'flex':'none';
+  if(fab) fab.classList.toggle('hidden', !searchTemplateState.showAdd);
   const top=document.getElementById('searchTemplateTopbar');
   if(top) top.classList.remove('search-mode');
   const inp=document.getElementById('searchTemplateInput');

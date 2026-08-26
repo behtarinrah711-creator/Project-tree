@@ -1,0 +1,4 @@
+/* C5 owner module: features/contracts-layout.css */
+.contract-parties-activity-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;width:100%;align-items:start;}
+@media (max-width:640px){.contract-parties-activity-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;}}
+

@@ -71,14 +71,14 @@ export function installProfileView({ windowRef = globalThis, documentRef = null 
     nameInp.oninput = ()=>{
       if(!profileDraft) profileDraft = {...loadProfile()};
       profileDraft.name = nameInp.value;
-      nameInp.style.borderColor = '';
+      nameInp.classList.remove('is-invalid');
     };
     nameField.appendChild(nameInp);
     body.appendChild(nameField);
 
     const abbrField = documentRef.createElement('div');
     abbrField.className = 'profile-field';
-    abbrField.innerHTML = '<label for="profileAbbrInput">اختصار فرستنده <span style="color:var(--danger)">*</span></label>';
+    abbrField.innerHTML = '<label for="profileAbbrInput">اختصار فرستنده <span class="required-mark">*</span></label>';
     const abbrInp = documentRef.createElement('input');
     abbrInp.type = 'text';
     abbrInp.id = 'profileAbbrInput';
@@ -87,11 +87,11 @@ export function installProfileView({ windowRef = globalThis, documentRef = null 
     abbrInp.oninput = ()=>{
       if(!profileDraft) profileDraft = {...loadProfile()};
       profileDraft.senderAbbr = abbrInp.value;
-      abbrInp.style.borderColor = '';
+      abbrInp.classList.remove('is-invalid');
     };
     abbrField.appendChild(abbrInp);
     const abbrHint = documentRef.createElement('div');
-    abbrHint.style.cssText = 'font-size:12px;color:var(--text-dim);margin-top:8px;line-height:1.5;';
+    abbrHint.className = 'profile-field-hint';
     abbrHint.textContent = 'این مقدار از شما گرفته و در شماره نامه ذخیره می‌شود. نمونه: ۴۰۵۰۵۲۱ / م.احمدی / ۰۱';
     abbrField.appendChild(abbrHint);
     body.appendChild(abbrField);
@@ -117,7 +117,7 @@ export function installProfileView({ windowRef = globalThis, documentRef = null 
     const fileInp = documentRef.createElement('input');
     fileInp.type = 'file';
     fileInp.accept = 'image/*';
-    fileInp.style.display = 'none';
+    fileInp.className = 'hidden';
     const upBtn = documentRef.createElement('button');
     upBtn.className = 'restore-btn';
     upBtn.type = 'button';
@@ -154,7 +154,7 @@ export function installProfileView({ windowRef = globalThis, documentRef = null 
     }
     wrap.appendChild(actions);
     const tip = documentRef.createElement('div');
-    tip.style.cssText = 'font-size:12px;color:var(--text-dim);line-height:1.6;';
+    tip.className = 'profile-signature-tip';
     tip.textContent = 'تصویر به‌صورت خودکار کوچک و فشرده می‌شود. ترجیحاً امضا روی زمینه سفید یا شفاف.';
     wrap.appendChild(tip);
     sigField.appendChild(wrap);
@@ -167,7 +167,7 @@ export function installProfileView({ windowRef = globalThis, documentRef = null 
     const name = (nameInp?.value || '').trim();
     const senderAbbr = (abbrInp?.value || '').trim();
     if(!senderAbbr){
-      if(abbrInp){ abbrInp.focus(); abbrInp.style.borderColor = 'var(--danger)'; }
+      if(abbrInp){ abbrInp.focus(); abbrInp.classList.add('is-invalid'); }
       toast('اختصار فرستنده را وارد کنید');
       return;
     }

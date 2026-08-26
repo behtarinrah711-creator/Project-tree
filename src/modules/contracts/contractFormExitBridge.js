@@ -2,14 +2,6 @@ import { createFormExitSession } from '../../core/formExitPolicy.js';
 
 let installed = false;
 
-function ensureEditDraftStyle(documentRef){
-  if(documentRef.getElementById('contract-edit-no-draft-style')) return;
-  const style = documentRef.createElement('style');
-  style.id = 'contract-edit-no-draft-style';
-  style.textContent = '#contractFormPage[data-contract-editing="true"] .if-draft{display:none!important;}';
-  documentRef.head?.appendChild(style);
-}
-
 function setEditMode(documentRef, editing){
   const page = documentRef.getElementById('contractFormPage');
   if(!page) return;
@@ -45,8 +37,6 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   installed = true;
 
   const documentRef = windowRef.document;
-  ensureEditDraftStyle(documentRef);
-
   const originalOpen = form.open.bind(form);
   const originalRequestClose = form.requestClose.bind(form);
   const originalClose = form.close.bind(form);

@@ -37,7 +37,7 @@ export function renderTaskActivities({document,item,projectId,container,onChange
     });
     if(!ids.length){
       const empty=document.createElement('div');
-      empty.style.cssText='font-size:12px;color:var(--text-dim);';
+      empty.className='detail-activity-empty';
       empty.textContent='برای این آیتم فعالیتی انتخاب نشده است.';
       list.appendChild(empty);
     }
@@ -104,4 +104,3 @@ export function renderTaskActivities({document,item,projectId,container,onChange
   container.appendChild(field);
   return field;
 }
-
