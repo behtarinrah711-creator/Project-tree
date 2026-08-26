@@ -1,3 +1,5 @@
+import { renderAll } from '../ui/workspacePresentationRuntime.js';
+import { closeDrawer, openProjectsPage, projectManagementView, refreshCurrentFooterPage, renderManagementPage, taskUI } from '../modules/runtime/featureComposition.js';
 const DATA_SCHEMA_VERSION = 8;
 let data = null;
 const foundation=window.KarhaApp.foundation;
@@ -272,3 +274,5 @@ function svgStar(filled){ return foundation.taskIcons.star(filled); }
 function svgChevron(){ return foundation.taskIcons.chevron(); }
 function svgTrash(){ return foundation.taskIcons.trash(); }
 function svgPlus(){ return foundation.taskIcons.plus(); }
+
+export { DATA_SCHEMA_VERSION, data, foundation, uid, rememberProjectTasks, getRecoveredLocalTasks, normalizeProjectScopedData, loadData, markDirty, persistStoreSnapshot, persist, getActiveTab, setActiveTab, getViewMode, setViewMode, showToast, findProject, findTask, findNestedItem, findSub, itemChildren, walkItems, toPersianDigits, toEnglishDigits, formatCost, formatCostDisplay, taskCostSum, projectCostSum, normalizeEmail, isFloatingConfirmUser, removeFromStarredOrder, toggleTaskDone, toggleSubDone, toggleTaskStar, toggleSubStar, deleteTask, deleteSub, addTaskToProject, addSubToTask, addProject, setWorkspaceRoute, replaceWorkspaceRoute, getProjectIdFromRoute, setActiveProject, projectsVisibleForAuth, renderDrawerProjectList, openGlobalTrashFromDrawer, deleteProject, firebaseRuntime, cloudRuntime, refreshAfterCloud, getCurrentUser, isCloudMode, cloudDeleteProject, cloudRenameProject, normalizeTaskRecord, taskCollection, purchaseCollection, estimateCollection, taskReportCollection, stopCloudTaskListener, startCloudTaskListener, hydrateProjectTasksFromCloud, writeTaskRecordsNormalized, cloudSyncTaskDomain, isPermissionError, isRetryableCloudError, cloudSyncCtx, flushProjectStatusQueue, scheduleProjectStatusRetry, cloudSyncProjectStatus, cloudSyncProjectFull, docToProject, findProjectRecordReferences, canDeleteProjectRecord, showRecordDeleteBlocked, isPendingDeleted, softDelete, softDeleteProjectRecord, finalizePendingDelete, undoPendingDelete, showUndoToast, hideUndoToast, onProjectSoftDeletedFinalize, getCurrentProjectScopeId, svgCheck, svgStar, svgChevron, svgTrash, svgPlus };

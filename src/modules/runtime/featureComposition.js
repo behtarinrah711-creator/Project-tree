@@ -1,3 +1,8 @@
+import { elementFromHtml as elFromHtml } from '../../core/htmlEscape.js';
+import { canDeleteProjectRecord, cloudRenameProject, cloudRuntime, cloudSyncProjectStatus, data, findNestedItem, findProject, findSub, findTask, formatCost, formatCostDisplay, getActiveTab, getCurrentProjectScopeId, hideUndoToast, isFloatingConfirmUser, isPendingDeleted, itemChildren, markDirty, normalizeProjectScopedData, openGlobalTrashFromDrawer, persist, projectCostSum, projectsVisibleForAuth, removeFromStarredOrder, setActiveTab, showRecordDeleteBlocked, showToast, softDelete, svgCheck, svgChevron, svgPlus, svgStar, svgTrash, taskCostSum, toggleSubDone, toggleSubStar, toggleTaskDone, toggleTaskStar, undoPendingDelete, walkItems } from '../../core/applicationFoundation.js';
+import { closeBottomPages, closeMenuRootPage, createWorkspaceSearch, ensureHomeSelection, enterWorkspaceSurface, leaveMenuRootForFooter, menuRootMode, pushMenuRootHistory, refreshStarredPartial, renderAccountingWorkspace, renderAll, renderReportsWorkspace, renderSettingsWorkspace, renderTabs, setBottomNavActive, showOnlyWorkspacePage, svgGrip, updateWorkspaceContextBar, workspaceSubpage, workspaceTextMatch } from '../../ui/workspacePresentationRuntime.js';
+import { pushWorkspaceHistory } from '../../core/childHistoryController.js';
+import { openCreatePage, openMiniPrompt, openNumpadGeneric } from '../../ui/workspaceFormPresentation.js';
 function getCurrentProject(){ const id=getCurrentProjectScopeId(); return id ? findProject(id) : null; }
 function getContacts(project=getCurrentProject()){
   if(!project) return [];
@@ -263,3 +268,5 @@ document.getElementById('closeProjectActivitiesPage').onclick = returnToSettings
 document.getElementById('closeContactsPage').onclick = ()=>{ window.KarhaApp?.modules?.get('people')?.resetContactFormShell?.(); returnToSettingsWorkspace(); };
 document.getElementById('contactAddBtn').onclick = ()=>window.KarhaApp?.modules?.get('people')?.openContactForm();
 document.getElementById('activityAddBtn').onclick = openActivityForm;
+
+export { getCurrentProject, getContacts, findContact, openContactsPage, renderContactsPage, getActivityTemplates, findActivityTemplate, openProjectActivitiesPage, renderProjectActivitiesPage, openActivityEditForm, openActivityForm, requestCloseActivityForm, permanentlyDeleteGlobalRecord, restoreGlobalRecord, projectTrashView, addTrashSourceBadge, appendTrashActions, collectProjectTrashedRecords, renderProjectTrashPage, openProjectTrashPage, refreshCurrentFooterPage, commitActiveContactDraft, navigateFooter, taskUI, openDrawer, closeDrawer, openConfirm, permanentlyDeleteProject, projectManagementView, renderManagementPage, openProjectsPage, openExportPage, returnToSettingsWorkspace };

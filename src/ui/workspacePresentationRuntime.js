@@ -1,3 +1,6 @@
+import { findProject, getActiveTab, getViewMode, persist, renderDrawerProjectList, replaceWorkspaceRoute, setActiveTab, setViewMode, showToast } from '../core/applicationFoundation.js';
+import { closeContractTemplatesPage, closeContractsPage, openContractForm, openContractTemplatesPage, requestCloseContractForm, requestCloseContractTemplateForm, shouldSuppressWorkspaceBack } from '../modules/contracts/contractCompatibility.js';
+import { openContactsPage, openProjectActivitiesPage, openProjectTrashPage } from '../modules/runtime/featureComposition.js';
 let lastCenteredTab = null;
 let workspaceSubpage = null;
 
@@ -219,3 +222,10 @@ function renderSettingsWorkspace(){
 
 
 /* ---------- قراردادها: قالب قرارداد + قرارداد واقعی + صورت وضعیت تستی ---------- */
+
+export { lastCenteredTab, workspaceSubpage, menuRootPage, menuRootMode, pushMenuRootHistory, closeMenuRootPage, renderTabs, svgGrip, enterWorkspaceSurface, enterProjectsSurface, renderAll, refreshStarredPartial, renderModeToggle, syncWorkspacePageTop, updateWorkspaceContextBar, setBottomNavActive, showOnlyWorkspacePage, closeBottomPages, handleWorkspaceContextBack, handleWorkspaceContextAction, ensureHomeSelection, leaveMenuRootForFooter, goHomeProjects, renderReportsWorkspace, renderAccountingWorkspace, applyRoutedSurface, createWorkspaceSearch, workspaceTextMatch, renderSettingsWorkspace };
+
+/** Narrow mutation API for runtime composition; state remains owned by Workspace presentation. */
+export function setWorkspaceSubpage(value){ workspaceSubpage=value; }
+export function clearWorkspaceSubpage(){ workspaceSubpage=null; }
+export function clearMenuRoot(){ menuRootMode=null; menuRootPage=null; }

@@ -1,3 +1,6 @@
+import './cacheGuard.js';
+import './shellEntry.js';
+
 /**
  * Keep this browser entry deliberately detached from the application graph.
  * A dynamic import lets us report failures that happen while that graph is

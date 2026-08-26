@@ -4,7 +4,8 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 
 async function harness(){
-  const source=await readFile(new URL('./childHistoryController.js',import.meta.url),'utf8');
+  const moduleSource=await readFile(new URL('./childHistoryController.js',import.meta.url),'utf8');
+  const source=moduleSource.replace(/^import .*;\n/gm,'').replace(/^export \{.*\};\n?/gm,'');
   const listeners={}; const entries=[{state:null,url:'#/projects/p/dashboard'}]; let cursor=0;
   const window={addEventListener(type,fn){listeners[type]=fn;}};
   const location={href:'#/projects/p/dashboard'};

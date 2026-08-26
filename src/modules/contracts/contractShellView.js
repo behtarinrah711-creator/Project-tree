@@ -1,3 +1,12 @@
+import { setInternalFormMode } from '../../ui/workspaceFormPresentation.js';
+import {
+  renderTabs,
+  setBottomNavActive,
+  setWorkspaceSubpage,
+  showOnlyWorkspacePage,
+  updateWorkspaceContextBar,
+} from '../../ui/workspacePresentationRuntime.js';
+
 /**
  * Contract page shell visibility — list + templates + form shell.
  * Does NOT own requestCloseContractForm / Back / Stay / popstate.
@@ -63,30 +72,27 @@ export function installContractShellView({ windowRef = globalThis, documentRef =
   }
 
   function openRealContractFormShell(projectId){
-    // Prefer explicit projectId from realContractFormModule.open. Requiring
-    // getCurrentProject() identity match caused silent false when the project
-    // existed in data/findProject but activeTab/scope lagged after seed + UI nav.
-    const p = (projectId && call(windowRef, 'findProject', projectId))
-      || call(windowRef, 'getCurrentProject');
-    if(!p) return false;
+    // realContractFormModule already validates the project. The shell owns only
+    // the workspace transition, and C4 delivers these dependencies explicitly.
+    if(!projectId && !call(windowRef, 'getCurrentProject')) return false;
     call(windowRef, 'closeDrawer');
-    try{ windowRef.workspaceSubpage = 'contractForm'; }catch(e){}
-    call(windowRef, 'setInternalFormMode', true);
-    call(windowRef, 'showOnlyWorkspacePage', 'contractFormPage');
-    call(windowRef, 'setBottomNavActive', 'Reports');
-    call(windowRef, 'renderTabs');
-    call(windowRef, 'updateWorkspaceContextBar');
-    return true;
+    setWorkspaceSubpage('contractForm');
+    setInternalFormMode(true);
+    showOnlyWorkspacePage('contractFormPage');
+    setBottomNavActive('Reports');
+    renderTabs();
+    updateWorkspaceContextBar();
+    return !documentRef?.getElementById?.('contractFormPage')?.classList.contains('hidden');
   }
 
   function closeRealContractFormShell(){
-    call(windowRef, 'setInternalFormMode', false);
+    setInternalFormMode(false);
     documentRef?.getElementById?.('contractFormPage')?.classList.add('hidden');
-    try{ windowRef.workspaceSubpage = 'contracts'; }catch(e){}
-    call(windowRef, 'showOnlyWorkspacePage', 'contractsPage');
-    call(windowRef, 'setBottomNavActive', 'Reports');
-    call(windowRef, 'renderTabs');
-    call(windowRef, 'updateWorkspaceContextBar');
+    setWorkspaceSubpage('contracts');
+    showOnlyWorkspacePage('contractsPage');
+    setBottomNavActive('Reports');
+    renderTabs();
+    updateWorkspaceContextBar();
     call(windowRef, 'renderContractsPage');
   }
 

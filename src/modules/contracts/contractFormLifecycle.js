@@ -1,3 +1,7 @@
+import { closeDrawer, getCurrentProject } from '../runtime/featureComposition.js';
+import { renderTabs, setBottomNavActive, showOnlyWorkspacePage, updateWorkspaceContextBar, workspaceSubpage } from '../../ui/workspacePresentationRuntime.js';
+import { setInternalFormMode, showIncompleteFormExitChoice } from '../../ui/workspaceFormPresentation.js';
+import { saveContractTemplateClean } from './contractCompatibility.js';
 /* Contract form shell/session lifecycle. Business mutations remain in form modules. */
 (function installContractFormLifecycle(){
   let templateDirty=false;
@@ -39,3 +43,5 @@
     isTemplateDirty(){return templateDirty;}
   });
 })();
+
+export {  };

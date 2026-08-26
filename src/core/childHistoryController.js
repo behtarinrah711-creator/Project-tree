@@ -1,3 +1,6 @@
+import { goHomeProjects, renderSettingsWorkspace, renderTabs, setBottomNavActive, showOnlyWorkspacePage, updateWorkspaceContextBar, workspaceSubpage } from '../ui/workspacePresentationRuntime.js';
+import { closeContractTemplatesPage, closeContractsPage } from '../modules/contracts/contractCompatibility.js';
+import { requestCloseActivityForm } from '../modules/runtime/featureComposition.js';
 /* Same-route child history. Route history remains owned by core/router.js. */
 (function installChildHistoryController(){
   const registrations = new Map();
@@ -88,7 +91,9 @@
     }
   }
 
-  window.addEventListener('popstate',onPopState);
+  if(typeof window.addEventListener === 'function'){
+    window.addEventListener('popstate',onPopState);
+  }
   window.KarhaChildHistory=Object.freeze({register,open,consume,replace,isOpen,top,
     afterNextPop(callback){if(typeof callback==='function')afterPopQueue.push(callback);},
     getDepth:()=>layers.length});
@@ -96,3 +101,5 @@
 
 /* Transitional classic-call facade: ownership still remains in this controller. */
 function pushWorkspaceHistory(kind){ return window.KarhaChildHistory?.open(kind); }
+
+export { pushWorkspaceHistory };

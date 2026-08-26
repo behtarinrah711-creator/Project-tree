@@ -1,3 +1,5 @@
+import { getCurrentProject } from '../runtime/featureComposition.js';
+import { markDirty, persist } from '../../core/applicationFoundation.js';
 /* Search Template presentation/state; child stack belongs to KarhaChildHistory. */
 let searchTemplateState = null;
 
@@ -301,3 +303,5 @@ window.KarhaChildHistory?.register('search-template',{
   onRestore:()=>{ if(searchTemplateState) document.getElementById('searchTemplatePage')?.classList.remove('hidden'); }
 });
 window.KarhaSearchTemplate={open:openSearchTemplate,close:closeSearchTemplate,back:handleSearchTemplateBack,isOpen:isSearchTemplateOpen,isSearchMode:isSearchTemplateSearchMode,enterSearch:enterSearchTemplateSearchMode,exitSearch:exitSearchTemplateSearchMode,render:renderSearchTemplateBody};
+
+export { searchTemplateState, suppressWorkspaceBackOnce, markSuppressWorkspaceBack, shouldSuppressWorkspaceBack, stplGetInitials, stplAvatarClass, stplFirstLetter, stplStarSvg, getSearchTemplateStarMap, isSearchTemplateStarred, setSearchTemplateStarred, isSearchTemplateOpen, isSearchTemplateSearchMode, exitSearchTemplateSearchMode, enterSearchTemplateSearchMode, closeSearchTemplate, handleSearchTemplateBack, openSearchTemplate, renderSearchTemplateBody, makeSearchTemplateRow, initSearchTemplateUI };

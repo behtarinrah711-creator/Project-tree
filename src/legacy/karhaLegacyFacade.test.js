@@ -9,10 +9,11 @@ const removed = [
   'suppressWorkspaceBack', 'findProjectRecordReferences',
   'renderAccountingWorkspace', 'openActivityForm', 'openActivityEditForm',
   'requestCloseActivityForm', 'activityFormRuntime', 'contactFormRuntime',
+  'requestAnimationFrame',
 ];
 
-test('C3 facade surface is explicit, minimal, and excludes obsolete delegates', () => {
-  assert.equal(KARHA_LEGACY_SURFACE.length, 43);
+test('C4 facade surface is explicit, reduced, and excludes obsolete delegates', () => {
+  assert.equal(KARHA_LEGACY_SURFACE.length, 42);
   assert.equal(new Set(KARHA_LEGACY_SURFACE).size, KARHA_LEGACY_SURFACE.length);
   removed.forEach(name => assert.ok(!KARHA_LEGACY_SURFACE.includes(name), name));
 });

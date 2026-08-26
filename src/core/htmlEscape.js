@@ -11,6 +11,12 @@ export function escapeHtml(str){
     .replace(/"/g, '&quot;');
 }
 
+export function elementFromHtml(html, { documentRef = document } = {}){
+  const template=documentRef.createElement('template');
+  template.innerHTML=String(html ?? '').trim();
+  return template.content.firstElementChild;
+}
+
 export function installHtmlEscape({ windowRef = globalThis } = {}){
   if(windowRef.KarhaHtmlEscape?.escapeHtml) return windowRef.KarhaHtmlEscape;
   const api = Object.freeze({ escapeHtml });
@@ -18,4 +24,4 @@ export function installHtmlEscape({ windowRef = globalThis } = {}){
   return api;
 }
 
-export default { escapeHtml, installHtmlEscape };
+export default { escapeHtml, elementFromHtml, installHtmlEscape };
