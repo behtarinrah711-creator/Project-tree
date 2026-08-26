@@ -91,7 +91,9 @@ import { requestCloseActivityForm } from '../modules/runtime/featureComposition.
     }
   }
 
-  window.addEventListener('popstate',onPopState);
+  if(typeof window.addEventListener === 'function'){
+    window.addEventListener('popstate',onPopState);
+  }
   window.KarhaChildHistory=Object.freeze({register,open,consume,replace,isOpen,top,
     afterNextPop(callback){if(typeof callback==='function')afterPopQueue.push(callback);},
     getDepth:()=>layers.length});
