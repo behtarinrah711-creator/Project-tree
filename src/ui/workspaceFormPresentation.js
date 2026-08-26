@@ -13,7 +13,6 @@ function updateCreateProjectPageUI(){
   if(input) input.placeholder = 'مثلاً «پروژه زیتون»';
   if(confirmBtn){
     confirmBtn.disabled = false;
-    confirmBtn.style.opacity = '1';
   }
 }
 

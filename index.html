@@ -57,7 +57,7 @@
 
 
 <!-- VERSION 246 — آیتم پروژه: ارتفاع خودکار و بدون نمایش تکراری متن -->
-<link rel="stylesheet" href="src/styles/legacy.css">
+<link rel="stylesheet" href="src/styles/index.css">
 </head>
 <body>
 
@@ -71,7 +71,7 @@
   </div>
   <div class="account-trigger" id="avatarBtn" title="حساب کاربری">
     <div class="avatar-circle">
-      <img id="avatarImg" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover;">
+      <img id="avatarImg" class="avatar-image hidden" alt="">
       <svg id="avatarDefaultIcon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zM4 20.5c0-3.6 3.6-6.5 8-6.5s8 2.9 8 6.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -116,7 +116,7 @@
       <button class="close-btn" id="deleteSheetBtn" title="حذف">
         <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.6c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7V4M6.6 7v5M9.4 7v5M3.7 4l.6 9.2c0 .6.5 1 1.1 1h5.2c.6 0 1.1-.4 1.1-1L12.3 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <span style="font-size:13px;color:#5f6368;">جزئیات</span>
+      <span class="sheet-caption">جزئیات</span>
       <button class="close-btn" id="closeSheetBtn">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
@@ -128,8 +128,8 @@
 <div class="overlay hidden" id="trashOverlay">
   <div class="sheet">
     <div class="sheet-head">
-      <span style="width:34px;"></span>
-      <span style="font-size:13px;color:#5f6368;">حذف شده ها</span>
+      <span class="sheet-head-spacer"></span>
+      <span class="sheet-caption">حذف شده ها</span>
       <button class="close-btn" id="closeTrashBtn">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
@@ -145,7 +145,7 @@
   <div class="drawer">
     <div class="drawer-account">
       <div class="avatar-circle big" id="drawerAvatarWrap">
-        <img id="drawerAvatarImg" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover;">
+        <img id="drawerAvatarImg" class="avatar-image hidden" alt="">
         <svg id="drawerAvatarDefaultIcon" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zM4 20.5c0-3.6 3.6-6.5 8-6.5s8 2.9 8 6.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="drawer-account-info">
@@ -190,7 +190,7 @@
 <div class="mini-overlay hidden" id="numpadOverlay">
   <div class="numpad-dialog">
     <div class="numpad-display empty" id="numpadDisplay">وارد کنید…</div>
-    <div class="numpad-grid" style="direction:ltr">
+    <div class="numpad-grid">
       <button type="button" class="numpad-key" data-d="7">۷</button>
       <button type="button" class="numpad-key" data-d="8">۸</button>
       <button type="button" class="numpad-key" data-d="9">۹</button>
@@ -230,7 +230,7 @@
   <div class="page-head management-page-head">
     <button class="icon-btn" id="closeProjectsPage"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2>مدیریت پروژه‌ها</h2>
-    <span style="width:38px;"></span>
+    <span class="page-head-spacer"></span>
   </div>
   <div class="page-body" id="projectsPageBody"></div>
 </div>
@@ -356,7 +356,7 @@
   <div class="page-head">
     <button class="icon-btn" id="closeAccountingPage"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2>حسابداری</h2>
-    <span style="width:38px;"></span>
+    <span class="page-head-spacer"></span>
   </div>
   <div class="page-body" id="accountingPageBody"></div>
 </div>
@@ -367,7 +367,7 @@
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <h2 id="createPageTitle">ساخت پروژه جدید</h2>
-    <span style="width:38px;"></span>
+    <span class="page-head-spacer"></span>
   </div>
   <div class="page-body create-page-body" id="createPageBody">
     <div class="create-page-form">
@@ -385,7 +385,7 @@
   <div class="page-head">
     <button class="icon-btn" id="closeExportPage"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="exportPageTitle">خروجی PDF</h2>
-    <span style="width:38px;"></span>
+    <span class="page-head-spacer"></span>
   </div>
   <div class="export-toolbar" id="exportToolbar"></div>
   <div class="export-options" id="exportOptions">
@@ -405,7 +405,7 @@
   <div class="page-head">
     <button class="icon-btn" id="closeStatusExportPage" type="button"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="statusExportTitle">خروجی صورت وضعیت</h2>
-    <span style="width:38px;"></span>
+    <span class="page-head-spacer"></span>
   </div>
   <div class="export-toolbar" id="statusExportToolbar"></div>
   <div class="page-body" id="statusExportBody"></div>

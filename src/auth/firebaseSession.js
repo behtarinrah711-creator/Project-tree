@@ -6,10 +6,10 @@ export function renderAccountSession(documentRef,user){
   if(!name||!sub||!button||!headerImg||!headerIcon||!drawerImg||!drawerIcon) return;
   if(user){
     name.textContent=user.displayName||'کاربر گوگل';sub.textContent=user.email||'';button.textContent='خروج از حساب';
-    if(user.photoURL){headerImg.src=user.photoURL;headerImg.style.display='block';headerIcon.style.display='none';drawerImg.src=user.photoURL;drawerImg.style.display='block';drawerIcon.style.display='none';}
+    if(user.photoURL){headerImg.src=user.photoURL;headerImg.classList.remove('hidden');headerIcon.classList.add('hidden');drawerImg.src=user.photoURL;drawerImg.classList.remove('hidden');drawerIcon.classList.add('hidden');}
   }else{
     name.textContent='مهمان';sub.textContent='وارد نشده‌اید';button.textContent='ورود با گوگل';
-    headerImg.style.display='none';headerIcon.style.display='flex';drawerImg.style.display='none';drawerIcon.style.display='flex';
+    headerImg.classList.add('hidden');headerIcon.classList.remove('hidden');drawerImg.classList.add('hidden');drawerIcon.classList.remove('hidden');
   }
 }
 

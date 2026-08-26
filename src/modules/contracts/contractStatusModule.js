@@ -89,7 +89,7 @@ export const contractStatusModule={
     if(!reports.length){const e=document.createElement('div');e.className='contract-empty';e.textContent='هنوز صورت وضعیتی برای این قرارداد ثبت نشده است.';list.appendChild(e);}
     reports.forEach((r,i)=>{
       const row=document.createElement('div');row.className='contract-status-row';
-      row.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px"><b>صورت وضعیت '+persian(i+1)+'</b><span class="contract-status-badge">در انتظار تایید حسابداری</span></div>'+
+      row.innerHTML='<div class="contract-status-row-head"><b>صورت وضعیت '+persian(i+1)+'</b><span class="contract-status-badge">در انتظار تایید حسابداری</span></div>'+
         '<div class="contract-status-meta">'+esc(r.date)+' · '+esc(persian(r.percent))+'٪ · مبلغ این مرحله '+esc(money(r.stageAmount||0))+'</div>'+
         (r.note?'<div class="contract-status-meta">'+esc(r.note)+'</div>':'');
       list.appendChild(row);

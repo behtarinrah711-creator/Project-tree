@@ -1,0 +1,27 @@
+/* C5 deterministic presentation manifest. Import order preserves the pre-C5 cascade. */
+@import url("./tokens.css");
+@import url("./base.css");
+@import url("./utilities.css");
+@import url("./workspace/chrome.css");
+@import url("./features/tasks.css");
+@import url("./components/dialogs.css");
+@import url("./widgets/numpad.css");
+@import url("./features/task-details.css");
+@import url("./workspace/drawer.css");
+@import url("./components/feedback.css");
+@import url("./workspace/workspace.css");
+@import url("./features/contacts.css");
+@import url("./features/accounting-settings.css");
+@import url("./components/forms.css");
+@import url("./features/contracts-layout.css");
+@import url("./features/project-management.css");
+@import url("./components/export.css");
+@import url("./features/contact-exit.css");
+@import url("./features/contracts.css");
+@import url("./features/contact-custom-select.css");
+@import url("./widgets/search-template.css");
+@import url("./features/contract-search-trigger.css");
+@import url("./workspace/back-navigation.css");
+@import url("./components/form-template.css");
+@import url("./features/contact-form-template.css");
+@import url("./workspace/navigation.css");

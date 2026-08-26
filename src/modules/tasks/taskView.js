@@ -686,8 +686,8 @@ function renderSheet(){
     const record=entry.record;
     const wrap=document.createElement('div'); wrap.className='trash-task-wrap project-trash-record'; addTrashSourceBadge(wrap,entry.type);
     const row=document.createElement('div'); row.className='row'+(record.done?' completed':'')+(entry.type==='subtask'?' sub':'');
-    row.style.setProperty('--item-depth',entry.type==='subtask'?'1':'0'); row.style.cursor='default';
-    const grip=document.createElement('span'); grip.className='drag-grip'+(entry.type==='subtask'?' sub-grip':''); grip.innerHTML=svgGrip(); grip.style.cursor='default'; row.appendChild(grip);
+    row.style.setProperty('--item-depth',entry.type==='subtask'?'1':'0'); row.classList.add('is-static-drag-row');
+    const grip=document.createElement('span'); grip.className='drag-grip'+(entry.type==='subtask'?' sub-grip':''); grip.innerHTML=svgGrip(); row.appendChild(grip);
     row.appendChild(buildCircle(!!record.done,()=>{},entry.type==='subtask'));
     const body=document.createElement('div'); body.className='row-body'; const title=document.createElement('div'); title.className='row-title'; title.textContent=record.text||'مورد بدون عنوان'; body.appendChild(title); row.appendChild(body);
     const actions=document.createElement('div'); actions.className='project-trash-inline-actions'; appendTrashActions(actions,entry); row.appendChild(actions);

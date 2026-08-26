@@ -94,8 +94,7 @@ function renderCtfGroup(item,index){
   if(dragHandlesVisible){
     grip.onpointerdown=e=>{e.preventDefault();e.stopPropagation();ctfStartDrag(state.items,item.id,group,'band');};
   }else{
-    grip.style.visibility='hidden';
-    grip.style.pointerEvents='none';
+    grip.classList.add('is-inert-handle');
     grip.setAttribute('aria-hidden','true');
   }
   band.appendChild(grip);
@@ -112,8 +111,7 @@ function renderCtfGroup(item,index){
     if(dragHandlesVisible){
       grip2.onpointerdown=e=>{e.preventDefault();e.stopPropagation();ctfStartDrag(children,child.id,row,'material',item.id);};
     }else{
-      grip2.style.visibility='hidden';
-      grip2.style.pointerEvents='none';
+      grip2.classList.add('is-inert-handle');
       grip2.setAttribute('aria-hidden','true');
     }
     row.appendChild(grip2);
