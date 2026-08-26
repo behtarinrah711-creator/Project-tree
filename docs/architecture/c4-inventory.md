@@ -49,3 +49,5 @@ The restored owner graph contains cyclic strongly-connected presentation depende
 ## CI validation
 
 PR #87 was explicitly retriggered after the validated real-contract-shell hotfix so GitHub Actions can exercise the current C4 head in Chromium.
+
+CI web retrigger
