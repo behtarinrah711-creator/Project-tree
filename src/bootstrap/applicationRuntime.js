@@ -3,7 +3,7 @@ import { canDeleteProjectRecord, data, findProject, formatCost, getActiveTab, ge
 import { openContractForm, openContractTemplateForm, renumberContractItems, requestCloseContractTemplateForm } from '../modules/contracts/contractCompatibility.js';
 import { openNumpadGeneric, setInternalFormMode, showIncompleteFormExitChoice } from '../ui/workspaceFormPresentation.js';
 import { applyRoutedSurface, goHomeProjects, handleWorkspaceContextAction, handleWorkspaceContextBack, clearMenuRoot, clearWorkspaceSubpage, menuRootMode, menuRootPage, renderAll, renderSettingsWorkspace, renderTabs, setBottomNavActive, showOnlyWorkspacePage, svgGrip, updateWorkspaceContextBar, workspaceSubpage, setWorkspaceSubpage } from '../ui/workspacePresentationRuntime.js';
-import { findActivityTemplate, getActivityTemplates, getContacts, getCurrentProject, navigateFooter, openConfirm, renderProjectActivitiesPage } from '../modules/runtime/featureComposition.js';
+import { findActivityTemplate, getActivityTemplates, getContacts, getCurrentProject, navigateFooter, openConfirm, renderProjectActivitiesPage, taskUI } from '../modules/runtime/featureComposition.js';
 import { pushWorkspaceHistory } from '../core/childHistoryController.js';
 import { closeSearchTemplate } from '../modules/contracts/searchTemplateModule.js';
 
@@ -76,8 +76,8 @@ window.KarhaInstallLegacyFacade({
   openConfirm,
   showToast,
   svgChevron,
-  renderInlineAddRow: (...args) => window.KarhaApp.taskRuntime.view.renderInlineAddRow(...args),
-  renderTaskBlock: (...args) => window.KarhaApp.taskRuntime.view.renderTaskBlock(...args),
+  renderInlineAddRow: (...args) => taskUI.renderInlineAddRow(...args),
+  renderTaskBlock: (...args) => taskUI.renderTaskBlock(...args),
   applyRoutedSurface,
   getWorkspaceChromeState(){
     const project=getCurrentProject();
