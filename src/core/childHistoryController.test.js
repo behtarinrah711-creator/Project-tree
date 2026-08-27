@@ -23,9 +23,11 @@ async function harness(){
     go(delta){history.go(delta);},
     register(owner,fn){if(owner==='child')listeners.popstate=event=>fn(event.state,event);},
   };
-  const context={window,history,location};vm.createContext(context);vm.runInContext(source,context);
+  const context={window,history,location,queueMicrotask,Promise};vm.createContext(context);vm.runInContext(source,context);
   return {api:window.KarhaChildHistory,history,entries,get cursor(){return cursor;}};
 }
+
+const settle=()=>new Promise(resolve=>queueMicrotask(resolve));
 
 test('registration, top-only Back, deduplication and unregister',async()=>{
   const h=await harness(); const events=[];
@@ -60,8 +62,10 @@ test('transient modal Back dismisses only the modal and returns to the restored 
   assert.equal(h.api.top().key,'form');
 
   // First Back consumes the dirty form entry. The transient controller restores
-  // it and then adds one same-route modal entry on top.
+  // it and then adds one same-route modal entry on top. Restoration is scheduled
+  // outside the active pop dispatch, matching real browser traversal semantics.
   h.history.back();
+  await settle();
   assert.equal(prompts,1);
   assert.equal(h.api.isOpen('form'),true);
   assert.equal(h.api.isTransientOpen('unsaved-form'),true);
@@ -76,6 +80,7 @@ test('transient modal Back dismisses only the modal and returns to the restored 
 
   // A later Back reaches the form policy again, as expected for still-dirty data.
   h.history.back();
+  await settle();
   assert.equal(prompts,2);
   assert.equal(h.api.isTransientOpen('unsaved-form'),true);
 });
