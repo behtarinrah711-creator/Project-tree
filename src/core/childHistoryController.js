@@ -105,9 +105,9 @@
 
     // A dirty-form Back has already consumed the form entry before its policy
     // can show a confirmation. Re-enter that consumed child synchronously with
-    // a fresh same-route pushState, then place the transient modal above it.
-    // This deliberately avoids history.go(1): physical/mobile Back handling can
-    // terminate the browser activity while a Forward traversal is still pending.
+    // a fresh same-route entry, then place the transient modal above it.
+    // This deliberately avoids asynchronous Forward traversal: physical/mobile
+    // Back handling can terminate the browser activity while it is still pending.
     const transition=activeTransition;
     if(transition?.consumed && typeof transition.restore==='function'){
       transition.restore();
