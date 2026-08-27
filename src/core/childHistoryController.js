@@ -24,6 +24,11 @@
   function top(){ return layers[layers.length-1] || null; }
   function isOpen(key){ return layers.some(layer=>layer.key===String(key)); }
   function transientKey(key){ return `transient:${String(key)}`; }
+  function deferTraversal(callback){
+    if(typeof callback!=='function') return;
+    if(typeof queueMicrotask==='function') queueMicrotask(callback);
+    else Promise.resolve().then(callback);
+  }
 
   function register(key, handlers={}){
     key=String(key);
@@ -152,7 +157,11 @@
           consumed:true,
           layer:{...layer},
           target:target ? {...target} : null,
-          restore(){window.KarhaBrowserHistory?.go(1);},
+          restore(){
+            const restore=()=>window.KarhaBrowserHistory?.go(1);
+            if(handlingPop) deferTraversal(restore);
+            else restore();
+          },
         });
         const previousTransition=activeTransition;
         activeTransition=transition;
