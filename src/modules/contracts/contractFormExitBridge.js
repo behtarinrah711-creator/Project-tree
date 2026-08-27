@@ -22,9 +22,16 @@ function patchEditPrompt({windowRef, form}){
   if(text) text.textContent = 'آیا تغییرات این فرم ذخیره شود؟';
   if(yes){
     yes.onclick = () => {
-      overlay.remove();
-      // Editing never creates a draft. Save back to the same contract id.
-      form.save(null, false);
+      const save = () => {
+        // Editing never creates a draft. Save back to the same contract id.
+        form.save(null, false);
+      };
+      if(typeof overlay.__karhaDismissWithAction === 'function'){
+        overlay.__karhaDismissWithAction(save);
+      }else{
+        overlay.remove();
+        save();
+      }
     };
   }
   return true;
