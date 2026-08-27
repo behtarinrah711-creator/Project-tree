@@ -676,14 +676,14 @@ export const realContractFormModule = {
     return true;
   },
 
-  requestClose(fromPopState = false) {
+  requestClose(fromPopState = false, transition = null) {
     // The browser already consumed the form entry before dispatching popstate.
     const formHistoryOwned = window.KarhaContractHistory?.formOwned?.() ?? false;
     if (!dirty) return this.close(fromPopState);
 
     const restoreHistory = () => {
       if (!fromPopState || formHistoryOwned) return;
-      window.KarhaContractHistory?.enterForm();
+      window.KarhaContractHistory?.restoreConsumedForm?.(transition);
     };
 
     const showExitChoice = (opts) => {
@@ -699,14 +699,11 @@ export const realContractFormModule = {
       onYes: () => {
         try { localStorageAdapter.setItem(REAL_CONTRACT_DRAFT_KEY, JSON.stringify(state)); } catch {}
         dirty = false;
-        // Consume the restored form-owned entry when the decision closes the form.
-        this.close(false);
+        this.close(fromPopState);
       },
-      onNo: () => this.close(false),
+      onNo: () => this.close(fromPopState),
       onStay: restoreHistory
     });
-    // Back consumed the form entry. Restore one so Stay keeps a single form entry.
-    restoreHistory();
     return false;
   },
 

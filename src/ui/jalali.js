@@ -60,16 +60,6 @@ export function formatJalaliDisplay(str){
 const jalaliPick = { y:1400, m:1, d:1, onPick:null, maxDate:null };
 let installed = false;
 
-function suppressBack(windowRef){
-  try{
-    if(typeof windowRef.KarhaBackGestureGuard?.suppress === 'function'){
-      windowRef.KarhaBackGestureGuard.suppress();
-    } else {
-      windowRef.__karhaSuppressWorkspaceBackOnce = true;
-    }
-  }catch(e){}
-}
-
 export function openJalaliPicker(current, onPick, opts={}, { documentRef = document, windowRef = window } = {}){
   jalaliPick.onPick = onPick;
   jalaliPick.maxDate = opts.maxToday ? todayJalaliStr() : null;

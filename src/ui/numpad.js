@@ -6,16 +6,6 @@ let numpadOnDone = null;
 let numpadOpts = { suffix: ' تومان', maxLen: 13, group: true };
 let installed = false;
 
-function suppressBack(windowRef){
-  try{
-    if(typeof windowRef.KarhaBackGestureGuard?.suppress === 'function'){
-      windowRef.KarhaBackGestureGuard.suppress();
-    } else {
-      windowRef.__karhaSuppressWorkspaceBackOnce = true;
-    }
-  }catch(e){}
-}
-
 export function openNumpadGeneric(initial, onDone, opts, { documentRef = document, windowRef = window } = {}){
   numpadOnDone = onDone;
   numpadOpts = Object.assign({ suffix: ' تومان', prefix: '', maxLen: 16, group: true }, opts || {});

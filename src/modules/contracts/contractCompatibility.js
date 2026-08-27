@@ -31,6 +31,3 @@ function closeRealContractFormShell(){return window.KarhaContractShell?.closeRea
 function openContractForm(id=null){const project=getCurrentProject();return project?window.KarhaRealContractForm?.open?.(id,project.id)||false:false;}
 function closeContractForm(fromPopState=false){return window.KarhaRealContractForm?.close?.(fromPopState)||false;}
 function requestCloseContractForm(fromPopState=false){return window.KarhaRealContractForm?.requestClose?.(fromPopState)||false;}
-function markSuppressWorkspaceBack(){return window.KarhaBackGestureGuard?.suppress?.();}
-function shouldSuppressWorkspaceBack(){return window.KarhaBackGestureGuard?.isSuppressed?.()||false;}
-window.KarhaSearchTemplateHooks=Object.assign({},window.KarhaSearchTemplateHooks||{},{suppressBack:markSuppressWorkspaceBack});

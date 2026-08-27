@@ -32,7 +32,8 @@
     leaveForm(fromPopState=false){return history?.consume('contract-form',{fromPopState});},
     restoreConsumedForm(transition){
       if(!isConsumedFormTransition(transition)) return false;
-      return history?.open('contract-form') || false;
+      transition.restore?.();
+      return true;
     },
     enterTemplate(){return history?.open('contract-template-form');},
     leaveTemplate(fromPopState=false){return history?.consume('contract-template-form',{fromPopState});},

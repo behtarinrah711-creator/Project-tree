@@ -17,7 +17,7 @@ async function productionJavaScriptFiles(directory=srcRoot){
   return files.flat();
 }
 
-test('only Router and childHistoryController install production popstate listeners',async()=>{
+test('only the canonical browser-history boundary installs a production popstate listener',async()=>{
   const files=await productionJavaScriptFiles();
   const output=[];
   for(const file of files){
@@ -27,7 +27,7 @@ test('only Router and childHistoryController install production popstate listene
     }
   }
   output.sort();
-  assert.deepEqual(output,['src/core/childHistoryController.js','src/core/router.js']);
+  assert.deepEqual(output,['src/core/browserHistory.js']);
 });
 
 test('presentation and Contract compatibility contain no browser-history implementation',async()=>{

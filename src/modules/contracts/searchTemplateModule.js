@@ -1,38 +1,6 @@
 /* Search Template presentation/state; child stack belongs to KarhaChildHistory. */
 let searchTemplateState = null;
 
-/** وقتی فقط تمپلیت جستجو / نامبرپد / تقویم بسته می‌شود، بک فرم قرارداد / ورک‌اسپیس یک‌بار نادیده گرفته شود.
- *  One-shot: valid only for the current popstate dispatch (cleared end-of-task).
- *  Must NOT be time-window based — that blocked empty-form Back after Stay/exit. */
-let suppressWorkspaceBackOnce = false;
-function markSuppressWorkspaceBack(){
-  suppressWorkspaceBackOnce = true;
-  try{ window.__karhaSuppressWorkspaceBackOnce = true; }catch(e){}
-}
-function shouldSuppressWorkspaceBack(){
-  if(typeof window!=='undefined' && window.__karhaSuppressWorkspaceBackOnce){
-    window.__karhaSuppressWorkspaceBackOnce=false;
-    suppressWorkspaceBackOnce=true;
-  }
-  if(typeof isSearchTemplateOpen==='function' && isSearchTemplateOpen()) return true;
-  if(typeof window!=='undefined' && window.KarhaSearchTemplate?.isOpen?.()) return true;
-  const numpad=document.getElementById('numpadOverlay');
-  if(numpad && !numpad.classList.contains('hidden')) return true;
-  const jalali=document.getElementById('jalaliPop');
-  if(jalali && !jalali.classList.contains('hidden')) return true;
-  if(suppressWorkspaceBackOnce){
-    // Clear after this turn so a later user Back is never swallowed.
-    suppressWorkspaceBackOnce=false;
-    try{ window.__karhaSuppressWorkspaceBackOnce=false; }catch(e){}
-    return true;
-  }
-  return false;
-}
-
-window.KarhaSearchTemplateHooks = Object.assign({}, window.KarhaSearchTemplateHooks || {}, {
-  suppressBack(){ markSuppressWorkspaceBack(); }
-});
-
 function stplGetInitials(name){
   const t=String(name||'').trim();
   if(!t) return '؟';

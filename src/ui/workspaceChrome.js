@@ -32,7 +32,6 @@ export function installWorkspaceChrome({
   documentRef = windowRef?.document || globalThis.document,
   getPresentationState = () => ({}),
   navigateFooter = () => {},
-  pushWorkspaceHistory = () => {},
   goHomeProjects = () => {},
   renderDrawerProjectList = () => {},
   clearWorkspaceSubpage = () => {},
@@ -180,17 +179,16 @@ export function installWorkspaceChrome({
   function enterWorkspaceSurface(){ get('content')?.replaceChildren?.(); }
   function enterProjectsSurface(){ clearMenuRoot(); closeBottomPages(); renderProjectsSurface(); }
 
-  Object.entries(FOOTER_MODULES).forEach(([id, [moduleId, historyState]]) => {
+  Object.entries(FOOTER_MODULES).forEach(([id, [moduleId]]) => {
     const button = get(id);
     if(!button) return;
     button.onclick = () => {
       navigateFooter(moduleId);
-      if(historyState) pushWorkspaceHistory(historyState);
     };
   });
   ['closeReportsPage','closeAccountingPage','closeSettingsPage'].forEach(id => {
     const button = get(id);
-    if(button) button.onclick = goHomeProjects;
+    if(button) button.onclick = () => windowRef.KarhaBrowserHistory?.back();
   });
   windowRef.addEventListener?.('karha:drawer-open', openDrawer);
   windowRef.addEventListener?.('resize', syncWorkspacePageTop);
