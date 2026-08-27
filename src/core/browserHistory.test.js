@@ -4,8 +4,13 @@ import {createHistoryState,installBrowserHistory,isApplicationHistoryState} from
 
 function harness(hash='#/projects/A/dashboard'){
   const listeners=new Map();
+  const navigationListeners=new Map();
   const stack=[{state:null,url:hash}]; let cursor=0;
-  const windowRef={location:{hash,href:hash},addEventListener(type,fn){listeners.set(type,fn);}};
+  const windowRef={
+    location:{hash,href:hash},
+    addEventListener(type,fn){listeners.set(type,fn);},
+    navigation:{addEventListener(type,fn){navigationListeners.set(type,fn);}}
+  };
   const setUrl=url=>{windowRef.location.hash=url;windowRef.location.href=url;};
   windowRef.history={
     get state(){return stack[cursor].state;},
@@ -14,7 +19,7 @@ function harness(hash='#/projects/A/dashboard'){
     go(delta){cursor+=delta;setUrl(stack[cursor].url);listeners.get('popstate')?.({state:stack[cursor].state});},
     back(){this.go(-1);},
   };
-  return {windowRef,stack,get cursor(){return cursor;}};
+  return {windowRef,stack,navigationListeners,get cursor(){return cursor;}};
 }
 
 test('schema is versioned, minimal, serializable and initializes the first entry',()=>{
@@ -40,4 +45,22 @@ test('foreign history state is not consumed by application restorers',()=>{
   const state=createHistoryState({locationRef:{hash:''}});
   assert.equal(isApplicationHistoryState(state),true);
   assert.equal(isApplicationHistoryState({app:'another'}),false);
+});
+
+test('Navigation API serializes a rapid traverse burst until popstate reconciliation',()=>{
+  const h=harness();installBrowserHistory({windowRef:h.windowRef});
+  const navigate=h.navigationListeners.get('navigate');
+  let prevented=0;
+  const traversal=()=>navigate({navigationType:'traverse',cancelable:true,preventDefault(){prevented++;}});
+
+  traversal();
+  traversal();
+  traversal();
+  assert.equal(prevented,2,'only the first outstanding traversal is admitted');
+
+  // A committed traversal releases the transaction for a later intentional Back.
+  h.windowRef.history.pushState(createHistoryState({locationRef:h.windowRef.location}),'',h.windowRef.location.href);
+  h.windowRef.history.back();
+  traversal();
+  assert.equal(prevented,2);
 });
