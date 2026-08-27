@@ -45,9 +45,27 @@ export class AppRouter{
 
   navigate(projectId, moduleId = 'dashboard', { replace = false } = {}){
     if(!projectId) return false;
-    const route = `#/projects/${encodeURIComponent(projectId)}/${encodeURIComponent(moduleId || 'dashboard')}`;
+    const requestedModule = moduleId || 'dashboard';
+    const currentRoute = parseRoute();
+    const hasExplicitProjectRoute = /^#\/?projects?\//i.test(String(window.location.hash || ''));
+    // Startup/recovery code may ask to replace the active project with its
+    // default dashboard before Router has synchronized even once. An explicit
+    // deep-link already in the address bar is authoritative during that
+    // bootstrap window; otherwise a refresh of /reports (or another module)
+    // is silently rewritten to /dashboard and its canonical history state is
+    // lost. Once the first sync completes, normal replace navigation applies.
+    if(
+      replace &&
+      this.lastSyncedHash === null &&
+      hasExplicitProjectRoute &&
+      String(currentRoute.projectId || '') === String(projectId) &&
+      currentRoute.moduleId !== requestedModule
+    ){
+      return true;
+    }
+    const route = `#/projects/${encodeURIComponent(projectId)}/${encodeURIComponent(requestedModule)}`;
     if(window.location.hash !== route){
-      const state=window.KarhaBrowserHistory?.stateForRoute({projectId,moduleId:moduleId||'dashboard',hash:route});
+      const state=window.KarhaBrowserHistory?.stateForRoute({projectId,moduleId:requestedModule,hash:route});
       window.KarhaBrowserHistory?.[replace?'replace':'push'](state,route);
     }
     // The History API does not emit hashchange or popstate. Routing owns the
