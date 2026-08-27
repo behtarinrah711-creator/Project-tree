@@ -22,6 +22,10 @@
     onPop:(_payload,transition)=>window.KarhaContractFormLifecycle?.requestCloseTemplate?.(true,transition)
   });
 
+  const requestCanonicalBack=()=>window.KarhaBrowserHistory?.back?.();
+  const formBackButton=document.getElementById('closeContractFormPage');
+  if(formBackButton) formBackButton.onclick=requestCanonicalBack;
+
   window.KarhaContractHistory=Object.freeze({
     enterForm(){
       // A consumed Back entry must stay consumed while its onPop policy is running.
@@ -37,6 +41,7 @@
     },
     enterTemplate(){return history?.open('contract-template-form');},
     leaveTemplate(fromPopState=false){return history?.consume('contract-template-form',{fromPopState});},
-    formOwned(){return !!history?.isOpen('contract-form');}
+    formOwned(){return !!history?.isOpen('contract-form');},
+    requestBack:requestCanonicalBack,
   });
 })();
