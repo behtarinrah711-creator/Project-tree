@@ -16,6 +16,13 @@ async function harness(){
     forward(){cursor++;listeners.popstate({state:entries[cursor].state});},
     go(delta){cursor+=delta;listeners.popstate({state:entries[cursor].state});}
   };
+  window.KarhaBrowserHistory={
+    stateForChild:child=>({child}),
+    push(patch,url){history.pushState(patch,'',url);},
+    replace(patch,url){history.replaceState(patch,'',url);},
+    go(delta){history.go(delta);},
+    register(owner,fn){if(owner==='child')listeners.popstate=event=>fn(event.state,event);},
+  };
   const context={window,history,location};vm.createContext(context);vm.runInContext(source,context);
   return {api:window.KarhaChildHistory,history,entries,get cursor(){return cursor;}};
 }

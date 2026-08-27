@@ -84,7 +84,7 @@ test('route presentation preserves mounted dashboard content while switching pag
 test('footer binding delegates navigation and routed surfaces own active state and visibility',()=>{
   const h=harness();
   h.ids.get('bottomReportsBtn').onclick();
-  assert.deepEqual(h.calls.slice(0,2),[['navigate','reports'],['history','reports-root']]);
+  assert.deepEqual(h.calls,[['navigate','reports']]);
   h.chrome.applyRoute('reports',getProjectRouteSurface('reports'));
   assert.equal(h.ids.get('bottomReportsBtn').classList.contains('active'),true);
   assert.equal(h.ids.get('reportsPage').classList.contains('hidden'),false);

@@ -7,24 +7,28 @@ const projects={
 
 async function createRouterHarness({initialHash,initialProjects,activeTab}){
   const listeners=new Map();
-  const stack=[initialHash];
+  const stack=[{url:initialHash,state:null}];
   let cursor=0;
   globalThis.CustomEvent=class { constructor(type,init={}){this.type=type;this.detail=init.detail;} };
   globalThis.document={readyState:'complete'};
   globalThis.window={
-    location:{hash:initialHash,search:''},
+    location:{hash:initialHash,href:initialHash,search:''},
     addEventListener(type,listener){
       const values=listeners.get(type)||[]; values.push(listener); listeners.set(type,values);
     },
     dispatchEvent(event){ (listeners.get(event.type)||[]).forEach(listener=>listener(event)); },
   };
-  const setLocation=value=>{ window.location.hash=value; };
+  const setLocation=value=>{ window.location.hash=value;window.location.href=value; };
   window.history={
-    pushState(_state,_title,url){ stack.splice(cursor+1); stack.push(url); cursor++; setLocation(url); },
-    replaceState(_state,_title,url){ stack[cursor]=url; setLocation(url); },
-    back(){ cursor--; setLocation(stack[cursor]); window.dispatchEvent({type:'popstate'}); },
-    forward(){ cursor++; setLocation(stack[cursor]); window.dispatchEvent({type:'popstate'}); },
+    get state(){return stack[cursor].state;},
+    pushState(state,_title,url){ stack.splice(cursor+1); stack.push({url,state}); cursor++; setLocation(url); },
+    replaceState(state,_title,url){ stack[cursor]={url,state}; setLocation(url); },
+    back(){ cursor--; setLocation(stack[cursor].url); window.dispatchEvent({type:'popstate',state:stack[cursor].state}); },
+    forward(){ cursor++; setLocation(stack[cursor].url); window.dispatchEvent({type:'popstate',state:stack[cursor].state}); },
+    go(delta){cursor+=delta;setLocation(stack[cursor].url);window.dispatchEvent({type:'popstate',state:stack[cursor].state});},
   };
+  const {installBrowserHistory}=await import(`./browserHistory.js?harness=${Date.now()}-${Math.random()}`);
+  installBrowserHistory({windowRef:window});
 
   const { AppRouter }=await import(`./router.js?harness=${Date.now()}-${Math.random()}`);
   const { moduleRegistry }=await import('./moduleRegistry.js');
@@ -47,6 +51,10 @@ async function createRouterHarness({initialHash,initialProjects,activeTab}){
   moduleRegistry.register({
     id:'contracts',
     mount({projectId}){ contractProjects.push(projectId); return {projectId,moduleId:'contracts'}; },
+  });
+  moduleRegistry.register({
+    id:'reports',
+    mount({projectId}){ return {projectId,moduleId:'reports'}; },
   });
   window.addEventListener('karha:workspace-route-synced',event=>{ data.activeTab=event.detail.projectId; });
   const router=new AppRouter();
@@ -153,4 +161,21 @@ test('empty startup mounts restored cloud project B and preserves later navigati
   harness.router.navigate('B','contracts');
   assert.equal(harness.contractProjects.at(-1),'B');
   assert.deepEqual(harness.invalidDashboardMounts,[]);
+});
+
+test('late background dashboard replace cannot overwrite an explicit same-project route', async () => {
+  const projectList=Object.keys(projects).map(id=>({id,...projects[id]}));
+  const harness=await createRouterHarness({
+    initialHash:'#/projects/A/reports',initialProjects:projectList,activeTab:'A',
+  });
+
+  assert.equal(window.location.hash,'#/projects/A/reports');
+  assert.equal(harness.router.currentMounted?.moduleId,'reports');
+  assert.equal(window.history.state?.route?.moduleId,'reports');
+
+  const result=harness.router.navigate('A','dashboard',{replace:true});
+  assert.equal(result,true);
+  assert.equal(window.location.hash,'#/projects/A/reports');
+  assert.equal(harness.router.currentMounted?.moduleId,'reports');
+  assert.equal(window.history.state?.route?.moduleId,'reports');
 });

@@ -34,16 +34,8 @@ export class AppRouter{
         this.sync();
       });
     };
-    const syncPopState = () => {
-      // Legacy child UI layers (picker/search/numpad/form history) deliberately
-      // push same-URL history entries. Traversing those entries must not remount
-      // the routed module underneath them. Only synchronize a pop when the hash
-      // route itself actually changed.
-      if(window.location.hash === this.lastSyncedHash) return;
-      sync();
-    };
     window.addEventListener('hashchange', sync);
-    window.addEventListener('popstate', syncPopState);
+    window.KarhaBrowserHistory?.register('route',sync);
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', sync, { once: true });
     } else {
@@ -53,10 +45,28 @@ export class AppRouter{
 
   navigate(projectId, moduleId = 'dashboard', { replace = false } = {}){
     if(!projectId) return false;
-    const route = `#/projects/${encodeURIComponent(projectId)}/${encodeURIComponent(moduleId || 'dashboard')}`;
-    const method = replace ? 'replaceState' : 'pushState';
+    const requestedModule = moduleId || 'dashboard';
+    const currentRoute = parseRoute();
+    const hasExplicitProjectRoute = /^#\/?projects?\//i.test(String(window.location.hash || ''));
+    // Background/startup rendering may ask to replace the active project with
+    // its default dashboard even while an explicit same-project route is the
+    // authoritative browser location. A replace operation must not demote an
+    // existing deep-link such as /reports, /accounting, /people, or /contracts
+    // to /dashboard. Intentional user navigation to Projects uses push, while
+    // condemned-route correction owns its explicit replace path in sync().
+    if(
+      replace &&
+      hasExplicitProjectRoute &&
+      String(currentRoute.projectId || '') === String(projectId) &&
+      currentRoute.moduleId !== requestedModule &&
+      requestedModule === 'dashboard'
+    ){
+      return true;
+    }
+    const route = `#/projects/${encodeURIComponent(projectId)}/${encodeURIComponent(requestedModule)}`;
     if(window.location.hash !== route){
-      window.history[method]({ projectId, moduleId }, '', route);
+      const state=window.KarhaBrowserHistory?.stateForRoute({projectId,moduleId:requestedModule,hash:route});
+      window.KarhaBrowserHistory?.[replace?'replace':'push'](state,route);
     }
     // The History API does not emit hashchange or popstate. Routing owns the
     // complete programmatic-navigation lifecycle, so synchronize it here once
@@ -87,7 +97,9 @@ export class AppRouter{
       if(projectId){
         const safe = `#/projects/${encodeURIComponent(projectId)}/dashboard`;
         if(window.location.hash !== safe){
-          window.history.replaceState({ projectId, moduleId: 'dashboard' }, '', safe);
+          window.KarhaBrowserHistory?.replace(
+            window.KarhaBrowserHistory.stateForRoute({projectId,moduleId:'dashboard',hash:safe}),safe
+          );
         }
       }
     }

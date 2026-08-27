@@ -113,7 +113,6 @@ function closeBottomPages(){
 function handleWorkspaceContextBack(){
   if(workspaceSubpage === 'contractTemplates'){ closeContractTemplatesPage(); return; }
   if(workspaceSubpage === 'contractTemplateForm'){ requestCloseContractTemplateForm(); return; }
-  if(typeof shouldSuppressWorkspaceBack==='function' && shouldSuppressWorkspaceBack()) return;
   if(workspaceSubpage === 'contractForm'){ requestCloseContractForm(); return; }
   if(workspaceSubpage === 'contracts'){ closeContractsPage(); return; }
   if(workspaceSubpage === 'archive'){ goHomeProjects(); return; }

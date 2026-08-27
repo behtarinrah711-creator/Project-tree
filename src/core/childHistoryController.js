@@ -6,7 +6,6 @@
   let handlingPop = false;
   const afterPopQueue=[];
 
-  function currentState(){ return history.state && history.state.karhaChild; }
   function closeKnownChild(key){
     if(key==='contacts'){ workspaceSubpage=null; renderSettingsWorkspace(); showOnlyWorkspacePage('settingsPage'); return; }
     if(key==='activities'){ workspaceSubpage=null; showOnlyWorkspacePage('settingsPage'); renderSettingsWorkspace(); return; }
@@ -36,7 +35,7 @@
     if(existing) return existing.id;
     const layer={id:`child-${++sequence}`,key,payload};
     layers.push(layer);
-    history.pushState({...(history.state||{}),karhaChild:layer},'',location.href);
+    window.KarhaBrowserHistory?.push(window.KarhaBrowserHistory.stateForChild(layer),location.href);
     return layer.id;
   }
 
@@ -46,7 +45,7 @@
     if(index<0) return false;
     layers.splice(index,1);
     if(!fromPopState){
-      if(steps>1) history.go(-steps); else history.back();
+      window.KarhaBrowserHistory?.go(-Math.max(1,steps));
     }
     return true;
   }
@@ -55,7 +54,7 @@
     const layer=top();
     if(!layer || layer.key!==String(key)) return false;
     layer.payload=payload;
-    history.replaceState({...(history.state||{}),karhaChild:{...layer}},'',location.href);
+    window.KarhaBrowserHistory?.replace(window.KarhaBrowserHistory.stateForChild({...layer}),location.href);
     return true;
   }
 
@@ -63,7 +62,7 @@
     if(handlingPop) return;
     handlingPop=true;
     try{
-      const target=event.state && event.state.karhaChild;
+      const target=event.state && event.state.child;
       const targetIndex=target ? layers.findIndex(layer=>layer.id===target.id) : -1;
       while(layers.length-1>targetIndex){
         const layer=layers.pop();
@@ -72,6 +71,7 @@
           consumed:true,
           layer:{...layer},
           target:target ? {...target} : null,
+          restore(){window.KarhaBrowserHistory?.go(1);},
         });
         registration(layer.key)?.onPop?.(layer.payload,transition);
       }
@@ -88,7 +88,7 @@
     }
   }
 
-  window.addEventListener('popstate',onPopState);
+  window.KarhaBrowserHistory?.register('child',(_state,event)=>onPopState(event));
   window.KarhaChildHistory=Object.freeze({register,open,consume,replace,isOpen,top,
     afterNextPop(callback){if(typeof callback==='function')afterPopQueue.push(callback);},
     getDepth:()=>layers.length});

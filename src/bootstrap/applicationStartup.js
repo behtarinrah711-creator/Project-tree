@@ -15,7 +15,6 @@ import { reconcileDrawerProjectList } from '../core/drawerProjectList.js';
 import { startCloudProjectRecovery } from '../core/cloudProjectRecovery.js';
 import { installProjectRouteSurfaceSync } from '../core/projectRouteSurface.js';
 import { installProjectRecoveryRetention } from '../core/projectRecoveryRetention.js';
-import { installBackGestureGuard } from '../core/backGestureGuard.js';
 import { installSoftDelete } from '../core/softDelete.js';
 import { installWorkspaceChrome } from '../ui/workspaceChrome.js';
 import { installContractFormExitBridge } from '../modules/contracts/contractFormExitBridge.js';
@@ -46,7 +45,7 @@ import { showToast as uiShowToast } from '../ui/toast.js';
 import { installUiPrimitives } from '../ui/installUiPrimitives.js';
 import { installProfileStore } from '../modules/profile/profileStore.js';
 import { installProfileView } from '../modules/profile/profileView.js';
-import { installWorkspaceHistory } from '../core/workspaceHistory.js';
+import { installBrowserHistory } from '../core/browserHistory.js';
 import { installExportNotesStore } from '../modules/export/exportNotesStore.js';
 import { installExportView } from '../modules/export/exportView.js';
 import { showWorkspacePage, hideAllWorkspacePages, SHELL_WORKSPACE_PAGE_IDS } from '../ui/shellSurface.js';
@@ -135,6 +134,7 @@ export async function startApplication({
   installAppDataStore({ windowRef, schemaVersion: 8 });
   installFirebaseRuntime({windowRef});
   installHtmlEscape({ windowRef });
+  installBrowserHistory({windowRef});
   await loadRuntime();
   // Attach after install so KarhaApp holds the live store reference.
   if(windowRef.KarhaApp && windowRef.KarhaAppData){
@@ -146,7 +146,6 @@ export async function startApplication({
   installUiPrimitives({ windowRef, documentRef: windowRef.document });
   installProfileStore({ windowRef });
   installProfileView({ windowRef, documentRef: windowRef.document });
-  installWorkspaceHistory({ windowRef });
   installExportNotesStore({ windowRef });
   installExportView({ windowRef, documentRef: windowRef.document });
   // Phase 4.2: Domain APIs call persistAdapter; legacy remains the implementation
@@ -157,16 +156,12 @@ export async function startApplication({
   });
   // Observe uid only. Does not own login, logout, or cloud migrate.
   installSessionObserver({windowRef});
-  // Child overlays (search template / numpad / Jalali picker) own their Back
-  // gesture and must never cascade into closing the parent contract form.
-  installBackGestureGuard({windowRef,documentRef:windowRef.document});
   installSoftDelete({ windowRef, documentRef: windowRef.document });
   installWorkspaceChrome({
     windowRef,
     documentRef: windowRef.document,
     getPresentationState: () => windowRef.KarhaLegacy?.getWorkspaceChromeState?.() || {},
     navigateFooter: moduleId => windowRef.KarhaLegacy?.navigateFooter?.(moduleId),
-    pushWorkspaceHistory: state => windowRef.KarhaLegacy?.pushWorkspaceHistory?.(state),
     goHomeProjects: () => windowRef.KarhaLegacy?.goHomeProjects?.(),
     renderDrawerProjectList: () => windowRef.KarhaLegacy?.renderDrawerProjectList?.(),
     clearWorkspaceSubpage: () => windowRef.KarhaLegacy?.clearWorkspaceSubpage?.(),
