@@ -3,7 +3,6 @@
   const registrations = new Map();
   const layers = [];
   const transientStates = new Map();
-  const pendingRestoreIds = new Set();
   let sequence = 0;
   let handlingPop = false;
   let popSequence = 0;
@@ -25,11 +24,6 @@
   function top(){ return layers[layers.length-1] || null; }
   function isOpen(key){ return layers.some(layer=>layer.key===String(key)); }
   function transientKey(key){ return `transient:${String(key)}`; }
-  function deferTraversal(callback){
-    if(typeof callback!=='function') return;
-    if(typeof queueMicrotask==='function') queueMicrotask(callback);
-    else Promise.resolve().then(callback);
-  }
 
   function register(key, handlers={}){
     key=String(key);
@@ -110,14 +104,14 @@
     };
 
     // A dirty-form Back has already consumed the form entry before its policy
-    // can show a confirmation. Restore that form entry first, then add the
-    // transient modal as a same-route child. Browser Back can now pop only the
-    // modal and naturally land on the unchanged form, without repair pushes or
-    // suppression timers.
+    // can show a confirmation. Re-enter that consumed child synchronously with
+    // a fresh same-route pushState, then place the transient modal above it.
+    // This deliberately avoids history.go(1): physical/mobile Back handling can
+    // terminate the browser activity while a Forward traversal is still pending.
     const transition=activeTransition;
     if(transition?.consumed && typeof transition.restore==='function'){
-      afterFuturePop(openTransientEntry);
       transition.restore();
+      openTransientEntry();
     }else{
       openTransientEntry();
     }
@@ -152,38 +146,37 @@
     try{
       const target=event.state && event.state.child;
       const targetIndex=target ? layers.findIndex(layer=>layer.id===target.id) : -1;
-      const restoringConsumedTarget=!!(target && targetIndex<0 && pendingRestoreIds.has(String(target.id)));
-      if(restoringConsumedTarget) pendingRestoreIds.delete(String(target.id));
 
-      // An intentional transition.restore() is a Forward traversal back to the
-      // exact child that was just consumed. Its parent layers are already the
-      // correct current stack and must not be popped merely because the restored
-      // child is temporarily absent from `layers`.
-      if(!restoringConsumedTarget){
-        while(layers.length-1>targetIndex){
-          const layer=layers.pop();
-          const transition=Object.freeze({
-            type:'pop',
-            consumed:true,
-            layer:{...layer},
-            target:target ? {...target} : null,
-            restore(){
-              pendingRestoreIds.add(String(layer.id));
-              const restore=()=>window.KarhaBrowserHistory?.go(1);
-              if(handlingPop) deferTraversal(restore);
-              else restore();
-            },
-          });
-          const previousTransition=activeTransition;
-          activeTransition=transition;
-          try{
-            registration(layer.key)?.onPop?.(layer.payload,transition);
-          }finally{
-            activeTransition=previousTransition;
-          }
+      while(layers.length-1>targetIndex){
+        const layer=layers.pop();
+        let restoredDuringPolicy=false;
+        const transition=Object.freeze({
+          type:'pop',
+          consumed:true,
+          layer:{...layer},
+          target:target ? {...target} : null,
+          restore(){
+            if(restoredDuringPolicy) return false;
+            restoredDuringPolicy=true;
+            if(!layers.some(item=>String(item.id)===String(layer.id))) layers.push({...layer});
+            window.KarhaBrowserHistory?.push(window.KarhaBrowserHistory.stateForChild(layer),location.href);
+            return true;
+          },
+        });
+        const previousTransition=activeTransition;
+        activeTransition=transition;
+        try{
+          registration(layer.key)?.onPop?.(layer.payload,transition);
+        }finally{
+          activeTransition=previousTransition;
         }
+        // restore() intentionally cancelled this Back by re-entering the child.
+        // Do not continue popping the newly restored child/transient layers in
+        // the same original popstate dispatch.
+        if(restoredDuringPolicy) break;
       }
-      if(target && targetIndex<0){
+
+      if(target && targetIndex<0 && !layers.some(layer=>String(layer.id)===String(target.id))){
         const handlers=registration(target.key);
         if(handlers){
           layers.push({...target});
