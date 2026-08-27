@@ -1,12 +1,15 @@
 import { createFormExitSession } from '../../core/formExitPolicy.js';
+import { projectContext } from '../../core/projectContext.js';
+import { contractApi } from '../../domain/contractApi.js';
 
 let installed = false;
-const REAL_CONTRACT_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
+const LEGACY_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
 
-function setEditMode(documentRef, editing){
+function setEditMode(documentRef, mode){
   const page = documentRef.getElementById('contractFormPage');
   if(!page) return;
-  if(editing) page.dataset.contractEditing = 'true';
+  page.dataset.contractMode = mode;
+  if(mode === 'saved') page.dataset.contractEditing = 'true';
   else delete page.dataset.contractEditing;
 }
 
@@ -19,7 +22,11 @@ function runAfterPromptDismiss(overlay, action){
   }
 }
 
-function patchExitPrompt({windowRef, form, editing}){
+function projectIdForForm(){
+  return projectContext.getProjectId?.() || projectContext.getActiveProjectId?.() || null;
+}
+
+function patchExitPrompt({windowRef, form, mode}){
   const documentRef = windowRef.document;
   const overlay = documentRef.querySelector('.global-incomplete-exit-choice');
   if(!overlay) return false;
@@ -29,49 +36,25 @@ function patchExitPrompt({windowRef, form, editing}){
   const yes = overlay.querySelector('[data-exit="yes"]');
   const no = overlay.querySelector('[data-exit="no"]');
 
-  if(editing){
+  if(mode === 'saved'){
     if(title) title.textContent = 'تغییرات ذخیره نشده';
-    if(text) text.textContent = 'آیا تغییرات این فرم ذخیره شود؟';
+    if(text) text.textContent = 'آیا تغییرات این قرارداد ذخیره شود؟';
+  }else{
+    if(title) title.textContent = 'قرارداد تکمیل نشده';
+    if(text) text.textContent = 'آیا اطلاعات فعلی به‌صورت پیش‌نویس ذخیره شود؟';
   }
 
   if(yes){
     yes.onclick = () => runAfterPromptDismiss(overlay, () => {
-      if(editing){
-        // Editing never creates a draft. Save back to the same contract id.
-        form.save(null, false);
-      }else{
-        // New-contract exit must use the real draft path so the same state can
-        // be restored next time the user opens New Contract.
-        form.saveDraft?.();
-      }
+      if(mode === 'saved') form.save(null, false);
+      else form.saveDraft?.();
     });
   }
 
   if(no){
-    no.onclick = () => runAfterPromptDismiss(overlay, () => {
-      // Once the transient has been dismissed the browser is back on the form
-      // entry. Consume that form entry normally; fromPopState=true would leave
-      // stale form ownership in history and desynchronise UI from the browser.
-      form.close(false);
-    });
+    no.onclick = () => runAfterPromptDismiss(overlay, () => form.close(false));
   }
   return true;
-}
-
-function restoreDraftIfPresent({windowRef, form, editing}){
-  if(editing) return false;
-  try{
-    const raw = windowRef.localStorage?.getItem?.(REAL_CONTRACT_DRAFT_KEY);
-    if(!raw) return false;
-    const draft = JSON.parse(raw);
-    if(!draft || typeof draft !== 'object' || Array.isArray(draft)) return false;
-    form.setState?.(draft);
-    form.setDirty?.(false);
-    form.render?.();
-    return true;
-  }catch{
-    return false;
-  }
 }
 
 export function installContractFormExitBridge({windowRef = window} = {}){
@@ -87,22 +70,20 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   const originalSetDirty = form.setDirty.bind(form);
   const originalSave = form.save.bind(form);
 
-  let editing = false;
+  let mode = 'new';
   let exitSession = null;
 
   form.open = function(id = null, projectId = null){
     const opened = originalOpen(id, projectId);
     if(!opened) return opened;
 
-    editing = !!id;
-    setEditMode(documentRef, editing);
-    restoreDraftIfPresent({windowRef, form, editing});
+    const current = form.getState?.();
+    mode = !id ? 'new' : (current?.status === 'draft' || current?.isDraft ? 'draft' : 'saved');
+    setEditMode(documentRef, mode);
     exitSession = createFormExitSession({
-      isNew: () => !editing,
+      isNew: () => mode !== 'saved',
       getState: () => form.getState?.(),
     });
-    // A restored draft is the new clean baseline; only later edits should ask
-    // whether to save another draft on exit.
     exitSession.captureBaseline();
     return opened;
   };
@@ -113,38 +94,55 @@ export function installContractFormExitBridge({windowRef = window} = {}){
       const el = doc?.getElementById?.(id);
       return !!(el && !el.classList.contains('hidden'));
     };
-    // Child overlays own this Back; form must not close or prompt.
     if(childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop')) return false;
 
-    // session baseline OR form dirty flag — never force-clear dirty to false.
     const sessionDirty = !!exitSession?.isDirty?.();
     const flagDirty = !!form.isDirty?.();
     const changed = sessionDirty || flagDirty;
     if(changed) originalSetDirty(true);
 
     const result = originalRequestClose(fromPopState, transition);
-    if(changed && result === false){
-      patchExitPrompt({windowRef, form, editing});
-    }
+    if(changed && result === false) patchExitPrompt({windowRef, form, mode});
     return result;
   };
 
+  form.saveDraft = function(){
+    const state = form.getState?.();
+    const projectId = projectIdForForm();
+    if(!state || !projectId) return false;
+    const result = contractApi.saveDraft(projectId, state);
+    if(!result.ok){
+      windowRef.KarhaLegacy?.showToast?.(result.message || 'پیش‌نویس ذخیره نشد');
+      return false;
+    }
+    try{ windowRef.localStorage?.removeItem?.(LEGACY_DRAFT_KEY); }catch{}
+    windowRef.KarhaLegacy?.showToast?.('پیش‌نویس ذخیره شد');
+    mode = 'draft';
+    form.close(false);
+    return true;
+  };
+
   form.save = function(projectId = null, silent = false){
-    const wasNew = !editing;
+    const state = form.getState?.();
+    if(state){
+      state.status = 'final';
+      state.isDraft = false;
+    }
     const saved = originalSave(projectId, silent);
-    if(saved && wasNew){
-      try{ windowRef.localStorage?.removeItem?.(REAL_CONTRACT_DRAFT_KEY); }catch{}
+    if(saved){
+      try{ windowRef.localStorage?.removeItem?.(LEGACY_DRAFT_KEY); }catch{}
     }
     return saved;
   };
 
   form.close = function(fromPopState = false){
-    editing = false;
+    mode = 'new';
     exitSession = null;
-    setEditMode(documentRef, false);
+    setEditMode(documentRef, mode);
     return originalClose(fromPopState);
   };
 
+  form.getLifecycleMode = () => mode;
   return true;
 }
 
