@@ -48,18 +48,18 @@ export class AppRouter{
     const requestedModule = moduleId || 'dashboard';
     const currentRoute = parseRoute();
     const hasExplicitProjectRoute = /^#\/?projects?\//i.test(String(window.location.hash || ''));
-    // Startup/recovery code may ask to replace the active project with its
-    // default dashboard before Router has synchronized even once. An explicit
-    // deep-link already in the address bar is authoritative during that
-    // bootstrap window; otherwise a refresh of /reports (or another module)
-    // is silently rewritten to /dashboard and its canonical history state is
-    // lost. Once the first sync completes, normal replace navigation applies.
+    // Background/startup rendering may ask to replace the active project with
+    // its default dashboard even while an explicit same-project route is the
+    // authoritative browser location. A replace operation must not demote an
+    // existing deep-link such as /reports, /accounting, /people, or /contracts
+    // to /dashboard. Intentional user navigation to Projects uses push, while
+    // condemned-route correction owns its explicit replace path in sync().
     if(
       replace &&
-      this.lastSyncedHash === null &&
       hasExplicitProjectRoute &&
       String(currentRoute.projectId || '') === String(projectId) &&
-      currentRoute.moduleId !== requestedModule
+      currentRoute.moduleId !== requestedModule &&
+      requestedModule === 'dashboard'
     ){
       return true;
     }
