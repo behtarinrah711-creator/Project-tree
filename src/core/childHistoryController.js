@@ -82,11 +82,11 @@
     return state;
   }
 
-  function presentTransient(key,{payload=null,onDismiss}={}){
+  function presentTransient(key,{payload=null,onDismiss,onReady}={}){
     key=String(key);
     if(transientStates.has(key)) return false;
     const internalKey=transientKey(key);
-    const state={key,internalKey,payload,onDismiss,ready:false,pendingDismiss:false,pendingAfter:null};
+    const state={key,internalKey,payload,onDismiss,onReady,ready:false,pendingDismiss:false,pendingAfter:null};
     transientStates.set(key,state);
     registrations.set(internalKey,{
       onPop:()=>{
@@ -100,6 +100,7 @@
       if(!current) return;
       open(internalKey,{key,payload});
       current.ready=true;
+      current.onReady?.({key,internalKey});
       if(current.pendingDismiss){
         const after=current.pendingAfter;
         current.pendingDismiss=false;
