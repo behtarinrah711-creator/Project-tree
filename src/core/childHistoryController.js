@@ -3,6 +3,7 @@
   const registrations = new Map();
   const layers = [];
   const transientStates = new Map();
+  const pendingRestoreIds = new Set();
   let sequence = 0;
   let handlingPop = false;
   let popSequence = 0;
@@ -150,25 +151,35 @@
     try{
       const target=event.state && event.state.child;
       const targetIndex=target ? layers.findIndex(layer=>layer.id===target.id) : -1;
-      while(layers.length-1>targetIndex){
-        const layer=layers.pop();
-        const transition=Object.freeze({
-          type:'pop',
-          consumed:true,
-          layer:{...layer},
-          target:target ? {...target} : null,
-          restore(){
-            const restore=()=>window.KarhaBrowserHistory?.go(1);
-            if(handlingPop) deferTraversal(restore);
-            else restore();
-          },
-        });
-        const previousTransition=activeTransition;
-        activeTransition=transition;
-        try{
-          registration(layer.key)?.onPop?.(layer.payload,transition);
-        }finally{
-          activeTransition=previousTransition;
+      const restoringConsumedTarget=!!(target && targetIndex<0 && pendingRestoreIds.has(String(target.id)));
+      if(restoringConsumedTarget) pendingRestoreIds.delete(String(target.id));
+
+      // An intentional transition.restore() is a Forward traversal back to the
+      // exact child that was just consumed. Its parent layers are already the
+      // correct current stack and must not be popped merely because the restored
+      // child is temporarily absent from `layers`.
+      if(!restoringConsumedTarget){
+        while(layers.length-1>targetIndex){
+          const layer=layers.pop();
+          const transition=Object.freeze({
+            type:'pop',
+            consumed:true,
+            layer:{...layer},
+            target:target ? {...target} : null,
+            restore(){
+              pendingRestoreIds.add(String(layer.id));
+              const restore=()=>window.KarhaBrowserHistory?.go(1);
+              if(handlingPop) deferTraversal(restore);
+              else restore();
+            },
+          });
+          const previousTransition=activeTransition;
+          activeTransition=transition;
+          try{
+            registration(layer.key)?.onPop?.(layer.payload,transition);
+          }finally{
+            activeTransition=previousTransition;
+          }
         }
       }
       if(target && targetIndex<0){
