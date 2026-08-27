@@ -49,6 +49,31 @@ function publishLive(projectId, fields = ['contracts', 'contractTemplates']){
   }
 }
 
+function saveContractRecord(projectId, draft, {status = null} = {}){
+  if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
+  if(!projectId || !draft) return deny('invalid', 'قرارداد نامعتبر است');
+  const project = projectRepository.find(projectId);
+  const access = canWriteProject(project);
+  if(!access.ok) return access;
+
+  const id = draft.id || makeId();
+  const current = draft.id ? contractRepository.get(projectId, draft.id) : null;
+  const record = { ...(current || {}), ...draft, id, trashed:false };
+  if(status) record.status = status;
+  if(status === 'draft'){
+    record.isDraft = true;
+    record.title = String(record.title || '').trim() || 'پیش‌نویس قرارداد';
+  }else if(status === 'final'){
+    record.isDraft = false;
+  }
+  if(!current) record.createdAt = record.createdAt || Date.now();
+  record.updatedAt = Date.now();
+
+  if(!contractRepository.save(projectId, record)) return deny('conflict', 'ذخیره قرارداد انجام نشد');
+  publishLive(projectId, ['contracts']);
+  return allow({ contract: record });
+}
+
 export const contractApi = {
   get(projectId, contractId){
     return contractRepository.get(projectId, contractId);
@@ -71,21 +96,11 @@ export const contractApi = {
   },
 
   save(projectId, draft){
-    if(isOffline()) return deny('offline', 'برای ثبت تغییرات به اینترنت متصل شوید');
-    if(!projectId || !draft) return deny('invalid', 'قرارداد نامعتبر است');
-    const project = projectRepository.find(projectId);
-    const access = canWriteProject(project);
-    if(!access.ok) return access;
+    return saveContractRecord(projectId, draft, {status:'final'});
+  },
 
-    const id = draft.id || makeId();
-    const current = draft.id ? contractRepository.get(projectId, draft.id) : null;
-    const record = { ...(current || {}), ...draft, id, trashed:false };
-    if(!current) record.createdAt = record.createdAt || Date.now();
-    record.updatedAt = Date.now();
-
-    if(!contractRepository.save(projectId, record)) return deny('conflict', 'ذخیره قرارداد انجام نشد');
-    publishLive(projectId);
-    return allow({ contract: record });
+  saveDraft(projectId, draft){
+    return saveContractRecord(projectId, draft, {status:'draft'});
   },
 
   trash(projectId, contractId){
