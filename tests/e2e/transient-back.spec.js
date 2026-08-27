@@ -45,6 +45,10 @@ test('Back on dirty-form confirmation dismisses only the confirmation and preser
   // First Back asks what to do with the dirty form.
   await page.goBack();
   await expect(prompt).toBeVisible();
+  // A visible modal must already own the current browser entry. This closes the
+  // race where the user could see the prompt before its same-route guard existed.
+  await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
+    .toBe('transient:incomplete-exit-choice');
   await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(page.locator('#contractsPage')).toBeHidden();
   await expect(place).toHaveValue('کارگاه مرکزی');
@@ -55,15 +59,57 @@ test('Back on dirty-form confirmation dismisses only the confirmation and preser
   await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(page.locator('#contractsPage')).toBeHidden();
   await expect(place).toHaveValue('کارگاه مرکزی');
+  await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
+    .toBe('contract-form');
 
   // The form is still dirty, so another Back asks again instead of navigating away.
   await page.goBack();
   await expect(prompt).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
+    .toBe('transient:incomplete-exit-choice');
   await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(place).toHaveValue('کارگاه مرکزی');
 
-  // Choosing No settles the transient entry first, then exits the form.
+  // Choosing No settles the transient entry first, then really consumes the
+  // restored form entry and returns to Contracts.
   await prompt.locator('[data-exit="no"]').click();
+  await expect(prompt).toBeHidden();
+  await expect(page.locator('#contractFormPage')).toBeHidden();
+  await expect(page.locator('#contractsPage')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
+    .not.toBe('contract-form');
+});
+
+test('Yes saves a new-contract draft and New Contract restores it as the clean baseline', async ({ page }) => {
+  await openDirtyContractForm(page);
+  const prompt = page.locator('.global-incomplete-exit-choice');
+
+  await page.goBack();
+  await expect(prompt).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
+    .toBe('transient:incomplete-exit-choice');
+
+  await prompt.locator('[data-exit="yes"]').click();
+  await expect(prompt).toBeHidden();
+  await expect(page.locator('#contractFormPage')).toBeHidden();
+  await expect(page.locator('#contractsPage')).toBeVisible();
+
+  const storedPlace = await page.evaluate(() => {
+    const raw = localStorage.getItem('karha_real_contract_form_draft_v1');
+    return raw ? JSON.parse(raw).contractPlace : null;
+  });
+  expect(storedPlace).toBe('کارگاه مرکزی');
+
+  // Reopening New Contract must recover the saved draft; otherwise "Yes" has
+  // no user-visible meaning even though bytes were written to localStorage.
+  await page.locator('#contractAddBtn').click();
+  await expect(page.locator('#contractFormPage')).toBeVisible();
+  const restoredPlace = row(page, 'محل انعقاد قرارداد').locator('input');
+  await expect(restoredPlace).toHaveValue('کارگاه مرکزی');
+
+  // A restored draft is a clean baseline, so immediate Back exits without
+  // showing the save-draft question again.
+  await page.goBack();
   await expect(prompt).toBeHidden();
   await expect(page.locator('#contractFormPage')).toBeHidden();
   await expect(page.locator('#contractsPage')).toBeVisible();

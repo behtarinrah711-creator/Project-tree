@@ -1,6 +1,7 @@
 import { createFormExitSession } from '../../core/formExitPolicy.js';
 
 let installed = false;
+const REAL_CONTRACT_DRAFT_KEY = 'karha_real_contract_form_draft_v1';
 
 function setEditMode(documentRef, editing){
   const page = documentRef.getElementById('contractFormPage');
@@ -9,7 +10,16 @@ function setEditMode(documentRef, editing){
   else delete page.dataset.contractEditing;
 }
 
-function patchEditPrompt({windowRef, form}){
+function runAfterPromptDismiss(overlay, action){
+  if(typeof overlay?.__karhaDismissWithAction === 'function'){
+    overlay.__karhaDismissWithAction(action);
+  }else{
+    overlay?.remove?.();
+    action?.();
+  }
+}
+
+function patchExitPrompt({windowRef, form, editing}){
   const documentRef = windowRef.document;
   const overlay = documentRef.querySelector('.global-incomplete-exit-choice');
   if(!overlay) return false;
@@ -17,24 +27,51 @@ function patchEditPrompt({windowRef, form}){
   const title = overlay.querySelector('.contact-exit-title');
   const text = overlay.querySelector('.contact-exit-text');
   const yes = overlay.querySelector('[data-exit="yes"]');
+  const no = overlay.querySelector('[data-exit="no"]');
 
-  if(title) title.textContent = 'تغییرات ذخیره نشده';
-  if(text) text.textContent = 'آیا تغییرات این فرم ذخیره شود؟';
+  if(editing){
+    if(title) title.textContent = 'تغییرات ذخیره نشده';
+    if(text) text.textContent = 'آیا تغییرات این فرم ذخیره شود؟';
+  }
+
   if(yes){
-    yes.onclick = () => {
-      const save = () => {
+    yes.onclick = () => runAfterPromptDismiss(overlay, () => {
+      if(editing){
         // Editing never creates a draft. Save back to the same contract id.
         form.save(null, false);
-      };
-      if(typeof overlay.__karhaDismissWithAction === 'function'){
-        overlay.__karhaDismissWithAction(save);
       }else{
-        overlay.remove();
-        save();
+        // New-contract exit must use the real draft path so the same state can
+        // be restored next time the user opens New Contract.
+        form.saveDraft?.();
       }
-    };
+    });
+  }
+
+  if(no){
+    no.onclick = () => runAfterPromptDismiss(overlay, () => {
+      // Once the transient has been dismissed the browser is back on the form
+      // entry. Consume that form entry normally; fromPopState=true would leave
+      // stale form ownership in history and desynchronise UI from the browser.
+      form.close(false);
+    });
   }
   return true;
+}
+
+function restoreDraftIfPresent({windowRef, form, editing}){
+  if(editing) return false;
+  try{
+    const raw = windowRef.localStorage?.getItem?.(REAL_CONTRACT_DRAFT_KEY);
+    if(!raw) return false;
+    const draft = JSON.parse(raw);
+    if(!draft || typeof draft !== 'object' || Array.isArray(draft)) return false;
+    form.setState?.(draft);
+    form.setDirty?.(false);
+    form.render?.();
+    return true;
+  }catch{
+    return false;
+  }
 }
 
 export function installContractFormExitBridge({windowRef = window} = {}){
@@ -48,6 +85,7 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   const originalRequestClose = form.requestClose.bind(form);
   const originalClose = form.close.bind(form);
   const originalSetDirty = form.setDirty.bind(form);
+  const originalSave = form.save.bind(form);
 
   let editing = false;
   let exitSession = null;
@@ -58,10 +96,13 @@ export function installContractFormExitBridge({windowRef = window} = {}){
 
     editing = !!id;
     setEditMode(documentRef, editing);
+    restoreDraftIfPresent({windowRef, form, editing});
     exitSession = createFormExitSession({
       isNew: () => !editing,
       getState: () => form.getState?.(),
     });
+    // A restored draft is the new clean baseline; only later edits should ask
+    // whether to save another draft on exit.
     exitSession.captureBaseline();
     return opened;
   };
@@ -82,10 +123,19 @@ export function installContractFormExitBridge({windowRef = window} = {}){
     if(changed) originalSetDirty(true);
 
     const result = originalRequestClose(fromPopState, transition);
-    if(editing && changed && result === false){
-      patchEditPrompt({windowRef, form});
+    if(changed && result === false){
+      patchExitPrompt({windowRef, form, editing});
     }
     return result;
+  };
+
+  form.save = function(projectId = null, silent = false){
+    const wasNew = !editing;
+    const saved = originalSave(projectId, silent);
+    if(saved && wasNew){
+      try{ windowRef.localStorage?.removeItem?.(REAL_CONTRACT_DRAFT_KEY); }catch{}
+    }
+    return saved;
   };
 
   form.close = function(fromPopState = false){
