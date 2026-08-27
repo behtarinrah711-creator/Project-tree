@@ -61,9 +61,6 @@ test('transient modal Back dismisses only the modal and returns to the restored 
   h.api.open('form');
   assert.equal(h.api.top().key,'form');
 
-  // First Back consumes the dirty form entry. The transient controller restores
-  // it and then adds one same-route modal entry on top. Restoration is scheduled
-  // outside the active pop dispatch, matching real browser traversal semantics.
   h.history.back();
   await settle();
   assert.equal(prompts,1);
@@ -71,18 +68,57 @@ test('transient modal Back dismisses only the modal and returns to the restored 
   assert.equal(h.api.isTransientOpen('unsaved-form'),true);
   assert.match(h.api.top().key,/^transient:unsaved-form$/);
 
-  // Second Back consumes only the modal; form history remains the current entry.
   h.history.back();
   assert.equal(dismisses,1);
   assert.equal(h.api.isTransientOpen('unsaved-form'),false);
   assert.equal(h.api.isOpen('form'),true);
   assert.equal(h.api.top().key,'form');
 
-  // A later Back reaches the form policy again, as expected for still-dirty data.
   h.history.back();
   await settle();
   assert.equal(prompts,2);
   assert.equal(h.api.isTransientOpen('unsaved-form'),true);
+});
+
+test('dirty transient restore preserves the real parent child stack',async()=>{
+  const h=await harness();
+  let prompts=0;
+  let dismisses=0;
+  const parentPops=[];
+
+  h.api.register('contracts',{onPop:()=>parentPops.push('contracts')});
+  h.api.register('form',{
+    onPop:()=>{
+      prompts++;
+      h.api.presentTransient('unsaved-form',{onDismiss:()=>dismisses++});
+    }
+  });
+
+  h.api.open('contracts');
+  h.api.open('form');
+  assert.equal(h.api.getDepth(),2);
+  assert.equal(h.api.top().key,'form');
+
+  // First Back asks about the dirty form. Restoring that consumed form must not
+  // pop the real parent ('contracts') while the form is temporarily absent.
+  h.history.back();
+  await settle();
+  assert.equal(prompts,1);
+  assert.equal(parentPops.length,0);
+  assert.equal(h.api.isOpen('contracts'),true);
+  assert.equal(h.api.isOpen('form'),true);
+  assert.equal(h.api.isTransientOpen('unsaved-form'),true);
+  assert.equal(h.api.getDepth(),3);
+
+  // Back from the visible confirmation dismisses only that transient layer.
+  h.history.back();
+  assert.equal(dismisses,1);
+  assert.equal(parentPops.length,0);
+  assert.equal(h.api.isTransientOpen('unsaved-form'),false);
+  assert.equal(h.api.isOpen('contracts'),true);
+  assert.equal(h.api.isOpen('form'),true);
+  assert.equal(h.api.top().key,'form');
+  assert.equal(h.api.getDepth(),2);
 });
 
 test('UI dismissal of a transient settles its entry before running the requested action',async()=>{
