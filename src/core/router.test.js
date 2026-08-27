@@ -52,6 +52,10 @@ async function createRouterHarness({initialHash,initialProjects,activeTab}){
     id:'contracts',
     mount({projectId}){ contractProjects.push(projectId); return {projectId,moduleId:'contracts'}; },
   });
+  moduleRegistry.register({
+    id:'reports',
+    mount({projectId}){ return {projectId,moduleId:'reports'}; },
+  });
   window.addEventListener('karha:workspace-route-synced',event=>{ data.activeTab=event.detail.projectId; });
   const router=new AppRouter();
   router.start();
@@ -157,4 +161,21 @@ test('empty startup mounts restored cloud project B and preserves later navigati
   harness.router.navigate('B','contracts');
   assert.equal(harness.contractProjects.at(-1),'B');
   assert.deepEqual(harness.invalidDashboardMounts,[]);
+});
+
+test('late background dashboard replace cannot overwrite an explicit same-project route', async () => {
+  const projectList=Object.keys(projects).map(id=>({id,...projects[id]}));
+  const harness=await createRouterHarness({
+    initialHash:'#/projects/A/reports',initialProjects:projectList,activeTab:'A',
+  });
+
+  assert.equal(window.location.hash,'#/projects/A/reports');
+  assert.equal(harness.router.currentMounted?.moduleId,'reports');
+  assert.equal(window.history.state?.route?.moduleId,'reports');
+
+  const result=harness.router.navigate('A','dashboard',{replace:true});
+  assert.equal(result,true);
+  assert.equal(window.location.hash,'#/projects/A/reports');
+  assert.equal(harness.router.currentMounted?.moduleId,'reports');
+  assert.equal(window.history.state?.route?.moduleId,'reports');
 });
