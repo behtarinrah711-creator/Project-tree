@@ -1,45 +1,50 @@
 # Rapid Back transaction analysis
 
-## Observed failing sequence
+## Chromium event order
 
-Instrumentation of the four-call stress case showed that the History API calls
-were accepted before the first `popstate` had reconciled the child controller.
-The relevant ordering was:
+The rapid test queues several `history.back()` calls before the first traversal
+has settled. Chromium can select destinations from the branch that existed when
+each request was made. The failing order is:
 
-1. The current entry was the `contract-form` child entry, above the `contracts`
-   child entry. Four relative Back traversals were requested.
-2. The first `popstate` named the older `contracts` entry as its destination.
-   The controller removed `child-4`; the dirty policy synchronously restored it
-   with a new entry and pushed `transient:incomplete-exit-choice` above it.
-3. A traversal that had already been accepted before step 2 subsequently
-   committed. Its destination was from the **old** branch, not from the newly
-   reconstructed form/prompt branch. Its `event.state.child` was therefore an
-   older child (and eventually `null`).
-4. That stale event was nevertheless reconciled against the **new** in-memory
-   `layers` array. It consumed the reconstructed transient and form. Because
-   `pushState` had replaced the old forward branch, relative repair could not
-   make the stale destination refer to the reconstructed generation. The
-   controller could still leave the form DOM mounted while the browser's
-   current state was `child: null`.
+1. The current child is `contract-form`; the older entry is `contracts`.
+2. Back commits `contracts` and dispatches `popstate`.
+3. The child controller consumes the dirty form. Its policy synchronously pushes
+   a reconstructed `contract-form` and then a transient prompt.
+4. A previously queued traversal commits a destination from the old branch. It
+   skips both newly pushed entries and delivers an older child, or `child: null`.
+5. The old controller loop interpreted the destination as an instruction to pop
+   every layer above it. It therefore dismissed the transient and then consumed
+   the reconstructed form during the same `popstate`. The visible form DOM could
+   survive even though the browser settled on `child: null`.
 
-`handlingPop` only guards reentrancy during one JavaScript dispatch. It cannot
-guard a second browser traversal delivered as a later task, so it did not cover
-this sequence. The faulty event was thus neither a duplicate nor an event
-processed twice: it was an already-accepted traversal from the previous history
-branch, processed against the wrong generation of the child stack.
+The later `popstate` is not reentrant, so `handlingPop` is false and cannot reject
+it. It is a valid browser event, but its destination belongs to the history
+branch that preceded the reconstruction.
 
-## Resolution
+## Why Navigation API cancellation was insufficient
 
-The canonical browser-history boundary now treats a Navigation API `traverse`
-as a transaction. The first traversal is admitted; additional traversals are
-cancelled until its `popstate` commit has run the route and child restorers.
-Consequently, a dirty policy can reconstruct the form and transient before a
-later Back chooses its destination. A later deliberate Back is admitted after
-the commit and dismisses only the transient.
+The earlier `traverseInFlight` enhancement assumed every overlapping traverse
+could be cancelled and that one `popstate` would be the commit boundary. Real
+Chromium can already have selected/queued another traversal, and traverse
+cancellation is not a universal guarantee. Resetting the flag did not identify
+which destination generation the later event represented. Consequently the
+stale `popstate` still reached the child controller.
 
-This is central and form-independent: every route or same-route history owner
-uses the same serialization. Browsers without the Navigation API retain the
-existing History API path; no second component mutates history, no sentinel
-entries are added, and no timing delay is used. Cross-document navigation is
-not replaced by a normal `beforeunload` prompt; the enhancement only cancels an
-overlapping traverse while an application traversal is being reconciled.
+## Central invariant and repair
+
+A browser traversal may perform **at most one logical same-route child
+transition**. A destination that skips multiple current layers is treated as a
+stale physical destination, not as permission to consume all those layers.
+After processing the current top layer, the controller compares the browser
+child state with its actual top and uses the canonical Browser History wrapper
+to replace the stale current entry in place when they differ.
+
+This yields the stable-point invariant:
+
+```
+history.state.child.id === KarhaChildHistory.top().id
+```
+
+when a child layer remains. Replacement does not grow history, add padding, or
+trap Back. A later Back is a new transition and can consume the next logical
+layer. The rule is form-independent and applies to every same-route child.
