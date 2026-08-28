@@ -6,6 +6,7 @@ import {readFile} from 'node:fs/promises';
 async function harness(){
   const source=await readFile(new URL('./childHistoryController.js',import.meta.url),'utf8');
   const listeners={}; const entries=[{state:null,url:'#/projects/p/dashboard'}]; let cursor=0;
+  const exitGuards=new Map();
   const window={addEventListener(type,fn){listeners[type]=fn;}};
   const location={href:'#/projects/p/dashboard'};
   const history={
@@ -23,9 +24,10 @@ async function harness(){
     replace(patch,url){history.replaceState(patch,'',url);},
     go(delta){history.go(delta);},
     register(owner,fn){if(owner==='child')listeners.popstate=event=>fn(event.state,event);},
+    registerExitGuard(owner,fn){exitGuards.set(owner,fn);return()=>exitGuards.delete(owner);},
   };
   const context={window,history,location,queueMicrotask,Promise};vm.createContext(context);vm.runInContext(source,context);
-  return {api:window.KarhaChildHistory,history,entries,get cursor(){return cursor;}};
+  return {api:window.KarhaChildHistory,history,entries,exitGuards,get cursor(){return cursor;}};
 }
 
 const settle=()=>new Promise(resolve=>queueMicrotask(resolve));
@@ -131,6 +133,7 @@ test('a stale rapid traversal cannot consume more than one current child generat
   h.api.open('form');
   h.history.back();
   assert.equal(h.api.top().key,'transient:choice');
+  assert.equal(h.exitGuards.get('child')(),true);
 
   // Chromium can commit a queued traversal to the old contracts entry rather
   // than the direct predecessor (the freshly reconstructed form entry).
