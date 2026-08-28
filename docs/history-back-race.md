@@ -21,6 +21,28 @@ The later `popstate` is not reentrant, so `handlingPop` is false and cannot reje
 it. It is a valid browser event, but its destination belongs to the history
 branch that preceded the reconstruction.
 
+## Ordinary prompt Back and the reconstructed-entry race
+
+The first implementation restored a dirty form by calling `pushState(form)`
+from the `popstate` which had just consumed it, and immediately followed that
+with `pushState(transient)`. This looked like the desired
+`contracts -> form -> transient` topology in the synchronous unit harness and
+in desktop CI. It did not use the real form entry that was still the direct
+Forward entry. On Android Chromium a second Back activation could be accepted
+while the first traversal and its newly reconstructed branch were still being
+finalized. That activation could retain a destination selected from the old
+branch and reach the document boundary. Because the reconstructed form was
+exit-protected, `beforeunload` then produced the native Leave-site dialog while
+the app prompt remained in the DOM.
+
+Restoration now traverses Forward to the consumed form entry. The transient is
+not opened or revealed until a `popstate` (or stale-destination repair) has
+settled browser state and controller top on that exact form id. Only then is the
+transient pushed. Thus a visible prompt always has the restored form as its real
+direct predecessor and one ordinary Back consumes only the transient. This is
+event-driven and adds no timeout, padding, sentinel, or contract-specific
+History operation.
+
 ## Why Navigation API cancellation was insufficient
 
 The earlier `traverseInFlight` enhancement assumed every overlapping traverse
@@ -55,7 +77,9 @@ A sufficiently deep queued burst can pass the oldest application entry. No
 `popstate` is delivered before a cross-document traversal replaces the page, so
 same-document reconciliation cannot handle that final step. Once a child policy
 has restored a consumed dirty layer, the layer is marked as document-exit
-protected. The canonical Browser History boundary consults that state from a
+protected. Protection belongs to that in-memory child layer, so consuming the
+layer after Save Draft, discard, successful final Save, or a clean close also
+removes it. The canonical Browser History boundary consults that state from a
 `beforeunload` guard only when Chromium is actually about to discard the
 document. Normal Back-to-prompt and prompt-to-form transitions remain custom
 same-document UI and never use the native dialog. This is the standards-based
