@@ -26,6 +26,19 @@ function projectIdForForm(){
   return projectContext.getProjectId?.() || projectContext.getActiveProjectId?.() || null;
 }
 
+function rerenderContracts(windowRef, projectId){
+  const render = () => {
+    const module = windowRef.KarhaApp?.modules?.get?.('contracts');
+    if(typeof module?.render === 'function'){
+      module.render(projectId);
+      return;
+    }
+    windowRef.KarhaLegacy?.renderContractsPage?.();
+  };
+  if(typeof windowRef.setTimeout === 'function') windowRef.setTimeout(render, 0);
+  else queueMicrotask(render);
+}
+
 function patchExitPrompt({windowRef, form, mode}){
   const documentRef = windowRef.document;
   const overlay = documentRef.querySelector('.global-incomplete-exit-choice');
@@ -119,20 +132,35 @@ export function installContractFormExitBridge({windowRef = window} = {}){
     windowRef.KarhaLegacy?.showToast?.('پیش‌نویس ذخیره شد');
     mode = 'draft';
     form.close(false);
+    rerenderContracts(windowRef, projectId);
     return true;
   };
 
   form.save = function(projectId = null, silent = false){
     const state = form.getState?.();
+    const targetProjectId = projectId || projectIdForForm();
+    const expectedId = state?.id || null;
     if(state){
       state.status = 'final';
       state.isDraft = false;
     }
-    const saved = originalSave(projectId, silent);
-    if(saved){
-      try{ windowRef.localStorage?.removeItem?.(LEGACY_DRAFT_KEY); }catch{}
+
+    // Suppress the legacy success toast until persistence has been verified.
+    const saved = originalSave(targetProjectId, true);
+    if(!saved) return false;
+
+    const persisted = expectedId && targetProjectId
+      ? contractApi.get(targetProjectId, expectedId)
+      : null;
+    if(!persisted || persisted.status !== 'final' || persisted.trashed){
+      windowRef.KarhaLegacy?.showToast?.('ذخیره قرارداد تایید نشد');
+      return false;
     }
-    return saved;
+
+    try{ windowRef.localStorage?.removeItem?.(LEGACY_DRAFT_KEY); }catch{}
+    rerenderContracts(windowRef, targetProjectId);
+    if(!silent) windowRef.KarhaLegacy?.showToast?.('قرارداد ذخیره شد');
+    return true;
   };
 
   form.close = function(fromPopState = false){

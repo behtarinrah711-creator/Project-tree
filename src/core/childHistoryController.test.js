@@ -6,6 +6,7 @@ import {readFile} from 'node:fs/promises';
 async function harness(){
   const source=await readFile(new URL('./childHistoryController.js',import.meta.url),'utf8');
   const listeners={}; const entries=[{state:null,url:'#/projects/p/dashboard'}]; let cursor=0;
+  const exitGuards=new Map();
   const window={addEventListener(type,fn){listeners[type]=fn;}};
   const location={href:'#/projects/p/dashboard'};
   const history={
@@ -17,14 +18,16 @@ async function harness(){
     go(delta){cursor+=delta;listeners.popstate({state:entries[cursor].state});}
   };
   window.KarhaBrowserHistory={
+    current:()=>history.state,
     stateForChild:child=>({child}),
     push(patch,url){history.pushState(patch,'',url);},
     replace(patch,url){history.replaceState(patch,'',url);},
     go(delta){history.go(delta);},
     register(owner,fn){if(owner==='child')listeners.popstate=event=>fn(event.state,event);},
+    registerExitGuard(owner,fn){exitGuards.set(owner,fn);return()=>exitGuards.delete(owner);},
   };
   const context={window,history,location,queueMicrotask,Promise};vm.createContext(context);vm.runInContext(source,context);
-  return {api:window.KarhaChildHistory,history,entries,get cursor(){return cursor;}};
+  return {api:window.KarhaChildHistory,history,entries,exitGuards,get cursor(){return cursor;}};
 }
 
 const settle=()=>new Promise(resolve=>queueMicrotask(resolve));
@@ -118,6 +121,26 @@ test('dirty transient restore preserves the real parent child stack',async()=>{
   assert.equal(h.api.isOpen('contracts'),true);
   assert.equal(h.api.isOpen('form'),true);
   assert.equal(h.api.top().key,'form');
+  assert.equal(h.api.getDepth(),2);
+});
+
+test('a stale rapid traversal cannot consume more than one current child generation',async()=>{
+  const h=await harness();
+  let dismisses=0;
+  h.api.register('contracts',{onPop:()=>assert.fail('parent must not be consumed by stale pop')});
+  h.api.register('form',{onPop:()=>h.api.presentTransient('choice',{onDismiss:()=>dismisses++})});
+  h.api.open('contracts');
+  h.api.open('form');
+  h.history.back();
+  assert.equal(h.api.top().key,'transient:choice');
+  assert.equal(h.exitGuards.get('child')(),true);
+
+  // Chromium can commit a queued traversal to the old contracts entry rather
+  // than the direct predecessor (the freshly reconstructed form entry).
+  h.history.go(-3);
+  assert.equal(dismisses,1);
+  assert.equal(h.api.top().key,'form');
+  assert.equal(h.history.state.child.key,'form');
   assert.equal(h.api.getDepth(),2);
 });
 

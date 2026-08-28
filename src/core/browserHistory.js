@@ -34,11 +34,12 @@ export function createHistoryState({locationRef=globalThis.location,route,child=
 export function installBrowserHistory({windowRef=window}={}){
   if(windowRef.KarhaBrowserHistory) return windowRef.KarhaBrowserHistory;
   if(!windowRef.history){
-    const unavailable=Object.freeze({current:()=>null,push:()=>null,replace:()=>null,back(){},go(){},register:()=>()=>{},stateForRoute:route=>({route,child:null}),stateForChild:child=>({child})});
+    const unavailable=Object.freeze({current:()=>null,push:()=>null,replace:()=>null,back(){},go(){},register:()=>()=>{},registerExitGuard:()=>()=>{},stateForRoute:route=>({route,child:null}),stateForChild:child=>({child})});
     windowRef.KarhaBrowserHistory=unavailable;
     return unavailable;
   }
   const restorers=new Map();
+  const exitGuards=new Map();
   const current=()=>isApplicationHistoryState(windowRef.history.state)
     ? windowRef.history.state
     : createHistoryState({locationRef:windowRef.location});
@@ -66,11 +67,24 @@ export function installBrowserHistory({windowRef=window}={}){
     restorers.get('child')?.(state,event);
   };
   windowRef.addEventListener('popstate',dispatch);
+  // Same-document Back remains a popstate/child-history concern. This guard is
+  // consulted only when the browser is actually about to discard the document
+  // (for example, a queued burst that crossed the oldest app entry).
+  windowRef.addEventListener('beforeunload',event=>{
+    if(![...exitGuards.values()].some(guard=>guard())) return;
+    event.preventDefault();
+    event.returnValue='';
+  });
   const api=Object.freeze({
     current, push, replace,
     back(){windowRef.history.back();},
     go(delta){windowRef.history.go(delta);},
     register(owner,restore){restorers.set(owner,restore);return()=>restorers.delete(owner);},
+    registerExitGuard(owner,guard){
+      if(typeof guard!=='function') return ()=>{};
+      exitGuards.set(owner,guard);
+      return ()=>exitGuards.delete(owner);
+    },
     stateForRoute(route){return {route,child:null};},
     stateForChild(child){return {child};},
   });
