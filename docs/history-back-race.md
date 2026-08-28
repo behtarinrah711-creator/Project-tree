@@ -48,3 +48,15 @@ history.state.child.id === KarhaChildHistory.top().id
 when a child layer remains. Replacement does not grow history, add padding, or
 trap Back. A later Back is a new transition and can consume the next logical
 layer. The rule is form-independent and applies to every same-route child.
+
+## Crossing the document boundary
+
+A sufficiently deep queued burst can pass the oldest application entry. No
+`popstate` is delivered before a cross-document traversal replaces the page, so
+same-document reconciliation cannot handle that final step. Once a child policy
+has restored a consumed dirty layer, the layer is marked as document-exit
+protected. The canonical Browser History boundary consults that state from a
+`beforeunload` guard only when Chromium is actually about to discard the
+document. Normal Back-to-prompt and prompt-to-form transitions remain custom
+same-document UI and never use the native dialog. This is the standards-based
+History API fallback safety net; it adds no history entry and uses no timing.
