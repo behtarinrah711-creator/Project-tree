@@ -77,5 +77,8 @@ test('rapid repeated Back while dirty never escapes the application document', a
   const state = await page.evaluate(() => window.history.state);
   expect(state?.app).toBe('karha');
   expect(['contract-form', 'transient:incomplete-exit-choice']).toContain(state?.child?.key);
+  const controllerTop = await page.evaluate(() => window.KarhaChildHistory?.top?.() || null);
+  expect(controllerTop?.id).toBe(state.child.id);
+  expect(controllerTop?.key).toBe(state.child.key);
   if(await prompt.isVisible()) await expect(prompt).toBeVisible();
 });
