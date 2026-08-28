@@ -147,7 +147,11 @@
       const target=event.state && event.state.child;
       const targetIndex=target ? layers.findIndex(layer=>layer.id===target.id) : -1;
 
-      while(layers.length-1>targetIndex){
+      // One browser traversal represents at most one same-route UI transition.
+      // A rapid Back burst can make Chromium commit an older destination which
+      // skips several child entries. Never apply that stale destination as a
+      // command to pop the entire current in-memory generation.
+      if(layers.length-1>targetIndex){
         const layer=layers.pop();
         let restoredDuringPolicy=false;
         const transition=Object.freeze({
@@ -170,10 +174,6 @@
         }finally{
           activeTransition=previousTransition;
         }
-        // restore() intentionally cancelled this Back by re-entering the child.
-        // Do not continue popping the newly restored child/transient layers in
-        // the same original popstate dispatch.
-        if(restoredDuringPolicy) break;
       }
 
       if(target && targetIndex<0 && !layers.some(layer=>String(layer.id)===String(target.id))){
@@ -182,6 +182,16 @@
           layers.push({...target});
           handlers.onRestore?.(target.payload,Object.freeze({type:'restore',consumed:false,layer:{...target}}));
         }
+      }
+
+      // The browser may have landed below more than one logical child. Repair
+      // that stale destination in place to the controller's actual top. This
+      // neither grows history nor traps Back: a later traversal is a new
+      // transaction and may pop the next logical layer.
+      const canonicalTop=top();
+      const browserChild=window.KarhaBrowserHistory?.current?.()?.child||null;
+      if(canonicalTop && String(browserChild?.id||'')!==String(canonicalTop.id)){
+        window.KarhaBrowserHistory?.replace(window.KarhaBrowserHistory.stateForChild(canonicalTop),location.href);
       }
     }finally{
       handlingPop=false;
