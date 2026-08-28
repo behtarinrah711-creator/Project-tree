@@ -7,6 +7,7 @@
   let handlingPop = false;
   let popSequence = 0;
   let activeTransition = null;
+  const restorationQueue=[];
   const afterPopQueue=[];
   const futurePopQueue=[];
 
@@ -104,14 +105,12 @@
     };
 
     // A dirty-form Back has already consumed the form entry before its policy
-    // can show a confirmation. Re-enter that consumed child synchronously with
-    // a fresh same-route entry, then place the transient modal above it.
-    // This deliberately avoids asynchronous Forward traversal: physical/mobile
-    // Back handling can terminate the browser activity while it is still pending.
+    // can show a confirmation. Restore that exact entry first, then place the
+    // transient modal above it. The modal stays hidden until restoration has
+    // settled, so a visible prompt always owns a real same-document Back entry.
     const transition=activeTransition;
     if(transition?.consumed && typeof transition.restore==='function'){
-      transition.restore();
-      openTransientEntry();
+      transition.restore(openTransientEntry);
     }else{
       openTransientEntry();
     }
@@ -159,12 +158,18 @@
           consumed:true,
           layer:{...layer},
           target:target ? {...target} : null,
-          restore(){
+          restore(onSettled){
             if(restoredDuringPolicy) return false;
             restoredDuringPolicy=true;
             layer.exitProtected=true;
             if(!layers.some(item=>String(item.id)===String(layer.id))) layers.push({...layer});
-            window.KarhaBrowserHistory?.push(window.KarhaBrowserHistory.stateForChild(layer),location.href);
+            if(typeof onSettled==='function') restorationQueue.push({id:String(layer.id),requestedAt:popSequence,callback:onSettled});
+            // The consumed child is still the direct Forward entry. Traverse
+            // back to that real entry instead of reconstructing it with a
+            // pushState from inside the Back popstate. The transient is opened
+            // only after this traversal settles, guaranteeing that its direct
+            // predecessor is the restored child on every browser.
+            window.KarhaBrowserHistory?.go(1);
             return true;
           },
         });
@@ -191,8 +196,20 @@
       // transaction and may pop the next logical layer.
       const canonicalTop=top();
       const browserChild=window.KarhaBrowserHistory?.current?.()?.child||null;
-      if(canonicalTop && String(browserChild?.id||'')!==String(canonicalTop.id)){
+      // During the consuming popstate, the restored child's real Forward entry
+      // has not committed yet. Do not replace the current predecessor out from
+      // under that traversal. A later stale pop is still repaired normally.
+      const awaitingForward=canonicalTop && restorationQueue.some(item=>item.id===String(canonicalTop.id) && item.requestedAt===popSequence);
+      if(canonicalTop && !awaitingForward && String(browserChild?.id||'')!==String(canonicalTop.id)){
         window.KarhaBrowserHistory?.replace(window.KarhaBrowserHistory.stateForChild(canonicalTop),location.href);
+      }
+
+      const settledChild=window.KarhaBrowserHistory?.current?.()?.child||null;
+      for(let i=restorationQueue.length-1;i>=0;i--){
+        if(String(settledChild?.id||'')===restorationQueue[i].id){
+          const [{callback}]=restorationQueue.splice(i,1);
+          callback();
+        }
       }
     }finally{
       handlingPop=false;
