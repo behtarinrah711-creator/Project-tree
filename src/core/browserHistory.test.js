@@ -17,7 +17,7 @@ function harness(hash='#/projects/A/dashboard'){
     go(delta){cursor+=delta;setUrl(stack[cursor].url);listeners.get('popstate')?.({state:stack[cursor].state});},
     back(){this.go(-1);},
   };
-  return {windowRef,stack,get cursor(){return cursor;}};
+  return {windowRef,stack,listeners,get cursor(){return cursor;}};
 }
 
 test('schema is versioned, minimal, serializable and initializes the first entry',()=>{
@@ -43,4 +43,17 @@ test('foreign history state is not consumed by application restorers',()=>{
   const state=createHistoryState({locationRef:{hash:''}});
   assert.equal(isApplicationHistoryState(state),true);
   assert.equal(isApplicationHistoryState({app:'another'}),false);
+});
+
+test('document exit guard is reserved for an actual unload',()=>{
+  const h=harness();const api=installBrowserHistory({windowRef:h.windowRef});
+  let dirty=false;
+  api.registerExitGuard('dirty-child',()=>dirty);
+  const event={prevented:false,preventDefault(){this.prevented=true;}};
+  h.listeners.get('beforeunload')(event);
+  assert.equal(event.prevented,false);
+  dirty=true;
+  h.listeners.get('beforeunload')(event);
+  assert.equal(event.prevented,true);
+  assert.equal(event.returnValue,'');
 });
