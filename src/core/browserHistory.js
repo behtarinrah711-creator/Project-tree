@@ -39,7 +39,6 @@ export function installBrowserHistory({windowRef=window}={}){
     return unavailable;
   }
   const restorers=new Map();
-  let traverseInFlight=false;
   const current=()=>isApplicationHistoryState(windowRef.history.state)
     ? windowRef.history.state
     : createHistoryState({locationRef:windowRef.location});
@@ -59,10 +58,6 @@ export function installBrowserHistory({windowRef=window}={}){
     return state;
   };
   const dispatch=event=>{
-    // popstate is the commit point for the one traverse admitted below. The
-    // owner-specific restorers run synchronously, so any repair push they make
-    // is complete before another traversal can be admitted.
-    traverseInFlight=false;
     const state=event?.state;
     if(!isApplicationHistoryState(state)) return;
     const routeChanged=state.route.hash!==activeRouteHash;
@@ -71,19 +66,6 @@ export function installBrowserHistory({windowRef=window}={}){
     restorers.get('child')?.(state,event);
   };
   windowRef.addEventListener('popstate',dispatch);
-  // History API has no way to cancel an already queued Back. Where the
-  // Navigation API is available, admit only one traverse until its popstate is
-  // reconciled. This prevents a burst from targeting entries underneath a
-  // child that the first pop is about to reconstruct. The History API remains
-  // the sole mutation/dispatch boundary and is the fallback on older engines.
-  windowRef.navigation?.addEventListener?.('navigate',event=>{
-    if(event.navigationType!=='traverse') return;
-    if(traverseInFlight){
-      if(event.cancelable!==false) event.preventDefault();
-      return;
-    }
-    traverseInFlight=true;
-  });
   const api=Object.freeze({
     current, push, replace,
     back(){windowRef.history.back();},
