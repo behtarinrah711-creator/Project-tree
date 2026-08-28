@@ -162,6 +162,7 @@
           restore(){
             if(restoredDuringPolicy) return false;
             restoredDuringPolicy=true;
+            layer.exitProtected=true;
             if(!layers.some(item=>String(item.id)===String(layer.id))) layers.push({...layer});
             window.KarhaBrowserHistory?.push(window.KarhaBrowserHistory.stateForChild(layer),location.href);
             return true;
@@ -206,6 +207,7 @@
   }
 
   window.KarhaBrowserHistory?.register('child',(_state,event)=>onPopState(event));
+  window.KarhaBrowserHistory?.registerExitGuard?.('child',()=>layers.some(layer=>layer.exitProtected));
   window.KarhaChildHistory=Object.freeze({register,open,consume,replace,isOpen,top,
     afterNextPop(callback){if(typeof callback==='function')afterPopQueue.push(callback);},
     afterFuturePop,
