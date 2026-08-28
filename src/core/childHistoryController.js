@@ -45,11 +45,22 @@
     return layer.id;
   }
 
+  function releaseExitProtection(layer){
+    if(!layer) return;
+    layer.exitProtected=false;
+    for(const item of layers){
+      if(String(item.id)===String(layer.id) || item.key===layer.key) item.exitProtected=false;
+    }
+  }
+
   function consume(key, {fromPopState=false, steps=1}={}){
     key=String(key);
     const index=layers.map(layer=>layer.key).lastIndexOf(key);
     if(index<0) return false;
-    layers.splice(index,1);
+    const [removed]=layers.splice(index,1);
+    // Resolving/consuming a child ends its dirty-document protection.
+    // Stay/restore keeps the flag; only consume (draft/discard/save/close) clears it.
+    releaseExitProtection(removed);
     if(!fromPopState){
       window.KarhaBrowserHistory?.go(-Math.max(1,steps));
     }
