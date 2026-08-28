@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 
-async function harness(){
+async function harness({asyncTraversal=false}={}){
   const source=await readFile(new URL('./childHistoryController.js',import.meta.url),'utf8');
   const listeners={}; const entries=[{state:null,url:'#/projects/p/dashboard'}]; let cursor=0;
   const exitGuards=new Map();
@@ -15,7 +15,10 @@ async function harness(){
     replaceState(state,_title,url){entries[cursor]={state,url};},
     back(){cursor--;listeners.popstate({state:entries[cursor].state});},
     forward(){cursor++;listeners.popstate({state:entries[cursor].state});},
-    go(delta){cursor+=delta;listeners.popstate({state:entries[cursor].state});}
+    go(delta){
+      const traverse=()=>{cursor+=delta;listeners.popstate({state:entries[cursor].state});};
+      if(asyncTraversal) queueMicrotask(traverse); else traverse();
+    }
   };
   window.KarhaBrowserHistory={
     current:()=>history.state,
@@ -31,6 +34,26 @@ async function harness(){
 }
 
 const settle=()=>new Promise(resolve=>queueMicrotask(resolve));
+
+test('transient is revealed only after the consumed real Forward entry settles',async()=>{
+  const h=await harness({asyncTraversal:true});
+  let ready=0;
+  h.api.register('contracts');
+  h.api.register('form',{onPop:()=>h.api.presentTransient('choice',{onReady:()=>ready++})});
+  h.api.open('contracts');
+  h.api.open('form');
+
+  h.history.back();
+  assert.equal(ready,0);
+  assert.equal(h.api.top().key,'form');
+
+  await settle();
+  await settle(); // the original form Forward entry commits, then prompt opens
+  assert.equal(ready,1);
+  assert.equal(h.history.state.child.key,'transient:choice');
+  assert.equal(h.entries[h.cursor-1].state.child.key,'form');
+  assert.equal(h.entries[h.cursor-2].state.child.key,'contracts');
+});
 
 test('registration, top-only Back, deduplication and unregister',async()=>{
   const h=await harness(); const events=[];
@@ -70,17 +93,50 @@ test('transient modal Back dismisses only the modal and returns to the restored 
   assert.equal(h.api.isOpen('form'),true);
   assert.equal(h.api.isTransientOpen('unsaved-form'),true);
   assert.match(h.api.top().key,/^transient:unsaved-form$/);
+  assert.equal(h.history.state.child.id,h.api.top().id);
+  assert.equal(h.entries[h.cursor-1].state.child.key,'form');
 
   h.history.back();
   assert.equal(dismisses,1);
   assert.equal(h.api.isTransientOpen('unsaved-form'),false);
   assert.equal(h.api.isOpen('form'),true);
   assert.equal(h.api.top().key,'form');
+  assert.equal(h.history.state.child.id,h.api.top().id);
+  assert.equal(h.exitGuards.get('child')(),true);
 
   h.history.back();
   await settle();
   assert.equal(prompts,2);
   assert.equal(h.api.isTransientOpen('unsaved-form'),true);
+});
+
+test('dirty form and transient settle for ten Back dismissal transactions',async()=>{
+  const h=await harness();
+  let dismisses=0;
+  h.api.register('form',{onPop:()=>h.api.presentTransient('choice',{onDismiss:()=>dismisses++})});
+  h.api.open('form');
+
+  for(let cycle=0;cycle<10;cycle++){
+    h.history.back();
+    assert.equal(h.api.top().key,'transient:choice');
+    assert.equal(h.history.state.child.id,h.api.top().id);
+    assert.equal(h.entries[h.cursor-1].state.child.key,'form');
+
+    h.history.back();
+    assert.equal(h.api.top().key,'form');
+    assert.equal(h.history.state.child.id,h.api.top().id);
+  }
+  assert.equal(dismisses,10);
+});
+
+test('document exit protection is released when the restored dirty child resolves',async()=>{
+  const h=await harness();
+  h.api.register('form',{onPop:()=>h.api.presentTransient('choice')});
+  h.api.open('form');
+  h.history.back();
+  assert.equal(h.exitGuards.get('child')(),true);
+  h.api.dismissTransient('choice',{after:()=>h.api.consume('form',{fromPopState:true})});
+  assert.equal(h.exitGuards.get('child')(),false);
 });
 
 test('dirty transient restore preserves the real parent child stack',async()=>{
