@@ -24,6 +24,24 @@ function money(v){
   if(v===null||v===undefined||v==='') return 'بدون مبلغ';
   try { return new Intl.NumberFormat('fa-IR').format(Number(v)); } catch { return String(v); }
 }
+function creationStamp(value){
+  const timestamp=Number(value);
+  if(!Number.isFinite(timestamp) || timestamp<=0) return null;
+  const date=new Date(timestamp);
+  if(Number.isNaN(date.getTime())) return null;
+  return {
+    date:new Intl.DateTimeFormat('fa-IR-u-ca-persian',{year:'numeric',month:'long',day:'numeric'}).format(date),
+    time:new Intl.DateTimeFormat('fa-IR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(date),
+  };
+}
+function appendCreationStamp(row,createdAt){
+  const stamp=creationStamp(createdAt);
+  if(!stamp) return;
+  const wrap=document.createElement('div'); wrap.className='contract-created-stamp';
+  const date=document.createElement('div'); date.className='contract-created-date'; date.textContent=stamp.date;
+  const time=document.createElement('div'); time.className='contract-created-time'; time.textContent=stamp.time;
+  wrap.append(date,time); row.appendChild(wrap);
+}
 function searchInput(placeholder,onInput){
   const wrap=document.createElement('div');
   wrap.className='workspace-search';
@@ -116,7 +134,7 @@ export const contractsModule={
         }
         this.render(id);
       };
-      actions.append(edit,del); row.append(main,actions);
+      actions.append(edit,del); row.append(main,actions); appendCreationStamp(row,c.createdAt);
       main.onclick=()=>legacy('openContractForm',c.id);
       listWrap.appendChild(row);
     });
@@ -142,9 +160,9 @@ export const contractsModule={
           const m=document.createElement('div'); m.className='contract-meta'; m.textContent=meta;
           main.append(t,m);
           const actions=document.createElement('div'); actions.className='contract-actions';
-          const edit=document.createElement('button'); edit.className='contract-action'; edit.textContent='✎';
+          const edit=document.createElement('button'); edit.type='button'; edit.className='contract-action'; edit.textContent='✎';
           edit.onclick=e=>{e.stopPropagation();legacy('openContractForm',c.id);};
-          const del=document.createElement('button'); del.className='contract-action danger'; del.textContent='×';
+          const del=document.createElement('button'); del.type='button'; del.className='contract-action danger'; del.textContent='×';
           del.onclick=e=>{
             e.stopPropagation();
             if(!confirm('آیا از حذف این قرارداد اطمینان دارید؟'))return;
@@ -156,7 +174,7 @@ export const contractsModule={
             }
             this.render(id);
           };
-          actions.append(edit,del); row.append(main,actions);
+          actions.append(edit,del); row.append(main,actions); appendCreationStamp(row,c.createdAt);
           main.onclick=()=>legacy('openContractForm',c.id);
           listWrap.appendChild(row);
         });
