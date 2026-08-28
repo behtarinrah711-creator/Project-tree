@@ -88,7 +88,8 @@ export const contractApi = {
     const start = Math.max(0, Number(cursor) || 0);
     const size = clampLimit(limit);
     const all = contractRepository.list(projectId)
-      .filter(contract => includeTrashed || !contract.trashed);
+      .filter(contract => includeTrashed || !contract.trashed)
+      .sort((a,b)=>(Number(b.createdAt)||0)-(Number(a.createdAt)||0));
     return {
       items: all.slice(start, start + size),
       cursor: start + size < all.length ? start + size : null,
