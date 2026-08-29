@@ -114,10 +114,6 @@
       if(!current) return;
       open(internalKey,{key,payload});
       current.ready=true;
-      // Let the two synchronous entries become the settled browser topology
-      // before revealing UI. This microtask does not gate navigation; it only
-      // prevents a prompt from painting between the restored child and its
-      // transient entry.
       queueMicrotask(()=>{
         if(transientStates.get(key)===current) current.onReady?.({key,internalKey});
       });
@@ -129,10 +125,6 @@
       }
     };
 
-    // A dirty-form Back has already consumed the form entry before its policy
-    // can show a confirmation. Restore that exact entry first, then place the
-    // transient modal above it. The modal stays hidden until restoration has
-    // settled, so a visible prompt always owns a real same-document Back entry.
     const transition=activeTransition;
     if(transition?.consumed && typeof transition.restore==='function'){
       transition.restore(openTransientEntry);
@@ -170,11 +162,6 @@
     try{
       const target=event.state && event.state.child;
       const targetIndex=target ? layers.findIndex(layer=>layer.id===target.id) : -1;
-
-      // One browser traversal represents at most one same-route UI transition.
-      // A rapid Back burst can make Chromium commit an older destination which
-      // skips several child entries. Never apply that stale destination as a
-      // command to pop the entire current in-memory generation.
       const controllerRequestedTraversal=traversalTransaction?.origin==='controller';
       if(!controllerRequestedTraversal && layers.length-1>targetIndex){
         const layer=layers.pop();
@@ -189,12 +176,6 @@
             restoredDuringPolicy=true;
             layer.exitProtected=true;
             if(!layers.some(item=>String(item.id)===String(layer.id))) layers.push({...layer});
-            // Commit the restored child synchronously. A Forward traversal
-            // leaves the browser on the consumed predecessor while it is
-            // pending, so already queued Back requests can cross the oldest app
-            // entry before the exit guard participates. Pushing here moves the
-            // active index back onto an app-owned child and truncates that stale
-            // forward branch before the transient is exposed.
             window.KarhaBrowserHistory?.push(window.KarhaBrowserHistory.stateForChild(layer),location.href);
             onSettled?.();
             return true;
@@ -217,10 +198,6 @@
         }
       }
 
-      // The browser may have landed below more than one logical child. Repair
-      // that stale destination in place to the controller's actual top. This
-      // neither grows history nor traps Back: a later traversal is a new
-      // transaction and may pop the next logical layer.
       const canonicalTop=top();
       const browserChild=window.KarhaBrowserHistory?.current?.()?.child||null;
       if(canonicalTop && String(browserChild?.id||'')!==String(canonicalTop.id)){
@@ -239,10 +216,6 @@
     }
   }
 
-  // Navigation API interception runs before a traversal commits. Admit only
-  // the direct logical predecessor and only one traversal per child
-  // transaction; stale destinations selected by a rapid Back burst are
-  // cancelled by the canonical Browser History owner before document exit.
   window.KarhaBrowserHistory?.registerTraversalGuard?.('child',context=>{
     const currentTop=top();
     const destination=context?.destinationState?.child||null;
@@ -253,6 +226,12 @@
       return false;
     }
     if(!currentTop) return false;
+
+    const handlers=registration(currentTop.key);
+    if(typeof handlers?.onTraverse==='function' && handlers.onTraverse(context,{...currentTop})===true){
+      return true;
+    }
+
     if(context?.sameDocument!==true) return true;
     const predecessor=layers[layers.length-2]||null;
     traversalTransaction=Object.freeze({phase:'admitted',origin:'browser',from:{...currentTop},to:predecessor?{...predecessor}:null,destination:destination?{...destination}:null});
@@ -271,5 +250,4 @@
     getDepth:()=>layers.length});
 })();
 
-/* Transitional classic-call facade: ownership still remains in this controller. */
 function pushWorkspaceHistory(kind){ return window.KarhaChildHistory?.open(kind); }
