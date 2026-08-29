@@ -34,11 +34,12 @@ export function createHistoryState({locationRef=globalThis.location,route,child=
 export function installBrowserHistory({windowRef=window}={}){
   if(windowRef.KarhaBrowserHistory) return windowRef.KarhaBrowserHistory;
   if(!windowRef.history){
-    const unavailable=Object.freeze({current:()=>null,push:()=>null,replace:()=>null,back(){},go(){},register:()=>()=>{},registerExitGuard:()=>()=>{},stateForRoute:route=>({route,child:null}),stateForChild:child=>({child})});
+    const unavailable=Object.freeze({current:()=>null,push:()=>null,replace:()=>null,back(){},go(){},register:()=>()=>{},registerTraversalGuard:()=>()=>{},registerExitGuard:()=>()=>{},supportsTraversalInterception:false,stateForRoute:route=>({route,child:null}),stateForChild:child=>({child})});
     windowRef.KarhaBrowserHistory=unavailable;
     return unavailable;
   }
   const restorers=new Map();
+  const traversalGuards=new Map();
   const exitGuards=new Map();
   const current=()=>isApplicationHistoryState(windowRef.history.state)
     ? windowRef.history.state
@@ -67,6 +68,27 @@ export function installBrowserHistory({windowRef=window}={}){
     restorers.get('child')?.(state,event);
   };
   windowRef.addEventListener('popstate',dispatch);
+  const navigationRef=windowRef.navigation;
+  const supportsTraversalInterception=!!navigationRef?.addEventListener;
+  if(supportsTraversalInterception){
+    navigationRef.addEventListener('navigate',event=>{
+      if(event?.navigationType!=='traverse') return;
+      let destinationState=null;
+      try{ destinationState=event.destination?.getState?.()??null; }catch{}
+      const context=Object.freeze({
+        navigationType:'traverse',
+        destinationState,
+        sameDocument:event.destination?.sameDocument===true,
+        cancelable:event.cancelable!==false,
+      });
+      // A guard must not enter an admitted lifecycle when the browser cannot
+      // honor cancellation. The existing beforeunload guard remains the only
+      // standards-based last resort for that traversal.
+      if(!context.cancelable) return;
+      if(![...traversalGuards.values()].some(guard=>guard(context))) return;
+      event.preventDefault();
+    });
+  }
   // Same-document Back remains a popstate/child-history concern. This guard is
   // consulted only when the browser is actually about to discard the document
   // (for example, a queued burst that crossed the oldest app entry).
@@ -80,6 +102,12 @@ export function installBrowserHistory({windowRef=window}={}){
     back(){windowRef.history.back();},
     go(delta){windowRef.history.go(delta);},
     register(owner,restore){restorers.set(owner,restore);return()=>restorers.delete(owner);},
+    registerTraversalGuard(owner,guard){
+      if(typeof guard!=='function') return ()=>{};
+      traversalGuards.set(owner,guard);
+      return ()=>traversalGuards.delete(owner);
+    },
+    supportsTraversalInterception,
     registerExitGuard(owner,guard){
       if(typeof guard!=='function') return ()=>{};
       exitGuards.set(owner,guard);

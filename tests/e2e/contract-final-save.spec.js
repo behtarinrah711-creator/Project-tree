@@ -57,6 +57,15 @@ test('Save persists a final contract and renders it in the contracts list', asyn
     return next.id;
   });
 
+  // Arm the restored dirty-child protection, then dismiss only the transient
+  // so successful final Save must also release that protection.
+  await page.goBack();
+  const prompt = page.locator('.global-incomplete-exit-choice');
+  await expect(prompt).toBeVisible();
+  await page.goBack();
+  await expect(prompt).toBeHidden();
+  await expect(page.locator('#contractFormPage')).toBeVisible();
+
   await page.locator('#contractFormActions .if-save').click();
   await expect(page.locator('#contractFormPage')).toBeHidden();
   await expect(page.locator('#contractsPage')).toBeVisible();
@@ -72,6 +81,13 @@ test('Save persists a final contract and renders it in the contracts list', asyn
   expect(stored.status).toBe('final');
   expect(stored.isDraft).toBe(false);
   expect(stored.contractPlace).toBe('کارگاه تست');
+
+  const exitGuardActive = await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(exitGuardActive).toBe(false);
 
   await expect(page.locator('.contract-row').filter({ hasText: 'کارگاه تست' }).or(page.locator('.contract-row').filter({ hasText: 'قرارداد' })).first()).toBeVisible();
 });
