@@ -19,9 +19,17 @@ async function openDirtyContract(page,{dirty=true}={}){
   }, project);
 
   await page.goto('/index.html#/projects/e2e-contract-back-stress/dashboard');
-  await page.waitForFunction(() => Boolean(window.KarhaLegacy && window.KarhaApp && window.KarhaChildHistory));
+  await page.waitForFunction(projectId => {
+    try {
+      window.KarhaLegacy?.renderDrawerProjectList?.();
+      return Boolean(document.querySelector(`#drawerProjectList .drawer-project-row[data-project-id="${projectId}"]`));
+    } catch {
+      return false;
+    }
+  }, project.id);
+  const projectRow = page.locator('#drawerProjectList .drawer-project-row[data-project-id="e2e-contract-back-stress"]');
   await page.locator('#hamburgerBtn').click();
-  await page.locator('#drawerProjectList .drawer-project-row[data-project-id="e2e-contract-back-stress"]').click();
+  await projectRow.click();
   await page.locator('#bottomReportsBtn').click();
   await page.getByText('قرارداد پیمانکاران', { exact: true }).first().click();
   await expect(page.locator('#contractsPage')).toBeVisible();
