@@ -106,7 +106,7 @@ function renderRecursiveProjectExport(){
   rows.forEach(row=>{
     const el=document.createElement('div');
     el.className='export-row'+(row.depth?' sub':'');
-    el.style.paddingRight=(row.depth*24)+'px';
+    el.dataset.exportDepth=String(row.depth);
     const cb=document.createElement('input'); cb.type='checkbox'; cb.className='exp-check'; cb.checked=state.selected.has(row.key);
     cb.onchange=()=>{
       descendantKeys(rows,row).forEach(k=>cb.checked?state.selected.add(k):state.selected.delete(k));
@@ -176,8 +176,8 @@ async function generateRecursiveJpeg(){
   const built=buildRows(project),meta=sharedMeta(project);
   const total=state.showCost?'<tr class="total-row"><td></td><td>جمع کل</td><td class="cost-cell">'+amountHtml(built.total)+'</td></tr>':'';
   const costHead=state.showCost?'<th>مبلغ</th>':'';
-  const wrap=document.createElement('div'); wrap.dir='rtl'; wrap.style.cssText='position:fixed;left:-9999px;top:0;width:800px;padding:28px 24px;background:#fff;color:#202124;box-sizing:border-box;z-index:-1';
-  wrap.innerHTML='<style>'+exportStyles()+'</style><div class="pdf-top"><h1>'+escapeHtml(project.name)+'</h1><div class="meta">تاریخ: '+meta.date+'</div></div><table><thead><tr><th></th><th>مورد</th>'+costHead+'</tr></thead><tbody>'+built.html+total+'</tbody></table>'+meta.note+meta.sig;
+  const wrap=document.createElement('div'); wrap.id='recursiveJpegExportCapture'; wrap.dir='rtl';
+  wrap.innerHTML='<style>#recursiveJpegExportCapture{position:fixed;left:-9999px;top:0;width:800px;padding:28px 24px;background:#fff;color:#202124;box-sizing:border-box;z-index:-1}'+exportStyles()+'</style><div class="pdf-top"><h1>'+escapeHtml(project.name)+'</h1><div class="meta">تاریخ: '+meta.date+'</div></div><table><thead><tr><th></th><th>مورد</th>'+costHead+'</tr></thead><tbody>'+built.html+total+'</tbody></table>'+meta.note+meta.sig;
   document.body.appendChild(wrap); toast('در حال ساخت تصویر…');
   try{ await new Promise(r=>setTimeout(r,200)); const canvas=await window.html2canvas(wrap,{scale:2,backgroundColor:'#ffffff',useCORS:true,allowTaint:true,logging:false,windowWidth:800}); const a=document.createElement('a'); a.href=canvas.toDataURL('image/jpeg',0.92); a.download=(project.name||'export').replace(/[\\/:*?"<>|]/g,'_').slice(0,40)+'.jpg'; document.body.appendChild(a);a.click();a.remove();toast('تصویر JPEG ذخیره شد'); }catch(error){console.error(error);toast('ساخت تصویر ناموفق بود');}finally{wrap.remove();}
 }
@@ -198,7 +198,7 @@ function install(){
 
 if(typeof window!=='undefined'){
   if(window.KarhaExportView) install();
-  else window.addEventListener('karha:ready',install,{once:true});
+  else if(typeof window.addEventListener==='function') window.addEventListener('karha:ready',install,{once:true});
 }
 
 export {flattenProject,openRecursiveProjectExport,renderRecursiveProjectExport,generateRecursivePdf,generateRecursiveJpeg};
