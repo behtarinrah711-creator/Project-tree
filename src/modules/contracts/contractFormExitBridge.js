@@ -86,6 +86,13 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   let mode = 'new';
   let exitSession = null;
 
+  const childOpen = id => {
+    const el = documentRef?.getElementById?.(id);
+    return !!(el && !el.classList.contains('hidden'));
+  };
+  const hasBlockingChild = () => childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop');
+  const hasPendingChanges = () => !!exitSession?.isDirty?.() || !!form.isDirty?.();
+
   form.open = function(id = null, projectId = null){
     const opened = originalOpen(id, projectId);
     if(!opened) return opened;
@@ -102,21 +109,18 @@ export function installContractFormExitBridge({windowRef = window} = {}){
   };
 
   form.requestClose = function(fromPopState = false, transition = null){
-    const doc = windowRef.document;
-    const childOpen = id => {
-      const el = doc?.getElementById?.(id);
-      return !!(el && !el.classList.contains('hidden'));
-    };
-    if(childOpen('searchTemplatePage') || childOpen('numpadOverlay') || childOpen('jalaliPop')) return false;
+    if(hasBlockingChild()) return false;
 
-    const sessionDirty = !!exitSession?.isDirty?.();
-    const flagDirty = !!form.isDirty?.();
-    const changed = sessionDirty || flagDirty;
+    const changed = hasPendingChanges();
     if(changed) originalSetDirty(true);
 
     const result = originalRequestClose(fromPopState, transition);
     if(changed && result === false) patchExitPrompt({windowRef, form, mode});
     return result;
+  };
+
+  form.shouldPreflightExit = function(){
+    return !hasBlockingChild() && hasPendingChanges();
   };
 
   form.saveDraft = function(){

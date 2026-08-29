@@ -2,12 +2,33 @@
 (function installContractHistoryController(){
   const history=window.KarhaChildHistory;
   let formPopDispatchDepth=0;
+  let traversalExitPending=false;
 
   function isConsumedFormTransition(transition){
     return !!(transition?.consumed && transition?.layer?.key==='contract-form');
   }
 
   history?.register('contract-form',{
+    onTraverse:()=>{
+      const form=window.KarhaRealContractForm;
+      if(!form?.shouldPreflightExit?.()) return false;
+
+      // Cancel the browser traversal first. Run the normal contract exit flow
+      // in the next task, after Navigation API cancellation has fully settled;
+      // pushing the transient history entry from the navigate-event microtask
+      // can race Chromium and leave the prompt mounted but still hidden.
+      if(!traversalExitPending){
+        traversalExitPending=true;
+        const dispatchExit=()=>{
+          traversalExitPending=false;
+          const activeForm=window.KarhaRealContractForm;
+          if(activeForm?.shouldPreflightExit?.()) activeForm.requestClose?.(false,null);
+        };
+        if(typeof window.setTimeout==='function') window.setTimeout(dispatchExit,0);
+        else queueMicrotask(dispatchExit);
+      }
+      return true;
+    },
     onPop:(_payload,transition)=>{
       const consumed=isConsumedFormTransition(transition);
       if(consumed) formPopDispatchDepth++;
@@ -30,8 +51,6 @@
 
   window.KarhaContractHistory=Object.freeze({
     enterForm(){
-      // A consumed Back entry must stay consumed while its onPop policy is running.
-      // Dirty-form Stay may restore it later, after this synchronous dispatch ends.
       if(formPopDispatchDepth>0) return false;
       return history?.open('contract-form');
     },
