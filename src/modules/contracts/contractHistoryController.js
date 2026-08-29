@@ -13,17 +13,19 @@
       const form=window.KarhaRealContractForm;
       if(!form?.shouldPreflightExit?.()) return false;
 
-      // The Navigation API guard runs before the browser traversal commits.
-      // Cancel that traversal first, then run the exact same form-exit policy
-      // used by the normal contract Back flow. Showing the transient prompt
-      // inside the navigate event can race with cancellation and disappear.
+      // Cancel the browser traversal first. Run the normal contract exit flow
+      // in the next task, after Navigation API cancellation has fully settled;
+      // pushing the transient history entry from the navigate-event microtask
+      // can race Chromium and leave the prompt mounted but still hidden.
       if(!traversalExitPending){
         traversalExitPending=true;
-        queueMicrotask(()=>{
+        const dispatchExit=()=>{
           traversalExitPending=false;
           const activeForm=window.KarhaRealContractForm;
           if(activeForm?.shouldPreflightExit?.()) activeForm.requestClose?.(false,null);
-        });
+        };
+        if(typeof window.setTimeout==='function') window.setTimeout(dispatchExit,0);
+        else queueMicrotask(dispatchExit);
       }
       return true;
     },
