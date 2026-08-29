@@ -25,9 +25,13 @@
   function top(){ return layers[layers.length-1] || null; }
   function isOpen(key){ return layers.some(layer=>layer.key===String(key)); }
   function transientKey(key){ return `transient:${String(key)}`; }
-  function sameChild(left,right){
-    if(!left || !right) return !left && !right;
-    return String(left.id)===String(right.id) && String(left.key)===String(right.key);
+  function releaseTraversalAfterPaint(transaction){
+    if(!transaction) return;
+    const release=()=>{
+      if(traversalTransaction===transaction) traversalTransaction=null;
+    };
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(release);
+    else release();
   }
 
   function register(key, handlers={}){
@@ -65,7 +69,7 @@
     releaseExitProtection(removed);
     if(!fromPopState){
       const expected=top();
-      traversalTransaction={phase:'requested',to:expected?{...expected}:null};
+      traversalTransaction={phase:'requested',origin:'controller',to:expected?{...expected}:null};
       window.KarhaBrowserHistory?.go(-Math.max(1,steps));
     }
     return true;
@@ -171,7 +175,8 @@
       // A rapid Back burst can make Chromium commit an older destination which
       // skips several child entries. Never apply that stale destination as a
       // command to pop the entire current in-memory generation.
-      if(layers.length-1>targetIndex){
+      const controllerRequestedTraversal=traversalTransaction?.origin==='controller';
+      if(!controllerRequestedTraversal && layers.length-1>targetIndex){
         const layer=layers.pop();
         let restoredDuringPolicy=false;
         const transition=Object.freeze({
@@ -204,7 +209,7 @@
         }
       }
 
-      if(target && targetIndex<0 && !layers.some(layer=>String(layer.id)===String(target.id))){
+      if(!controllerRequestedTraversal && target && targetIndex<0 && !layers.some(layer=>String(layer.id)===String(target.id))){
         const handlers=registration(target.key);
         if(handlers){
           layers.push({...target});
@@ -222,7 +227,7 @@
         window.KarhaBrowserHistory?.replace(window.KarhaBrowserHistory.stateForChild(canonicalTop),location.href);
       }
     }finally{
-      traversalTransaction=null;
+      releaseTraversalAfterPaint(traversalTransaction);
       handlingPop=false;
       afterPopQueue.splice(0).forEach(callback=>callback());
       for(let i=futurePopQueue.length-1;i>=0;i--){
@@ -243,14 +248,14 @@
     const destination=context?.destinationState?.child||null;
     if(traversalTransaction){
       if(traversalTransaction.phase!=='requested') return true;
-      if(context?.sameDocument!==true || !sameChild(destination,traversalTransaction.to)) return true;
-      traversalTransaction=Object.freeze({...traversalTransaction,phase:'admitted'});
+      if(context?.sameDocument!==true) return true;
+      traversalTransaction=Object.freeze({...traversalTransaction,phase:'admitted',destination:destination?{...destination}:null});
       return false;
     }
     if(!currentTop) return false;
+    if(context?.sameDocument!==true) return true;
     const predecessor=layers[layers.length-2]||null;
-    if(context?.sameDocument!==true || !sameChild(destination,predecessor)) return true;
-    traversalTransaction=Object.freeze({phase:'admitted',from:{...currentTop},to:predecessor?{...predecessor}:null});
+    traversalTransaction=Object.freeze({phase:'admitted',origin:'browser',from:{...currentTop},to:predecessor?{...predecessor}:null,destination:destination?{...destination}:null});
     return false;
   });
   window.KarhaBrowserHistory?.register('child',(_state,event)=>onPopState(event));

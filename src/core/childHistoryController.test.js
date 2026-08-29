@@ -324,3 +324,35 @@ test('controller-requested transient dismissal admits its exact traversal once',
   assert.equal(h.api.currentTraversalTransaction(),null);
   assert.equal(h.history.state.child.id,h.api.top().id);
 });
+
+test('a fresh Back admits a stale same-document destination for canonical repair',async()=>{
+  const h=await harness();
+  h.api.register('contracts');
+  h.api.register('form',{onPop:()=>h.api.presentTransient('choice')});
+  h.api.open('contracts');
+  h.api.open('form');
+  h.history.back();
+  await settle();
+
+  const inspect=h.traversalGuards.get('child');
+  const staleContracts=h.entries[h.cursor-2].state;
+  assert.equal(staleContracts.child.key,'contracts');
+  assert.equal(inspect({sameDocument:true,destinationState:staleContracts}),false);
+  assert.equal(h.api.currentTraversalTransaction().origin,'browser');
+  assert.equal(inspect({sameDocument:true,destinationState:staleContracts}),true);
+});
+
+test('controller dismissal admits a stale destination without consuming the restored form',async()=>{
+  const h=await harness({asyncTraversal:true});
+  h.api.open('contracts');
+  h.api.open('form');
+  h.api.presentTransient('choice');
+  h.api.dismissTransient('choice');
+
+  const inspect=h.traversalGuards.get('child');
+  const staleContracts=h.entries[h.cursor-2].state;
+  assert.equal(inspect({sameDocument:true,destinationState:staleContracts}),false);
+  await settle();
+  assert.equal(h.api.top().key,'form');
+  assert.equal(h.api.getDepth(),2);
+});
