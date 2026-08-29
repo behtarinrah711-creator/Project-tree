@@ -2,6 +2,7 @@
 (function installContractHistoryController(){
   const history=window.KarhaChildHistory;
   let formPopDispatchDepth=0;
+  let traversalExitPending=false;
 
   function isConsumedFormTransition(transition){
     return !!(transition?.consumed && transition?.layer?.key==='contract-form');
@@ -11,7 +12,19 @@
     onTraverse:()=>{
       const form=window.KarhaRealContractForm;
       if(!form?.shouldPreflightExit?.()) return false;
-      form.requestClose?.(false,null);
+
+      // The Navigation API guard runs before the browser traversal commits.
+      // Cancel that traversal first, then run the exact same form-exit policy
+      // used by the normal contract Back flow. Showing the transient prompt
+      // inside the navigate event can race with cancellation and disappear.
+      if(!traversalExitPending){
+        traversalExitPending=true;
+        queueMicrotask(()=>{
+          traversalExitPending=false;
+          const activeForm=window.KarhaRealContractForm;
+          if(activeForm?.shouldPreflightExit?.()) activeForm.requestClose?.(false,null);
+        });
+      }
       return true;
     },
     onPop:(_payload,transition)=>{
