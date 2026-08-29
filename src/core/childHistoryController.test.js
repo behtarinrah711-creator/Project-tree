@@ -7,6 +7,10 @@ async function harness({asyncTraversal=false}={}){
   const source=await readFile(new URL('./childHistoryController.js',import.meta.url),'utf8');
   const listeners={}; const entries=[{state:null,url:'#/projects/p/dashboard'}]; let cursor=0;
   const exitGuards=new Map();
+  const traversalGuards=new Map();
+  const traversalQueue=[];
+  let requestedCursor=cursor;
+  let beforeUnloadCalls=0;
   const window={addEventListener(type,fn){listeners[type]=fn;}};
   const location={href:'#/projects/p/dashboard'};
   const history={
@@ -27,15 +31,39 @@ async function harness({asyncTraversal=false}={}){
     replace(patch,url){history.replaceState(patch,'',url);},
     go(delta){history.go(delta);},
     register(owner,fn){if(owner==='child')listeners.popstate=event=>fn(event.state,event);},
+    registerTraversalGuard(owner,fn){traversalGuards.set(owner,fn);return()=>traversalGuards.delete(owner);},
     registerExitGuard(owner,fn){exitGuards.set(owner,fn);return()=>exitGuards.delete(owner);},
   };
   const context={window,history,location,queueMicrotask,Promise};vm.createContext(context);vm.runInContext(source,context);
-  return {api:window.KarhaChildHistory,history,entries,exitGuards,get cursor(){return cursor;}};
+  return {
+    api:window.KarhaChildHistory,history,entries,exitGuards,traversalGuards,
+    requestBack(){
+      if(traversalQueue.length===0) requestedCursor=cursor;
+      requestedCursor--;
+      const target=requestedCursor;
+      const destinationState=target>=0 ? entries[target]?.state||null : null;
+      const blocked=traversalGuards.get('child')?.({sameDocument:target>=0,destinationState,cancelable:true})===true;
+      const request={target,destinationState,blocked};
+      traversalQueue.push(request);
+      return request;
+    },
+    commitNext(){
+      const request=traversalQueue.shift();
+      if(!request || request.blocked) return request||null;
+      if(request.target<0){beforeUnloadCalls++;return {...request,blank:true};}
+      cursor=request.target;
+      listeners.popstate({state:request.destinationState});
+      requestedCursor=cursor;
+      return request;
+    },
+    get beforeUnloadCalls(){return beforeUnloadCalls;},
+    get cursor(){return cursor;}
+  };
 }
 
 const settle=()=>new Promise(resolve=>queueMicrotask(resolve));
 
-test('transient is revealed only after the consumed real Forward entry settles',async()=>{
+test('transient is revealed only after synchronous restored topology settles',async()=>{
   const h=await harness({asyncTraversal:true});
   let ready=0;
   h.api.register('contracts');
@@ -45,14 +73,71 @@ test('transient is revealed only after the consumed real Forward entry settles',
 
   h.history.back();
   assert.equal(ready,0);
-  assert.equal(h.api.top().key,'form');
+  assert.equal(h.api.top().key,'transient:choice');
 
   await settle();
-  await settle(); // the original form Forward entry commits, then prompt opens
   assert.equal(ready,1);
   assert.equal(h.history.state.child.key,'transient:choice');
   assert.equal(h.entries[h.cursor-1].state.child.key,'form');
   assert.equal(h.entries[h.cursor-2].state.child.key,'contracts');
+});
+
+test('pre-traversal transaction admits one direct predecessor and rejects queued stale and blank destinations',async()=>{
+  const h=await harness();
+  h.api.register('contracts');
+  h.api.register('form',{onPop:()=>h.api.presentTransient('choice')});
+  h.api.open('contracts');
+  h.api.open('form');
+  const inspect=h.traversalGuards.get('child');
+  const contracts=h.entries[h.cursor-1].state;
+
+  assert.equal(inspect({sameDocument:true,destinationState:contracts}),false);
+  assert.equal(h.api.currentTraversalTransaction().from.key,'form');
+  assert.equal(inspect({sameDocument:true,destinationState:{child:null}}),true);
+  assert.equal(inspect({sameDocument:false,destinationState:null}),true);
+
+  h.history.back();
+  await settle();
+  assert.equal(h.api.currentTraversalTransaction(),null);
+  assert.equal(h.api.top().key,'transient:choice');
+  assert.equal(h.history.state.child.id,h.api.top().id);
+
+  const form=h.entries[h.cursor-1].state;
+  assert.equal(inspect({sameDocument:true,destinationState:form}),false);
+  h.history.back();
+  assert.equal(h.api.top().key,'form');
+  assert.equal(h.history.state.child.id,h.api.top().id);
+});
+
+test('Back Back Back snapshots before first popstate commit only the direct predecessor',async()=>{
+  const h=await harness();
+  h.api.register('contracts');
+  h.api.register('form',{onPop:()=>h.api.presentTransient('choice')});
+  h.api.open('contracts');
+  h.api.open('form');
+
+  const first=h.requestBack();
+  const second=h.requestBack();
+  const third=h.requestBack();
+  assert.equal(first.blocked,false);
+  assert.equal(second.blocked,true);
+  assert.equal(third.blocked,true);
+
+  h.commitNext();
+  h.commitNext();
+  h.commitNext();
+  await settle();
+  assert.equal(h.beforeUnloadCalls,0);
+  assert.equal(h.api.top().key,'transient:choice');
+  assert.equal(h.history.state.child.id,h.api.top().id);
+  assert.equal(h.history.state.child.key,h.api.top().key);
+
+  const dismiss=h.requestBack();
+  assert.equal(dismiss.blocked,false);
+  h.commitNext();
+  assert.equal(h.beforeUnloadCalls,0);
+  assert.equal(h.api.top().key,'form');
+  assert.equal(h.history.state.child.id,h.api.top().id);
 });
 
 test('registration, top-only Back, deduplication and unregister',async()=>{
@@ -139,6 +224,18 @@ test('document exit protection is released when the restored dirty child resolve
   assert.equal(h.exitGuards.get('child')(),false);
 });
 
+test('all resolved form outcomes release document exit protection',async()=>{
+  for(const outcome of ['Save Draft','No','final Save','clean close']){
+    const h=await harness();
+    h.api.register('form',{onPop:()=>h.api.presentTransient(`choice-${outcome}`)});
+    h.api.open('form');
+    h.history.back();
+    assert.equal(h.exitGuards.get('child')(),true,outcome);
+    h.api.dismissTransient(`choice-${outcome}`,{after:()=>h.api.consume('form',{fromPopState:true})});
+    assert.equal(h.exitGuards.get('child')(),false,outcome);
+  }
+});
+
 test('dirty transient restore preserves the real parent child stack',async()=>{
   const h=await harness();
   let prompts=0;
@@ -211,4 +308,19 @@ test('UI dismissal of a transient settles its entry before running the requested
   assert.deepEqual(actions,['yes']);
   assert.equal(h.api.isTransientOpen('choice'),false);
   assert.equal(h.api.top().key,'form');
+});
+
+test('controller-requested transient dismissal admits its exact traversal once',async()=>{
+  const h=await harness({asyncTraversal:true});
+  h.api.open('form');
+  h.api.presentTransient('choice');
+  h.api.dismissTransient('choice');
+  const inspect=h.traversalGuards.get('child');
+  const form=h.entries[h.cursor-1].state;
+  assert.equal(h.api.currentTraversalTransaction().phase,'requested');
+  assert.equal(inspect({sameDocument:true,destinationState:form}),false);
+  assert.equal(inspect({sameDocument:true,destinationState:form}),true);
+  await settle();
+  assert.equal(h.api.currentTraversalTransaction(),null);
+  assert.equal(h.history.state.child.id,h.api.top().id);
 });

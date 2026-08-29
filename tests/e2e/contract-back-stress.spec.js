@@ -10,7 +10,7 @@ const row = (page, label) => page.locator('#contractFormBody .ft-row').filter({
   has: page.locator('.ft-label').filter({ hasText: new RegExp(`^${label}:?$`) })
 }).first();
 
-async function openDirtyContract(page){
+async function openDirtyContract(page,{dirty=true}={}){
   await page.addInitScript(seed => {
     localStorage.clear();
     localStorage.setItem('gtasks-clone-v2', JSON.stringify({
@@ -27,11 +27,19 @@ async function openDirtyContract(page){
   await expect(page.locator('#contractsPage')).toBeVisible();
   await page.locator('#contractAddBtn').click();
   await expect(page.locator('#contractFormPage')).toBeVisible();
-  await row(page, 'محل انعقاد قرارداد').locator('input').fill('کارگاه تست بک تکراری');
+  if(dirty) await row(page, 'محل انعقاد قرارداد').locator('input').fill('کارگاه تست بک تکراری');
 }
 
 async function childKey(page){
   return page.evaluate(() => window.history.state?.child?.key || null);
+}
+
+async function exitGuardWouldBlock(page){
+  return page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
 }
 
 test('dirty contract survives ten complete Back/prompt-dismiss cycles', async ({ page }) => {
@@ -81,4 +89,29 @@ test('rapid repeated Back while dirty never escapes the application document', a
   expect(controllerTop?.id).toBe(state.child.id);
   expect(controllerTop?.key).toBe(state.child.key);
   if(await prompt.isVisible()) await expect(prompt).toBeVisible();
+});
+
+test('draft, discard and clean close release document exit protection', async ({ page }) => {
+  await openDirtyContract(page);
+  let prompt = page.locator('.global-incomplete-exit-choice');
+  await page.goBack();
+  await expect(prompt).toBeVisible();
+  await prompt.locator('[data-exit="yes"]').click();
+  await expect(page.locator('#contractFormPage')).toBeHidden();
+  expect(await exitGuardWouldBlock(page)).toBe(false);
+
+  await page.locator('#contractAddBtn').click();
+  await row(page, 'محل انعقاد قرارداد').locator('input').fill('Discard protection test');
+  await page.goBack();
+  prompt = page.locator('.global-incomplete-exit-choice');
+  await expect(prompt).toBeVisible();
+  await prompt.locator('[data-exit="no"]').click();
+  await expect(page.locator('#contractFormPage')).toBeHidden();
+  expect(await exitGuardWouldBlock(page)).toBe(false);
+
+  await page.locator('#contractAddBtn').click();
+  await expect(page.locator('#contractFormPage')).toBeVisible();
+  await page.goBack();
+  await expect(page.locator('#contractFormPage')).toBeHidden();
+  expect(await exitGuardWouldBlock(page)).toBe(false);
 });

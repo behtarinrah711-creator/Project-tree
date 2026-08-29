@@ -7,7 +7,7 @@
   let handlingPop = false;
   let popSequence = 0;
   let activeTransition = null;
-  const restorationQueue=[];
+  let traversalTransaction = null;
   const afterPopQueue=[];
   const futurePopQueue=[];
 
@@ -25,6 +25,10 @@
   function top(){ return layers[layers.length-1] || null; }
   function isOpen(key){ return layers.some(layer=>layer.key===String(key)); }
   function transientKey(key){ return `transient:${String(key)}`; }
+  function sameChild(left,right){
+    if(!left || !right) return !left && !right;
+    return String(left.id)===String(right.id) && String(left.key)===String(right.key);
+  }
 
   function register(key, handlers={}){
     key=String(key);
@@ -58,10 +62,10 @@
     const index=layers.map(layer=>layer.key).lastIndexOf(key);
     if(index<0) return false;
     const [removed]=layers.splice(index,1);
-    // Resolving/consuming a child ends its dirty-document protection.
-    // Stay/restore keeps the flag; only consume (draft/discard/save/close) clears it.
     releaseExitProtection(removed);
     if(!fromPopState){
+      const expected=top();
+      traversalTransaction={phase:'requested',to:expected?{...expected}:null};
       window.KarhaBrowserHistory?.go(-Math.max(1,steps));
     }
     return true;
@@ -106,7 +110,13 @@
       if(!current) return;
       open(internalKey,{key,payload});
       current.ready=true;
-      current.onReady?.({key,internalKey});
+      // Let the two synchronous entries become the settled browser topology
+      // before revealing UI. This microtask does not gate navigation; it only
+      // prevents a prompt from painting between the restored child and its
+      // transient entry.
+      queueMicrotask(()=>{
+        if(transientStates.get(key)===current) current.onReady?.({key,internalKey});
+      });
       if(current.pendingDismiss){
         const after=current.pendingAfter;
         current.pendingDismiss=false;
@@ -174,13 +184,14 @@
             restoredDuringPolicy=true;
             layer.exitProtected=true;
             if(!layers.some(item=>String(item.id)===String(layer.id))) layers.push({...layer});
-            if(typeof onSettled==='function') restorationQueue.push({id:String(layer.id),requestedAt:popSequence,callback:onSettled});
-            // The consumed child is still the direct Forward entry. Traverse
-            // back to that real entry instead of reconstructing it with a
-            // pushState from inside the Back popstate. The transient is opened
-            // only after this traversal settles, guaranteeing that its direct
-            // predecessor is the restored child on every browser.
-            window.KarhaBrowserHistory?.go(1);
+            // Commit the restored child synchronously. A Forward traversal
+            // leaves the browser on the consumed predecessor while it is
+            // pending, so already queued Back requests can cross the oldest app
+            // entry before the exit guard participates. Pushing here moves the
+            // active index back onto an app-owned child and truncates that stale
+            // forward branch before the transient is exposed.
+            window.KarhaBrowserHistory?.push(window.KarhaBrowserHistory.stateForChild(layer),location.href);
+            onSettled?.();
             return true;
           },
         });
@@ -207,22 +218,11 @@
       // transaction and may pop the next logical layer.
       const canonicalTop=top();
       const browserChild=window.KarhaBrowserHistory?.current?.()?.child||null;
-      // During the consuming popstate, the restored child's real Forward entry
-      // has not committed yet. Do not replace the current predecessor out from
-      // under that traversal. A later stale pop is still repaired normally.
-      const awaitingForward=canonicalTop && restorationQueue.some(item=>item.id===String(canonicalTop.id) && item.requestedAt===popSequence);
-      if(canonicalTop && !awaitingForward && String(browserChild?.id||'')!==String(canonicalTop.id)){
+      if(canonicalTop && String(browserChild?.id||'')!==String(canonicalTop.id)){
         window.KarhaBrowserHistory?.replace(window.KarhaBrowserHistory.stateForChild(canonicalTop),location.href);
       }
-
-      const settledChild=window.KarhaBrowserHistory?.current?.()?.child||null;
-      for(let i=restorationQueue.length-1;i>=0;i--){
-        if(String(settledChild?.id||'')===restorationQueue[i].id){
-          const [{callback}]=restorationQueue.splice(i,1);
-          callback();
-        }
-      }
     }finally{
+      traversalTransaction=null;
       handlingPop=false;
       afterPopQueue.splice(0).forEach(callback=>callback());
       for(let i=futurePopQueue.length-1;i>=0;i--){
@@ -234,6 +234,25 @@
     }
   }
 
+  // Navigation API interception runs before a traversal commits. Admit only
+  // the direct logical predecessor and only one traversal per child
+  // transaction; stale destinations selected by a rapid Back burst are
+  // cancelled by the canonical Browser History owner before document exit.
+  window.KarhaBrowserHistory?.registerTraversalGuard?.('child',context=>{
+    const currentTop=top();
+    const destination=context?.destinationState?.child||null;
+    if(traversalTransaction){
+      if(traversalTransaction.phase!=='requested') return true;
+      if(context?.sameDocument!==true || !sameChild(destination,traversalTransaction.to)) return true;
+      traversalTransaction=Object.freeze({...traversalTransaction,phase:'admitted'});
+      return false;
+    }
+    if(!currentTop) return false;
+    const predecessor=layers[layers.length-2]||null;
+    if(context?.sameDocument!==true || !sameChild(destination,predecessor)) return true;
+    traversalTransaction=Object.freeze({phase:'admitted',from:{...currentTop},to:predecessor?{...predecessor}:null});
+    return false;
+  });
   window.KarhaBrowserHistory?.register('child',(_state,event)=>onPopState(event));
   window.KarhaBrowserHistory?.registerExitGuard?.('child',()=>layers.some(layer=>layer.exitProtected));
   window.KarhaChildHistory=Object.freeze({register,open,consume,replace,isOpen,top,
@@ -243,6 +262,7 @@
     dismissTransient,
     isTransientOpen:key=>transientStates.has(String(key)),
     currentTransition:()=>activeTransition,
+    currentTraversalTransaction:()=>traversalTransaction,
     getDepth:()=>layers.length});
 })();
 

@@ -35,13 +35,12 @@ branch and reach the document boundary. Because the reconstructed form was
 exit-protected, `beforeunload` then produced the native Leave-site dialog while
 the app prompt remained in the DOM.
 
-Restoration now traverses Forward to the consumed form entry. The transient is
-not opened or revealed until a `popstate` (or stale-destination repair) has
-settled browser state and controller top on that exact form id. Only then is the
-transient pushed. Thus a visible prompt always has the restored form as its real
-direct predecessor and one ordinary Back consumes only the transient. This is
-event-driven and adds no timeout, padding, sentinel, or contract-specific
-History operation.
+Restoration now synchronously commits a reconstructed form child through the
+canonical Browser History owner, then commits the transient above it before the
+prompt is revealed. Thus a visible prompt has the restored form as its direct
+predecessor and one ordinary Back consumes only the transient. Pre-traversal
+validation described below rejects destinations selected from the old branch.
+This adds no timeout, padding, sentinel, or contract-specific History operation.
 
 ## Why Navigation API cancellation was insufficient
 
@@ -84,3 +83,28 @@ removes it. The canonical Browser History boundary consults that state from a
 document. Normal Back-to-prompt and prompt-to-form transitions remain custom
 same-document UI and never use the native dialog. This is the standards-based
 History API fallback safety net; it adds no history entry and uses no timing.
+
+## Pre-traversal transaction boundary
+
+When the browser exposes the Navigation API, the canonical Browser History
+owner observes `navigate` events whose `navigationType` is `traverse`. The child
+controller supplies only lifecycle policy: it records the one expected direct
+predecessor for a physical Back, or the exact destination of a traversal it
+requested itself. Browser History admits that destination once and cancels any
+overlapping, stale, skipped, or cross-document destination before it commits.
+`popstate` completes the admitted transaction and normal child reconciliation
+continues unchanged.
+
+This prevents a burst whose destinations were selected before the first
+`popstate` from escaping the current document, without padding history or
+repeatedly trapping Back. A later Back after the prompt is visible starts a new
+transaction and may consume the transient normally.
+
+The interception is feature-detected. Browsers without `window.navigation`
+retain the History API reconciliation and `beforeunload` data-loss guard. That
+fallback cannot provide the same pre-commit cancellation guarantee, because
+`popstate` is delivered only after traversal; it is intentionally documented as
+a weaker last-resort path rather than emulated with sentinels or timing.
+Non-cancelable `navigate` events are not admitted into the child transaction:
+the browser cannot honor cancellation for them, so `beforeunload` remains the
+last-resort document-exit guard and no stale admitted transaction is retained.

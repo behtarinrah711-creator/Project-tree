@@ -34,5 +34,7 @@ describe('KarhaRealContractForm global bridge', () => {
     assert.match(src, /if\(formPopDispatchDepth>0\) return false/, 'eager form re-entry during onPop must be rejected');
     assert.match(src, /restoreConsumedForm\(transition\)/, 'explicit consumed-entry restoration remains available for Stay');
     assert.match(src, /isConsumedFormTransition\(transition\)/, 'restoration remains restricted to canonical consumed contract-form transitions');
+    assert.match(src, /getElementById\('closeContractsPage'\)/, 'contracts list header Back must remain wired');
+    assert.match(src, /contractsBackButton\.onclick=requestCanonicalBack/, 'contracts list header Back must use canonical Browser History');
   });
 });
