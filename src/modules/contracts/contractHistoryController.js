@@ -8,6 +8,12 @@
   }
 
   history?.register('contract-form',{
+    onTraverse:()=>{
+      const form=window.KarhaRealContractForm;
+      if(!form?.shouldPreflightExit?.()) return false;
+      form.requestClose?.(false,null);
+      return true;
+    },
     onPop:(_payload,transition)=>{
       const consumed=isConsumedFormTransition(transition);
       if(consumed) formPopDispatchDepth++;
@@ -30,8 +36,6 @@
 
   window.KarhaContractHistory=Object.freeze({
     enterForm(){
-      // A consumed Back entry must stay consumed while its onPop policy is running.
-      // Dirty-form Stay may restore it later, after this synchronous dispatch ends.
       if(formPopDispatchDepth>0) return false;
       return history?.open('contract-form');
     },
