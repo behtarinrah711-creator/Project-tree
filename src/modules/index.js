@@ -1,3 +1,4 @@
+import './export/recursiveProjectExport.js';
 import dashboard from './dashboard/index.js';
 import contracts from './contracts/index.js';
 import accounting from './accounting/index.js';
