@@ -39,7 +39,7 @@ async function openDirtyNewContract(page){
   return place;
 }
 
-test('browser Back on dirty New Contract dismisses only the confirmation on second Back', async ({ page }) => {
+test('browser Back on dirty New Contract can repeatedly toggle confirmation without leaving the form', async ({ page }) => {
   const place = await openDirtyNewContract(page);
   const prompt = page.locator('.global-incomplete-exit-choice');
   const startUrl = page.url();
@@ -49,26 +49,33 @@ test('browser Back on dirty New Contract dismisses only the confirmation on seco
     void dialog.dismiss();
   });
 
+  for(let cycle=0; cycle<10; cycle++){
+    await page.evaluate(() => window.history.back());
+    await expect(prompt).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
+      .toBe('transient:incomplete-exit-choice');
+    await expect(page.locator('#contractFormPage')).toBeVisible();
+    await expect(place).toHaveValue('کارگاه مرکزی');
+    expect(page.url()).toBe(startUrl);
+    expect(nativeDialogs).toEqual([]);
+
+    await page.evaluate(() => window.history.back());
+    await expect(prompt).toBeHidden();
+    await expect(page.locator('#contractFormPage')).toBeVisible();
+    await expect(place).toHaveValue('کارگاه مرکزی');
+    await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
+      .toBe('contract-form');
+    expect(page.url()).toBe(startUrl);
+    expect(nativeDialogs).toEqual([]);
+  }
+
   await page.evaluate(() => window.history.back());
   await expect(prompt).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
-    .toBe('transient:incomplete-exit-choice');
   await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(place).toHaveValue('کارگاه مرکزی');
   expect(page.url()).toBe(startUrl);
   expect(nativeDialogs).toEqual([]);
 
-  await page.evaluate(() => window.history.back());
-  await expect(prompt).toBeHidden();
-  await expect(page.locator('#contractFormPage')).toBeVisible();
-  await expect(place).toHaveValue('کارگاه مرکزی');
-  await expect.poll(() => page.evaluate(() => window.history.state?.child?.key || null))
-    .toBe('contract-form');
-  expect(page.url()).toBe(startUrl);
-  expect(nativeDialogs).toEqual([]);
-
-  await page.evaluate(() => window.history.back());
-  await expect(prompt).toBeVisible();
   await prompt.locator('[data-exit="no"]').click();
   await expect(page.locator('#contractFormPage')).toBeHidden();
   await expect(page.locator('#contractsPage')).toBeVisible();
@@ -120,7 +127,6 @@ test('Yes persists a visible project-scoped Draft row and reopening it uses the 
   await expect.poll(() => page.evaluate(() => window.KarhaRealContractForm?.getLifecycleMode?.()))
     .toBe('draft');
 
-  // Clean draft: the purple Back arrow must return to the list without a prompt.
   await page.locator('#closeContractFormPage').click();
   await expect(prompt).toBeHidden();
   await expect(page.locator('#contractFormPage')).toBeHidden();
