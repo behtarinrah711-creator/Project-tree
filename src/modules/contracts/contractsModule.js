@@ -20,15 +20,20 @@ function money(v){
   if(v===null||v===undefined||v==='') return 'بدون مبلغ';
   try { return new Intl.NumberFormat('fa-IR').format(Number(v)); } catch { return String(v); }
 }
-export function contractCreatedLabel(value){
+export function contractCreatedParts(value){
   const stamp=Number(value);
-  if(!Number.isFinite(stamp)||stamp<=0) return '';
+  if(!Number.isFinite(stamp)||stamp<=0) return null;
   try{
     const date=new Date(stamp);
-    const d=new Intl.DateTimeFormat('fa-IR-u-ca-persian',{year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
-    const t=new Intl.DateTimeFormat('fa-IR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(date);
-    return `ثبت: ${d} · ${t}`;
-  }catch{return '';}
+    return {
+      date:new Intl.DateTimeFormat('fa-IR-u-ca-persian',{year:'numeric',month:'2-digit',day:'2-digit'}).format(date),
+      time:new Intl.DateTimeFormat('fa-IR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(date),
+    };
+  }catch{return null;}
+}
+export function contractCreatedLabel(value){
+  const created=contractCreatedParts(value);
+  return created ? `${created.date} ${created.time}` : '';
 }
 function searchInput(placeholder,onInput){
   const wrap=document.createElement('div'); wrap.className='workspace-search';
@@ -48,9 +53,8 @@ function contractRowData(projectId,c){
   const contact=findContact(projectId,c.contractorId||c.contactId);
   const title=c.title || ('قرارداد '+(a?.name||''));
   const person=contact ? ([contact.firstName,contact.lastName].filter(Boolean).join(' ')||contact.name) : 'بدون مخاطب';
-  const base=[person,a?.name||'بدون فعالیت',money(c.amount)].join(' · ');
-  const created=contractCreatedLabel(c.createdAt);
-  return {title,meta:created ? base+' · '+created : base};
+  const meta=[person,a?.name||'بدون فعالیت',money(c.amount)].join(' · ');
+  return {title,meta,created:contractCreatedParts(c.createdAt)};
 }
 
 export const contractsModule={
@@ -70,8 +74,9 @@ export const contractsModule={
     body.append(search.wrap,listWrap);
     if(!contracts.length){const e=document.createElement('div');e.className='contract-empty';e.innerHTML='هنوز قرارداد واقعی ثبت نشده است.<br>از علامت + یک قرارداد ایجاد کنید.';body.appendChild(e);return;}
     const appendContract=c=>{
-      const {title,meta}=contractRowData(id,c);
-      const row=document.createElement('div'); row.className='contract-row'; row.dataset.searchText=(title+' '+meta).toLocaleLowerCase('fa');
+      const {title,meta,created}=contractRowData(id,c);
+      const row=document.createElement('div'); row.className='contract-row';
+      row.dataset.searchText=(title+' '+meta+' '+(created ? `${created.date} ${created.time}` : '')).toLocaleLowerCase('fa');
       const main=document.createElement('div'); main.className='contract-main';
       const t=document.createElement('div'); t.className='contract-title'; t.textContent=title;
       const m=document.createElement('div'); m.className='contract-meta'; m.textContent=meta; main.append(t,m);
@@ -79,7 +84,17 @@ export const contractsModule={
       const edit=document.createElement('button'); edit.className='contract-action'; edit.textContent='✎'; edit.title='ویرایش'; edit.onclick=e=>{e.stopPropagation();legacy('openContractForm',c.id);};
       const del=document.createElement('button'); del.className='contract-action danger'; del.textContent='×'; del.title='حذف';
       del.onclick=e=>{e.stopPropagation();if(!confirm('آیا از حذف این قرارداد اطمینان دارید؟'))return;const result=contractApi.trash(id,c.id);if(!result.ok){if(result.code==='in_use')window.KarhaLegacy?.showRecordDeleteBlocked?.('contract',result.refs);else window.KarhaLegacy?.showToast?.(result.message||'حذف قرارداد انجام نشد');return;}this.render(id);};
-      actions.append(edit,del); row.append(main,actions); main.onclick=()=>legacy('openContractForm',c.id); listWrap.appendChild(row);
+      actions.append(edit,del);
+      if(created){
+        const createdBox=document.createElement('div'); createdBox.className='contract-created';
+        const date=document.createElement('div'); date.className='contract-created-date'; date.textContent=created.date;
+        const time=document.createElement('div'); time.className='contract-created-time'; time.textContent=created.time;
+        createdBox.append(date,time);
+        row.append(main,createdBox,actions);
+      }else{
+        row.append(main,actions);
+      }
+      main.onclick=()=>legacy('openContractForm',c.id); listWrap.appendChild(row);
     };
     contracts.forEach(appendContract);
     if(firstPage.cursor != null){
