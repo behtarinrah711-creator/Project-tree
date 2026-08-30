@@ -97,3 +97,17 @@ test('non-cancelable traversals do not enter traversal guard lifecycle',()=>{
   assert.equal(calls,0);
   assert.equal(event.prevented,false);
 });
+
+test('structured traversal claim runs afterCancel only after preventDefault',()=>{
+  const h=harness(undefined,{navigation:true});
+  const api=installBrowserHistory({windowRef:h.windowRef});
+  const order=[];
+  api.registerTraversalGuard('guarded-form',()=>({afterCancel:()=>order.push('afterCancel')}));
+  const event={
+    navigationType:'traverse',cancelable:true,
+    destination:{sameDocument:true,getState:()=>api.current()},
+    preventDefault(){order.push('preventDefault');},
+  };
+  h.navigationListeners.get('navigate')(event);
+  assert.deepEqual(order,['preventDefault','afterCancel']);
+});
