@@ -81,17 +81,25 @@ export function installBrowserHistory({windowRef=window}={}){
         sameDocument:event.destination?.sameDocument===true,
         cancelable:event.cancelable!==false,
       });
-      // A guard must not enter an admitted lifecycle when the browser cannot
-      // honor cancellation. The existing beforeunload guard remains the only
-      // standards-based last resort for that traversal.
       if(!context.cancelable) return;
-      if(![...traversalGuards.values()].some(guard=>guard(context))) return;
+
+      let claim=null;
+      for(const guard of traversalGuards.values()){
+        const result=guard(context);
+        if(result===true){ claim=Object.freeze({claimed:true,afterCancel:null}); break; }
+        if(result && typeof result==='object'){
+          claim=Object.freeze({claimed:true,afterCancel:typeof result.afterCancel==='function' ? result.afterCancel : null});
+          break;
+        }
+      }
+      if(!claim?.claimed) return;
+
       event.preventDefault();
+      claim.afterCancel?.(context);
     });
   }
   // Same-document Back remains a popstate/child-history concern. This guard is
-  // consulted only when the browser is actually about to discard the document
-  // (for example, a queued burst that crossed the oldest app entry).
+  // consulted only when the browser is actually about to discard the document.
   windowRef.addEventListener('beforeunload',event=>{
     if(![...exitGuards.values()].some(guard=>guard())) return;
     event.preventDefault();
