@@ -43,6 +43,20 @@
     };
   }
 
+  function registerGuardedForm(key,{shouldIntercept,requestExit,onPop,onRestore}={}){
+    key=String(key);
+    return register(key,{
+      onTraverse(context,layer){
+        if(typeof shouldIntercept!=='function' || shouldIntercept(context,layer)!==true) return false;
+        return {
+          afterCancel(){ requestExit?.({source:'browser',context,layer}); }
+        };
+      },
+      onPop,
+      onRestore,
+    });
+  }
+
   function open(key, payload=null){
     key=String(key);
     const existing=layers.find(layer=>layer.key===key);
@@ -228,8 +242,19 @@
     if(!currentTop) return false;
 
     const handlers=registration(currentTop.key);
-    if(typeof handlers?.onTraverse==='function' && handlers.onTraverse(context,{...currentTop})===true){
-      return true;
+    if(typeof handlers?.onTraverse==='function'){
+      const claim=handlers.onTraverse(context,{...currentTop});
+      if(claim){
+        const transaction=Object.freeze({phase:'intercepted',origin:'browser',from:{...currentTop},destination:destination?{...destination}:null});
+        traversalTransaction=transaction;
+        const afterCancel=typeof claim==='object' && typeof claim.afterCancel==='function' ? claim.afterCancel : null;
+        return {
+          afterCancel(){
+            try{ afterCancel?.(); }
+            finally{ if(traversalTransaction===transaction) traversalTransaction=null; }
+          }
+        };
+      }
     }
 
     if(context?.sameDocument!==true) return true;
@@ -239,7 +264,7 @@
   });
   window.KarhaBrowserHistory?.register('child',(_state,event)=>onPopState(event));
   window.KarhaBrowserHistory?.registerExitGuard?.('child',()=>layers.some(layer=>layer.exitProtected));
-  window.KarhaChildHistory=Object.freeze({register,open,consume,replace,isOpen,top,
+  window.KarhaChildHistory=Object.freeze({register,registerGuardedForm,open,consume,replace,isOpen,top,
     afterNextPop(callback){if(typeof callback==='function')afterPopQueue.push(callback);},
     afterFuturePop,
     presentTransient,
