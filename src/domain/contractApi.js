@@ -14,6 +14,18 @@ function clampLimit(limit){
   return Math.min(MAX_LIMIT, Math.max(1, Math.floor(n)));
 }
 
+function createdAtValue(value){
+  const n=Number(value);
+  return Number.isFinite(n) && n>0 ? n : 0;
+}
+
+function newestFirst(items){
+  return items
+    .map((item,index)=>({item,index,createdAt:createdAtValue(item?.createdAt)}))
+    .sort((a,b)=>(b.createdAt-a.createdAt)||(a.index-b.index))
+    .map(entry=>entry.item);
+}
+
 function makeId(){
   return 'i' + Math.random().toString(36).slice(2, 10);
 }
@@ -87,8 +99,8 @@ export const contractApi = {
   listPage(projectId, { cursor = 0, limit = DEFAULT_LIMIT, includeTrashed = false } = {}){
     const start = Math.max(0, Number(cursor) || 0);
     const size = clampLimit(limit);
-    const all = contractRepository.list(projectId)
-      .filter(contract => includeTrashed || !contract.trashed);
+    const all = newestFirst(contractRepository.list(projectId)
+      .filter(contract => includeTrashed || !contract.trashed));
     return {
       items: all.slice(start, start + size),
       cursor: start + size < all.length ? start + size : null,
