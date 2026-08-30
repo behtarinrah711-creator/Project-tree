@@ -31,3 +31,13 @@ test('contracts renderer wires the real list Add button to the contract form', a
     globalThis.document = previousDocument;
   }
 });
+
+test('contract registration timestamp has separate date/time parts and no registration label', async () => {
+  const { contractCreatedParts, contractCreatedLabel } = await import('./contractsModule.js');
+  const value = Date.UTC(2026, 7, 29, 12, 34);
+  const parts = contractCreatedParts(value);
+  assert.ok(parts?.date);
+  assert.ok(parts?.time);
+  assert.doesNotMatch(contractCreatedLabel(value), /ثبت:/);
+  assert.equal(contractCreatedParts(null), null);
+});

@@ -26,3 +26,10 @@ test('contractApi owns template save and trash methods', async () => {
   assert.match(source, /trashTemplate\s*\(/);
   assert.match(source, /listTemplatesPage\s*\(/);
 });
+
+test('contract list is sorted by createdAt descending before pagination with stable legacy fallback', async () => {
+  const source = await readFile(new URL('./contractApi.js', import.meta.url), 'utf8');
+  assert.match(source, /newestFirst\(contractRepository\.list\(projectId\)/);
+  assert.match(source, /b\.createdAt-a\.createdAt/);
+  assert.match(source, /a\.index-b\.index/);
+});

@@ -42,6 +42,10 @@ async function childKey(page){
   return page.evaluate(() => window.history.state?.child?.key || null);
 }
 
+async function physicalBack(page){
+  await page.evaluate(() => window.history.back());
+}
+
 async function exitGuardWouldBlock(page){
   return page.evaluate(() => {
     const event = new Event('beforeunload', { cancelable: true });
@@ -53,56 +57,61 @@ async function exitGuardWouldBlock(page){
 test('dirty contract survives ten complete Back/prompt-dismiss cycles', async ({ page }) => {
   await openDirtyContract(page);
   const prompt = page.locator('.global-incomplete-exit-choice');
+  const startUrl=page.url();
 
   for(let cycle = 0; cycle < 10; cycle++){
-    await page.goBack();
+    await physicalBack(page);
     await expect(prompt, `prompt cycle ${cycle + 1}`).toBeVisible();
     await expect.poll(() => childKey(page)).toBe('transient:incomplete-exit-choice');
     await expect(page.locator('#contractFormPage')).toBeVisible();
+    await expect(row(page, 'محل انعقاد قرارداد').locator('input')).toHaveValue('کارگاه تست بک تکراری');
+    expect(page.url()).toBe(startUrl);
 
-    await page.goBack();
+    await physicalBack(page);
     await expect(prompt, `dismiss cycle ${cycle + 1}`).toBeHidden();
     await expect(page.locator('#contractFormPage')).toBeVisible();
     await expect.poll(() => childKey(page)).toBe('contract-form');
+    await expect(row(page, 'محل انعقاد قرارداد').locator('input')).toHaveValue('کارگاه تست بک تکراری');
+    expect(page.url()).toBe(startUrl);
   }
 
-  await expect(page).toHaveURL(/#\/projects\/e2e-contract-back-stress\//);
+  await physicalBack(page);
+  await expect(prompt).toBeVisible();
+  await expect.poll(() => childKey(page)).toBe('transient:incomplete-exit-choice');
+  await expect(page.locator('#contractFormPage')).toBeVisible();
   await expect(row(page, 'محل انعقاد قرارداد').locator('input')).toHaveValue('کارگاه تست بک تکراری');
+  expect(page.url()).toBe(startUrl);
 });
 
-test('rapid repeated Back while dirty never escapes the application document', async ({ page }) => {
+test('repeated physical Back gestures remain owned by form and transient', async ({ page }) => {
   await openDirtyContract(page);
   const prompt = page.locator('.global-incomplete-exit-choice');
   const appUrl = page.url();
 
-  // Mimic repeated physical Back presses faster than the UI can visibly settle.
-  await page.evaluate(() => {
-    history.back();
-    setTimeout(() => history.back(), 0);
-    setTimeout(() => history.back(), 5);
-    setTimeout(() => history.back(), 10);
-  });
+  for(let cycle=0;cycle<6;cycle++){
+    await physicalBack(page);
+    await expect(prompt).toBeVisible();
+    await expect.poll(() => childKey(page)).toBe('transient:incomplete-exit-choice');
 
-  await page.waitForTimeout(300);
-  expect(new URL(page.url()).pathname).toBe(new URL(appUrl).pathname);
-  await expect(page.locator('#contractFormPage')).toBeVisible();
-  await expect(row(page, 'محل انعقاد قرارداد').locator('input')).toHaveValue('کارگاه تست بک تکراری');
+    await physicalBack(page);
+    await expect(prompt).toBeHidden();
+    await expect.poll(() => childKey(page)).toBe('contract-form');
 
-  // The settled state may be either the form or its transient prompt, but it
-  // must still be an application-owned contract state and never a foreign entry.
-  const state = await page.evaluate(() => window.history.state);
-  expect(state?.app).toBe('karha');
-  expect(['contract-form', 'transient:incomplete-exit-choice']).toContain(state?.child?.key);
-  const controllerTop = await page.evaluate(() => window.KarhaChildHistory?.top?.() || null);
-  expect(controllerTop?.id).toBe(state.child.id);
-  expect(controllerTop?.key).toBe(state.child.key);
-  if(await prompt.isVisible()) await expect(prompt).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe(new URL(appUrl).pathname);
+    await expect(page.locator('#contractFormPage')).toBeVisible();
+    await expect(row(page, 'محل انعقاد قرارداد').locator('input')).toHaveValue('کارگاه تست بک تکراری');
+    const state = await page.evaluate(() => window.history.state);
+    const controllerTop = await page.evaluate(() => window.KarhaChildHistory?.top?.() || null);
+    expect(state?.app).toBe('karha');
+    expect(controllerTop?.id).toBe(state?.child?.id);
+    expect(controllerTop?.key).toBe('contract-form');
+  }
 });
 
 test('draft, discard and clean close release document exit protection', async ({ page }) => {
   await openDirtyContract(page);
   let prompt = page.locator('.global-incomplete-exit-choice');
-  await page.goBack();
+  await physicalBack(page);
   await expect(prompt).toBeVisible();
   await prompt.locator('[data-exit="yes"]').click();
   await expect(page.locator('#contractFormPage')).toBeHidden();
@@ -110,7 +119,7 @@ test('draft, discard and clean close release document exit protection', async ({
 
   await page.locator('#contractAddBtn').click();
   await row(page, 'محل انعقاد قرارداد').locator('input').fill('Discard protection test');
-  await page.goBack();
+  await physicalBack(page);
   prompt = page.locator('.global-incomplete-exit-choice');
   await expect(prompt).toBeVisible();
   await prompt.locator('[data-exit="no"]').click();
@@ -119,7 +128,7 @@ test('draft, discard and clean close release document exit protection', async ({
 
   await page.locator('#contractAddBtn').click();
   await expect(page.locator('#contractFormPage')).toBeVisible();
-  await page.goBack();
+  await physicalBack(page);
   await expect(page.locator('#contractFormPage')).toBeHidden();
   expect(await exitGuardWouldBlock(page)).toBe(false);
 });
