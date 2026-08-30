@@ -25,8 +25,13 @@
   function top(){ return layers[layers.length-1] || null; }
   function isOpen(key){ return layers.some(layer=>layer.key===String(key)); }
   function transientKey(key){ return `transient:${String(key)}`; }
-  function releaseTraversal(transaction){
-    if(transaction && traversalTransaction===transaction) traversalTransaction=null;
+  function releaseTraversalAfterPaint(transaction){
+    if(!transaction) return;
+    const release=()=>{
+      if(traversalTransaction===transaction) traversalTransaction=null;
+    };
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(release);
+    else release();
   }
 
   function register(key, handlers={}){
@@ -199,7 +204,7 @@
         window.KarhaBrowserHistory?.replace(window.KarhaBrowserHistory.stateForChild(canonicalTop),location.href);
       }
     }finally{
-      releaseTraversal(traversalTransaction);
+      releaseTraversalAfterPaint(traversalTransaction);
       handlingPop=false;
       afterPopQueue.splice(0).forEach(callback=>callback());
       for(let i=futurePopQueue.length-1;i>=0;i--){
