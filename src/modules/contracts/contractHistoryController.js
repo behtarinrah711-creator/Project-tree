@@ -23,6 +23,8 @@
   });
 
   const requestCanonicalBack=()=>window.KarhaBrowserHistory?.back?.();
+  const contractsBackButton=document.getElementById('closeContractsPage');
+  if(contractsBackButton) contractsBackButton.onclick=requestCanonicalBack;
   const formBackButton=document.getElementById('closeContractFormPage');
   if(formBackButton) formBackButton.onclick=requestCanonicalBack;
 

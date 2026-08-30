@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createHistoryState,installBrowserHistory,isApplicationHistoryState} from './browserHistory.js';
 
-function harness(hash='#/projects/A/dashboard'){
+function harness(hash='#/projects/A/dashboard',{navigation=false}={}){
   const listeners=new Map();
+  const navigationListeners=new Map();
   const stack=[{state:null,url:hash}]; let cursor=0;
   const windowRef={
     location:{hash,href:hash},
     addEventListener(type,fn){listeners.set(type,fn);},
   };
+  if(navigation) windowRef.navigation={addEventListener(type,fn){navigationListeners.set(type,fn);}};
   const setUrl=url=>{windowRef.location.hash=url;windowRef.location.href=url;};
   windowRef.history={
     get state(){return stack[cursor].state;},
@@ -17,7 +19,7 @@ function harness(hash='#/projects/A/dashboard'){
     go(delta){cursor+=delta;setUrl(stack[cursor].url);listeners.get('popstate')?.({state:stack[cursor].state});},
     back(){this.go(-1);},
   };
-  return {windowRef,stack,listeners,get cursor(){return cursor;}};
+  return {windowRef,stack,listeners,navigationListeners,get cursor(){return cursor;}};
 }
 
 test('schema is versioned, minimal, serializable and initializes the first entry',()=>{
@@ -56,4 +58,42 @@ test('document exit guard is reserved for an actual unload',()=>{
   h.listeners.get('beforeunload')(event);
   assert.equal(event.prevented,true);
   assert.equal(event.returnValue,'');
+});
+
+test('Navigation API traversal guards cancel a stale or cross-document destination before commit',()=>{
+  const h=harness(undefined,{navigation:true});
+  const api=installBrowserHistory({windowRef:h.windowRef});
+  let transaction=false;
+  api.registerTraversalGuard('child',context=>{
+    if(transaction) return true;
+    if(!context.sameDocument) return true;
+    transaction=true;
+    return false;
+  });
+  const navigate=h.navigationListeners.get('navigate');
+  const event=({sameDocument=true}={})=>({
+    navigationType:'traverse',cancelable:true,prevented:false,
+    destination:{sameDocument,getState:()=>api.current()},
+    preventDefault(){this.prevented=true;},
+  });
+  const first=event();navigate(first);assert.equal(first.prevented,false);
+  const queued=event();navigate(queued);assert.equal(queued.prevented,true);
+  transaction=false;
+  const external=event({sameDocument:false});navigate(external);assert.equal(external.prevented,true);
+  assert.equal(api.supportsTraversalInterception,true);
+});
+
+test('non-cancelable traversals do not enter traversal guard lifecycle',()=>{
+  const h=harness(undefined,{navigation:true});
+  const api=installBrowserHistory({windowRef:h.windowRef});
+  let calls=0;
+  api.registerTraversalGuard('child',()=>{calls++;return true;});
+  const event={
+    navigationType:'traverse',cancelable:false,prevented:false,
+    destination:{sameDocument:false,getState:()=>null},
+    preventDefault(){this.prevented=true;},
+  };
+  h.navigationListeners.get('navigate')(event);
+  assert.equal(calls,0);
+  assert.equal(event.prevented,false);
 });
