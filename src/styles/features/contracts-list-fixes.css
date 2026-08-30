@@ -1,0 +1,3 @@
+.contract-row{align-items:flex-start;}
+.contract-created{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:1px;white-space:nowrap;direction:ltr;text-align:left;margin-top:1px;font-size:11px;line-height:1.45;color:var(--text-dim);}
+.contract-created-date,.contract-created-time{display:block;white-space:nowrap;}
