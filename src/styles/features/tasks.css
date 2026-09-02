@@ -7,7 +7,7 @@
     display:flex;align-items:center;gap:14px;padding:12px 16px 12px 16px;cursor:pointer;position:relative;
     padding-right:46px;
   }
-  .row.sub{padding:9px 16px 9px 16px; padding-right:calc(46px + (var(--item-depth,1) * 18px));} /* متن/محتوا تو در تو می‌شود، اما grip ستون ثابت راست را حفظ می‌کند */
+  .row.sub{padding:9px 16px 9px 16px; padding-right:calc(46px + (var(--item-depth,1) * 18px));background:#F6F6F6;} /* متن/محتوا تو در تو می‌شود، اما grip ستون ثابت راست را حفظ می‌کند */
   .sub-indent{width:32px;flex-shrink:0;} /* فقط دایره و متن جلوتر */
   .row.completed .row-title{color:var(--text-dim);text-decoration:line-through;}
   .drag-grip{
